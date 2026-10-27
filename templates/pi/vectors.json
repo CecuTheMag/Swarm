@@ -1,0 +1,44 @@
+[
+  {
+    "seed": 0,
+    "unit_index": 0,
+    "samples": 1,
+    "inside": 1
+  },
+  {
+    "seed": 0,
+    "unit_index": 0,
+    "samples": 1000,
+    "inside": 766
+  },
+  {
+    "seed": 42,
+    "unit_index": 0,
+    "samples": 65536,
+    "inside": 51513
+  },
+  {
+    "seed": 42,
+    "unit_index": 1,
+    "samples": 65536,
+    "inside": 51457
+  },
+  {
+    "seed": 42,
+    "unit_index": 63,
+    "samples": 100003,
+    "inside": 78941
+  },
+  {
+    "seed": 4294967295,
+    "unit_index": 4294967295,
+    "samples": 4096,
+    "inside": 3204
+  },
+  {
+    "seed": 123456789,
+    "unit_index": 7,
+    "samples": 250000,
+    "inside": 196307
+  }
+]
