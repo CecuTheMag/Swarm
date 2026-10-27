@@ -1,0 +1,69 @@
+# Local development services.
+#   docker compose up -d                 -> postgres + redis
+#   docker compose --profile ops up -d   -> + prometheus, grafana, unleash
+name: swarm
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: swarm
+      POSTGRES_PASSWORD: swarm
+      POSTGRES_DB: swarm
+    ports: ["127.0.0.1:7732:5432"]
+    volumes: [pgdata:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U swarm"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    ports: ["127.0.0.1:7779:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  prometheus:
+    profiles: [ops]
+    image: prom/prometheus:v3.7.0
+    volumes: [./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    ports: ["127.0.0.1:7790:9090"]
+
+  grafana:
+    profiles: [ops]
+    image: grafana/grafana:12.2.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    ports: ["127.0.0.1:7791:3000"]
+    depends_on: [prometheus]
+
+  unleash-db:
+    profiles: [ops]
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: unleash
+      POSTGRES_PASSWORD: unleash
+      POSTGRES_DB: unleash
+    volumes: [unleashdata:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U unleash"]
+      interval: 5s
+      retries: 10
+
+  unleash:
+    profiles: [ops]
+    image: unleashorg/unleash-server:7
+    environment:
+      DATABASE_URL: postgres://unleash:unleash@unleash-db:5432/unleash
+      DATABASE_SSL: "false"
+    ports: ["127.0.0.1:7742:4242"]
+    depends_on:
+      unleash-db: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  unleashdata:

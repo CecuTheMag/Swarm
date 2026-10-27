@@ -1,0 +1,30 @@
+# Rust
+/target/
+
+# Node
+node_modules/
+.pnpm-store/
+
+# SvelteKit / Vite
+web/.svelte-kit/
+web/build/
+
+# WASM build output
+pkg/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Test output
+test-results/
+playwright-report/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
