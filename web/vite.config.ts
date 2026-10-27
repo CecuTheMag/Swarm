@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { searchForWorkspaceRoot } from 'vite';
 import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
 
@@ -17,12 +18,17 @@ export default defineConfig({
 		host: true,
 		port: 7701,
 		strictPort: true,
+		fs: { allow: [searchForWorkspaceRoot(process.cwd()), '../templates'] },
 		// Same origin for the page and the coordinator, so WebGPU's secure-context
 		// requirement is met by a single TLS endpoint.
 		proxy: {
 			'/api': 'http://localhost:7700',
 			'/ws': { target: 'ws://localhost:7700', ws: true }
 		}
+	},
+	preview: {
+		port: 7702,
+		strictPort: true
 	},
 	test: {
 		expect: { requireAssertions: true },
