@@ -9,36 +9,36 @@
     "seed": 0,
     "unit_index": 0,
     "samples": 1000,
-    "inside": 766
+    "inside": 797
   },
   {
     "seed": 42,
     "unit_index": 0,
     "samples": 65536,
-    "inside": 51513
+    "inside": 51425
   },
   {
     "seed": 42,
     "unit_index": 1,
     "samples": 65536,
-    "inside": 51457
+    "inside": 51486
   },
   {
     "seed": 42,
     "unit_index": 63,
     "samples": 100003,
-    "inside": 78941
+    "inside": 78442
   },
   {
     "seed": 4294967295,
     "unit_index": 4294967295,
     "samples": 4096,
-    "inside": 3204
+    "inside": 3210
   },
   {
     "seed": 123456789,
     "unit_index": 7,
     "samples": 250000,
-    "inside": 196307
+    "inside": 196552
   }
 ]

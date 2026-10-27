@@ -1,15 +1,17 @@
 //! Monte Carlo estimate of π — the pipeline smoke-test template.
 //!
-//! Integer-only so every device returns the same count: sample coordinates are
-//! 15-bit integers and a point is inside the quarter circle when
-//! `x² + y² < 32768²`. The largest possible sum, `2 · 32767²`, fits in `u32`
-//! (WGSL has no 64-bit integers).
+//! Integer-only so every device returns the same count. Each sample picks one
+//! cell of a 16384 × 16384 grid over the unit square and tests the cell's
+//! centre: with doubled coordinates `X = 2x + 1` (odd, `1..=32767`) the point is
+//! inside the quarter circle when `X² + Y² < 32768²`. Testing centres instead of
+//! corners makes the grid's own bias negligible (~1e-6). The largest possible
+//! sum, `2 · 32767²`, fits in `u32` (WGSL has no 64-bit integers).
 
-use crate::rng::{pcg_hash, unit_base};
+use crate::rng::{sample2, unit_base};
 
-/// Coordinates are in `0..SCALE`.
-pub const SCALE: u32 = 1 << 15;
-const RADIUS_SQ: u32 = SCALE * SCALE;
+/// Grid cells per axis.
+pub const GRID: u32 = 1 << 14;
+const RADIUS_SQ: u32 = (2 * GRID) * (2 * GRID);
 
 /// Parameters of one work unit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,8 +24,9 @@ pub struct UnitParams {
 /// Whether sample `i` of the unit with base `base` lands inside the quarter circle.
 #[inline]
 pub fn sample_inside(base: u32, i: u32) -> bool {
-    let x = pcg_hash(base.wrapping_add(i.wrapping_mul(2))) >> 17;
-    let y = pcg_hash(base.wrapping_add(i.wrapping_mul(2)).wrapping_add(1)) >> 17;
+    let (a, b) = sample2(base, i);
+    let x = 2 * (a >> 18) + 1;
+    let y = 2 * (b >> 18) + 1;
     x * x + y * y < RADIUS_SQ
 }
 
@@ -107,7 +110,7 @@ mod tests {
 
     #[test]
     fn no_overflow_at_extremes() {
-        let max = SCALE - 1;
+        let max = 2 * (GRID - 1) + 1;
         assert!(
             max.checked_mul(max)
                 .unwrap()

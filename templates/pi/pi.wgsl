@@ -2,11 +2,13 @@
 // Must stay bit-identical to the Rust reference: same hash, same integer math.
 // u32 arithmetic in WGSL wraps on overflow, matching Rust's wrapping_* calls.
 
+// One dispatch covers samples [start, end) of a unit, so a large unit can be
+// split into short dispatches (GPU watchdogs kill long-running ones).
 struct Params {
   seed: u32,
   unit_index: u32,
-  samples: u32,
-  _pad: u32,
+  start: u32,
+  end: u32,
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -18,10 +20,39 @@ var<workgroup> local_count: atomic<u32>;
 const WORKGROUP_SIZE: u32 = 256u;
 const RADIUS_SQ: u32 = 1073741824u; // 32768^2
 
+// Hashes: see crates/kernels/src/rng.rs for sources and the statistical tests
+// behind this choice.
 fn pcg_hash(input: u32) -> u32 {
   let state = input * 747796405u + 2891336453u;
   let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
   return (word >> 22u) ^ word;
+}
+
+fn pcg2d(a: u32, b: u32) -> vec2<u32> {
+  var v = vec2<u32>(a, b) * 1664525u + 1013904223u;
+  v.x += v.y * 1664525u;
+  v.y += v.x * 1664525u;
+  v = v ^ (v >> vec2<u32>(16u));
+  v.x += v.y * 1664525u;
+  v.y += v.x * 1664525u;
+  v = v ^ (v >> vec2<u32>(16u));
+  return v;
+}
+
+fn lowbias32(input: u32) -> u32 {
+  var x = input;
+  x ^= x >> 16u;
+  x *= 0x7feb352du;
+  x ^= x >> 15u;
+  x *= 0x846ca68bu;
+  x ^= x >> 16u;
+  return x;
+}
+
+// Two independent uniform u32 values for sample i of the unit with this base.
+fn sample2(base: u32, i: u32) -> vec2<u32> {
+  let v = pcg2d(i, base);
+  return vec2<u32>(lowbias32(v.x), lowbias32(v.y));
 }
 
 @compute @workgroup_size(WORKGROUP_SIZE)
@@ -34,10 +65,11 @@ fn main(
   let stride = groups.x * WORKGROUP_SIZE;
 
   var count = 0u;
-  for (var i = gid.x; i < params.samples; i += stride) {
-    let k = base + i * 2u;
-    let x = pcg_hash(k) >> 17u;
-    let y = pcg_hash(k + 1u) >> 17u;
+  for (var i = params.start + gid.x; i < params.end; i += stride) {
+    // Centre of a cell in a 16384 x 16384 grid, in doubled coordinates.
+    let r = sample2(base, i);
+    let x = 2u * (r.x >> 18u) + 1u;
+    let y = 2u * (r.y >> 18u) + 1u;
     if (x * x + y * y < RADIUS_SQ) {
       count += 1u;
     }
