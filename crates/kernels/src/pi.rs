@@ -32,8 +32,14 @@ pub fn sample_inside(base: u32, i: u32) -> bool {
 
 /// Number of samples inside the quarter circle for one unit.
 pub fn count_inside(p: UnitParams) -> u32 {
-    let base = unit_base(p.seed, p.unit_index);
-    (0..p.samples).filter(|&i| sample_inside(base, i)).count() as u32
+    count_inside_range(p.seed, p.unit_index, 0, p.samples)
+}
+
+/// Number of samples `start..end` of a unit inside the quarter circle. Counts of
+/// disjoint ranges add up to the unit's count, so a unit can be split across threads.
+pub fn count_inside_range(seed: u32, unit_index: u32, start: u32, end: u32) -> u32 {
+    let base = unit_base(seed, unit_index);
+    (start..end).filter(|&i| sample_inside(base, i)).count() as u32
 }
 
 /// π estimate from aggregated counts.
@@ -69,6 +75,22 @@ mod tests {
             };
             assert_eq!(count_inside(p), v.inside, "{p:?}");
         }
+    }
+
+    #[test]
+    fn ranges_add_up_to_the_unit() {
+        let p = UnitParams {
+            seed: 42,
+            unit_index: 63,
+            samples: 100_003,
+        };
+        let split = [0, 1, 4096, 50_000, 99_999, 100_003];
+        let sum: u32 = split
+            .windows(2)
+            .map(|w| count_inside_range(p.seed, p.unit_index, w[0], w[1]))
+            .sum();
+        assert_eq!(sum, count_inside(p));
+        assert_eq!(count_inside_range(p.seed, p.unit_index, 7, 7), 0);
     }
 
     #[test]

@@ -27,7 +27,7 @@ In:
 Out (later specs):
 - Lease expiry by time (a reaper), retry limits → 0002.
 - Redundancy, quorum, honeypots, reputation → 0004.
-- WASM fallback, benchmark-based sizing, throttling, background-tab behaviour.
+- WASM fallback (→ 0005), benchmark-based sizing, throttling, background-tab behaviour.
 - Path tracer, Ising, ML templates. Auth and roles.
 
 The π template is a **pipeline smoke test**, not a showcase. It exists because its

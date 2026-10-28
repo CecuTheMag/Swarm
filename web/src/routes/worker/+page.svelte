@@ -1,10 +1,22 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
+	import { page } from '$app/state';
 	import { WorkerSession, type SessionStatus } from '#lib/worker/session.svelte.ts';
 	import { wsUrl } from '#lib/net.ts';
+	import type { Backend } from '#lib/protocol/Backend.ts';
 
-	const session = new WorkerSession(wsUrl('/ws/worker'));
+	// `?backend=wasm` computes on the CPU even when there is a GPU (for comparisons).
+	const session = new WorkerSession(
+		wsUrl('/ws/worker'),
+		page.url.searchParams.get('backend') === 'wasm' ? 'wasm' : undefined
+	);
 	onDestroy(() => session.destroy());
+
+	const backendText: Record<Backend, string> = {
+		webgpu: 'видеокарта',
+		wasm: 'процесор',
+		native: 'native'
+	};
 
 	const statusText: Record<SessionStatus, string> = {
 		stopped: 'Спрян',
@@ -23,7 +35,8 @@
 	<h1>Дари изчислителна мощ</h1>
 	<p class="muted">
 		Тази страница изпълнява само проверени изчислителни шаблони на Рояк чрез видеокартата на
-		устройството. Не се събират лични данни. Можете да спрете по всяко време.
+		устройството, а ако няма подходяща видеокарта — чрез процесора. Не се събират лични данни.
+		Можете да спрете по всяко време.
 	</p>
 
 	<div class="card controls">
@@ -39,7 +52,7 @@
 
 	{#if session.status === 'unsupported'}
 		<p class="bad" role="alert">
-			WebGPU не е достъпен на това устройство. Опитайте с актуален Chrome или Edge.
+			Този браузър не може да изчислява за Рояк. Опитайте с актуален Chrome или Edge.
 		</p>
 		<p class="muted">{session.error}</p>
 	{:else if session.error}
@@ -60,8 +73,10 @@
 			<div class="label">Последна единица</div>
 		</div>
 		<div class="card stat">
-			<div class="value device">
-				{session.device ? `${session.device.vendor} · ${session.device.architecture}` : '—'}
+			<div class="value device" data-testid="device" data-backend={session.device?.backend}>
+				{session.device
+					? `${backendText[session.device.backend]}: ${session.device.vendor} · ${session.device.architecture}`
+					: '—'}
 			</div>
 			<div class="label">Устройство</div>
 		</div>

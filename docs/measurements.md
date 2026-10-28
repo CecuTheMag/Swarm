@@ -8,7 +8,7 @@ Every number used in the competition documents comes from this log.
 |---|---|---|---|---|---|---|
 | 2026-10-27 | Dev PC | NVIDIA RTX 4060 | Arch Linux | Chromium 154 (headless) | Only with `--enable-unsafe-webgpu --enable-features=Vulkan`; SwiftShader adapter | Headless does not use the real GPU |
 | 2026-10-28 | Nothing Phone (1) | Adreno 642L (Snapdragon 778G+) | Android 15 | Chrome 156 | Yes | Adapter `qualcomm` / `adreno-6xx`; self-test bit-exact on all vectors |
-| 2026-10-28 | Lenovo ThinkPad T540p (2014) | Intel HD Graphics 4600, driver 20.19.15.5126 (2020) | Windows 10 22H2 | Edge 156 | No | `edge://gpu` reports WebGPU enabled, but `requestAdapter()` returns null for default, high-performance, low-power, compatibility and fallback adapters. Typical of older lab PCs: needs a CPU fallback |
+| 2026-10-28 | Lenovo ThinkPad T540p (2014) | Intel HD Graphics 4600, driver 20.19.15.5126 (2020) | Windows 10 22H2 | Edge 156 | No | `edge://gpu` reports WebGPU enabled, but `requestAdapter()` returns null for default, high-performance, low-power, compatibility and fallback adapters. Joins through the CPU fallback (spec 0005) |
 
 ## School lab idle time
 
@@ -23,10 +23,20 @@ Every number used in the competition documents comes from this log.
 | 2026-10-28 | Nothing Phone (1), Chrome 156 | π, 2²⁴ samples/unit | 40 | — | 25 ms per unit: units this small are dominated by per-unit overhead (680 M samples/s) |
 | 2026-10-28 | Nothing Phone (1), Chrome 156 | π, 2²⁸ samples/unit, 10.6 min | 2.83 | — | Sustained-load run: 1800 units (4.83·10¹¹ samples) submitted from the T540p's dashboard, computed by the phone alone. Unit time 332 ms average, 351 ms p95, flat from first to last minute: no thermal throttling. GPU 36–37 °C, skin 37–38 °C, battery 32 °C, on charger. 761 M samples/s wall-clock including coordinator round trips |
 
+| 2026-10-28 | ThinkPad T540p (i5-4300M, 2C/4T), Edge 156, CPU fallback (3 threads) | π, 2²⁷ samples/unit | 4.05 | — | 544 M samples/s: 128 units, 247 ms average, 255 ms p95, 36 s for the job. Self-test: 512 M samples/s. About two thirds of the phone's GPU, from a laptop with no usable WebGPU |
+
 Grid correctness (2026-10-28): a 128-unit π job (2²⁷ samples/unit, seed 2026) computed by
 the phone (52 units) and four CPU sim-workers (76 units) gave exactly the same count as a
 CPU-only run: 13 492 969 218 inside of 17 179 869 184. A 64-unit job (seed 7001) whose
-phone tab was reloaded mid-unit also matched its clean rerun exactly.
+phone tab was reloaded mid-unit also matched its clean rerun exactly. The same seed-2026
+job computed by the T540p alone through the CPU fallback matched too.
+
+The first CPU-fallback build lost counts when several threads finished chunks at once
+(`inside += await …` reads `inside` before awaiting). The coordinator accepted those
+wrong results: a 128-unit job came out at 10 442 581 916 instead of 13 492 969 218.
+Shared test vectors now include a unit of five 2²² chunks, and the browser tests fail
+on that build. It is also a concrete case for result verification (spec 0004): a
+faulty client, not only a malicious one, can return plausible wrong counts.
 
 ## Random number generator validation (π template)
 

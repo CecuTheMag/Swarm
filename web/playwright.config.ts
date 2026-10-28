@@ -9,13 +9,22 @@ export default defineConfig({
 	testDir: 'e2e',
 	testMatch: '**/*.e2e.ts',
 	timeout: 60_000,
-	use: {
-		baseURL: 'http://localhost:7702',
-		launchOptions: {
-			// Headless Chromium exposes WebGPU (software adapter) only with these flags.
-			args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan']
-		}
-	},
+	// One coordinator serves every test, and the worker test counts connected workers.
+	workers: 1,
+	use: { baseURL: 'http://localhost:7702' },
+	projects: [
+		{
+			name: 'webgpu',
+			use: {
+				launchOptions: {
+					// Headless Chromium exposes WebGPU (software adapter) only with these flags.
+					args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan']
+				}
+			}
+		},
+		// Without the flags there is no WebGPU, so workers fall back to the CPU.
+		{ name: 'cpu' }
+	],
 	webServer: [
 		{
 			command: 'cargo run -p coordinator',

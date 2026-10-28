@@ -1,3 +1,4 @@
+import type { Backend } from '#lib/protocol/Backend.ts';
 import type { DeviceInfo } from '#lib/protocol/DeviceInfo.ts';
 import type { TemplateRef } from '#lib/protocol/TemplateRef.ts';
 import type { JsonValue } from '#lib/protocol/serde_json/JsonValue.ts';
@@ -41,8 +42,8 @@ export class ComputeClient {
 		});
 	}
 
-	init(): Promise<DeviceInfo> {
-		return this.call({ kind: 'init' });
+	init(backend?: Backend): Promise<DeviceInfo> {
+		return this.call({ kind: 'init', backend });
 	}
 
 	run(template: TemplateRef, params: JsonValue): Promise<UnitResult> {

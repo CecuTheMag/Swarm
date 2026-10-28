@@ -1,4 +1,5 @@
 import { ComputeClient } from './compute-client.ts';
+import type { Backend } from '#lib/protocol/Backend.ts';
 import type { CoordinatorMessage } from '#lib/protocol/CoordinatorMessage.ts';
 import type { DeviceInfo } from '#lib/protocol/DeviceInfo.ts';
 import type { WorkerMessage } from '#lib/protocol/WorkerMessage.ts';
@@ -34,7 +35,11 @@ export class WorkerSession {
 	private replyTimeout: ReturnType<typeof setTimeout> | undefined;
 	private reconnectDelay = 1000;
 
-	constructor(private url: string) {}
+	/** `backend: 'wasm'` computes on the CPU even when there is a GPU. */
+	constructor(
+		private url: string,
+		private backend?: Backend
+	) {}
 
 	async start() {
 		if (this.running) return;
@@ -43,7 +48,7 @@ export class WorkerSession {
 		this.status = 'starting';
 		this.compute ??= new ComputeClient((reason) => this.fail(`GPU device lost: ${reason}`));
 		try {
-			this.device ??= await this.compute.init();
+			this.device ??= await this.compute.init(this.backend);
 		} catch (e) {
 			this.running = false;
 			this.status = 'unsupported';

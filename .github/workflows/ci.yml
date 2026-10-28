@@ -35,6 +35,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy -p kernels-wasm --target wasm32-unknown-unknown -- -D warnings
       - run: cargo nextest run --workspace
       - name: TypeScript bindings are up to date
         run: git diff --exit-code web/src/lib/protocol
@@ -46,6 +47,11 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v5
+      # The Vite build compiles the CPU-fallback kernels (crates/kernels-wasm).
+      - uses: dtolnay/rust-toolchain@1.95
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
       - uses: pnpm/action-setup@v4
         with:
           version: 12
@@ -75,6 +81,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.95
+        with:
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - uses: pnpm/action-setup@v4
         with:

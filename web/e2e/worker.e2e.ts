@@ -3,15 +3,19 @@ import vectors from '../../templates/pi/vectors.json' with { type: 'json' };
 import type { JobSummary } from '../src/lib/protocol/JobSummary.ts';
 import type { PiResult } from '../src/lib/protocol/PiResult.ts';
 
-test('a browser worker computes a job on the GPU with an exact result', async ({
+test('a browser worker computes a job with an exact result', async ({
 	page,
 	request
-}) => {
+}, testInfo) => {
 	await page.goto('/worker');
 	await page.getByRole('button', { name: 'Включи се' }).click();
 	await expect(page.getByTestId('status')).toHaveAttribute('data-status', /waiting|computing/, {
 		timeout: 30_000
 	});
+	await expect(page.getByTestId('device')).toHaveAttribute(
+		'data-backend',
+		testInfo.project.name === 'cpu' ? 'wasm' : 'webgpu'
+	);
 
 	// Units 0 and 1 of seed 42 are pinned test vectors, so the exact answer is known.
 	const res = await request.post('/api/jobs', {
@@ -35,6 +39,24 @@ test('a browser worker computes a job on the GPU with an exact result', async ({
 		.reduce((sum, v) => sum + v.inside, 0);
 	expect((done.result as unknown as PiResult).inside).toBe(expected);
 	await expect(page.getByTestId('accepted')).not.toHaveText('0');
+
+	// A unit of several chunks, which the GPU computes in several dispatches and the
+	// CPU on several threads at once.
+	const big = vectors.find((v) => v.samples > 1 << 24)!;
+	const bigRes = await request.post('/api/jobs', {
+		data: {
+			template: 'pi',
+			params: { units: 1, samples_per_unit: big.samples, seed: big.seed }
+		}
+	});
+	const bigJob = (await bigRes.json()) as JobSummary;
+	await expect
+		.poll(
+			async () =>
+				((await (await request.get(`/api/jobs/${bigJob.id}`)).json()) as JobSummary).result,
+			{ timeout: 45_000 }
+		)
+		.toMatchObject({ inside: big.inside });
 
 	// The dashboard reflects the finished job.
 	const dashboard = await page.context().newPage();
