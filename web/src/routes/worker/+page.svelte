@@ -37,7 +37,12 @@
 		<span data-testid="status" data-status={session.status}>{statusText[session.status]}</span>
 	</div>
 
-	{#if session.error}
+	{#if session.status === 'unsupported'}
+		<p class="bad" role="alert">
+			WebGPU не е достъпен на това устройство. Опитайте с актуален Chrome или Edge.
+		</p>
+		<p class="muted">{session.error}</p>
+	{:else if session.error}
 		<p class="bad" role="alert">{session.error}</p>
 	{/if}
 

@@ -6,6 +6,11 @@ import type { WorkerMessage } from '#lib/protocol/WorkerMessage.ts';
 export const CLIENT_VERSION = 'web-0.1.0';
 const PROTOCOL_VERSION = 1;
 const MAX_RECONNECT_DELAY_MS = 15_000;
+// The coordinator answers `request_work` and `result` at once. No answer within this
+// time means the connection is dead even if the socket still looks open: a phone
+// that slept with the page frozen is dropped by the coordinator, but the browser
+// may never see the close.
+const REPLY_TIMEOUT_MS = 20_000;
 
 export type SessionStatus =
 	'stopped' | 'starting' | 'connecting' | 'computing' | 'waiting' | 'reconnecting' | 'unsupported';
@@ -26,6 +31,7 @@ export class WorkerSession {
 	private lease: string | null = null;
 	private heartbeat: ReturnType<typeof setInterval> | undefined;
 	private retry: ReturnType<typeof setTimeout> | undefined;
+	private replyTimeout: ReturnType<typeof setTimeout> | undefined;
 	private reconnectDelay = 1000;
 
 	constructor(private url: string) {}
@@ -67,7 +73,7 @@ export class WorkerSession {
 		const ws = new WebSocket(this.url);
 		this.ws = ws;
 		ws.onopen = () => {
-			this.send({
+			this.sendExpectingReply({
 				type: 'hello',
 				protocol_version: PROTOCOL_VERSION,
 				client_version: CLIENT_VERSION,
@@ -75,21 +81,27 @@ export class WorkerSession {
 			});
 		};
 		ws.onmessage = (event) => this.onMessage(JSON.parse(event.data) as CoordinatorMessage);
-		ws.onclose = () => {
-			if (this.ws !== ws) return;
-			this.teardown();
-			this.ws = null;
-			if (!this.running) return;
-			// The coordinator returns our unit to the queue; reconnect with back-off.
-			this.status = 'reconnecting';
-			this.retry = setTimeout(() => this.running && this.connect(), this.reconnectDelay);
-			this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY_MS);
-		};
+		ws.onclose = () => this.lost(ws);
+	}
+
+	/** Drops `ws` and reconnects with back-off. The coordinator returns our unit to the queue. */
+	private lost(ws: WebSocket) {
+		if (this.ws !== ws) return;
+		this.teardown();
+		this.ws = null;
+		// A half-open socket may take long to report its close; don't wait for it.
+		ws.onmessage = ws.onclose = null;
+		ws.close();
+		if (!this.running) return;
+		this.status = 'reconnecting';
+		this.retry = setTimeout(() => this.running && this.connect(), this.reconnectDelay);
+		this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY_MS);
 	}
 
 	private teardown() {
 		clearInterval(this.heartbeat);
 		clearTimeout(this.retry);
+		clearTimeout(this.replyTimeout);
 		this.lease = null;
 	}
 
@@ -97,11 +109,21 @@ export class WorkerSession {
 		if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
 	}
 
+	/** Sends a message the coordinator always answers, and reconnects if it doesn't. */
+	private sendExpectingReply(msg: WorkerMessage) {
+		const ws = this.ws;
+		if (!ws) return;
+		this.send(msg);
+		clearTimeout(this.replyTimeout);
+		this.replyTimeout = setTimeout(() => this.lost(ws), REPLY_TIMEOUT_MS);
+	}
+
 	private requestWork() {
-		if (this.running) this.send({ type: 'request_work' });
+		if (this.running) this.sendExpectingReply({ type: 'request_work' });
 	}
 
 	private async onMessage(msg: CoordinatorMessage) {
+		clearTimeout(this.replyTimeout);
 		switch (msg.type) {
 			case 'welcome':
 				this.workerId = msg.worker_id;
@@ -121,11 +143,11 @@ export class WorkerSession {
 				try {
 					const { output, elapsed_ms } = await this.compute!.run(msg.template, msg.params);
 					this.lastUnitMs = elapsed_ms;
-					this.send({ type: 'result', lease_id: msg.lease_id, output, elapsed_ms });
+					this.sendExpectingReply({ type: 'result', lease_id: msg.lease_id, output, elapsed_ms });
 				} catch (e) {
 					if (!this.running) return;
 					const reason = e instanceof Error ? e.message : String(e);
-					this.send({ type: 'failed', lease_id: msg.lease_id, reason });
+					this.sendExpectingReply({ type: 'failed', lease_id: msg.lease_id, reason });
 				}
 				break;
 			}
