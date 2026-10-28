@@ -18,6 +18,9 @@ export default defineConfig({
 		host: true,
 		port: 7701,
 		strictPort: true,
+		// `just share` serves the dev server over HTTPS at this machine's
+		// Tailscale name, so lab PCs and phones get a secure context.
+		allowedHosts: ['.ts.net'],
 		fs: { allow: [searchForWorkspaceRoot(process.cwd()), '../templates'] },
 		// Same origin for the page and the coordinator, so WebGPU's secure-context
 		// requirement is met by a single TLS endpoint.
