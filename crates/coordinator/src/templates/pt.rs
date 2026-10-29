@@ -209,6 +209,25 @@ mod tests {
     }
 
     #[test]
+    fn the_largest_tile_fits_in_a_worker_message() {
+        let unit = json!({"width": MAX_TILE, "height": MAX_TILE, "x": 0, "y": 0,
+                          "w": MAX_TILE, "h": MAX_TILE, "spp": 1, "pass": 0, "seed": 0});
+        let rgb = vec![0.5f32; (MAX_TILE * MAX_TILE * 3) as usize];
+        let message = json!({
+            "type": "result",
+            "lease_id": uuid::Uuid::now_v7(),
+            "output": { "rgb": encode_rgb(&rgb) },
+            "elapsed_ms": u32::MAX,
+        });
+        assert!(Pt.validate_output(&unit, &message["output"]).is_ok());
+        let size = message.to_string().len();
+        assert!(
+            size < crate::ws::MAX_WORKER_MESSAGE_BYTES * 3 / 4,
+            "{size} bytes leave too little headroom under the worker message limit"
+        );
+    }
+
+    #[test]
     fn split_rejects_bad_params() {
         let ok = json!({"width": 64, "height": 64, "tile": 32, "spp": 4, "passes": 2, "seed": 0});
         assert!(Pt.split(&ok).is_ok());

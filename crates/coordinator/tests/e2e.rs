@@ -662,3 +662,20 @@ async fn colluders_are_caught_by_honeypots_and_their_work_redone(db: PgPool) {
         .sum();
     assert_eq!(result.inside, expected, "a colluders' result survived");
 }
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn the_largest_tiles_can_be_delivered(db: PgPool) {
+    // One 128 × 128 tile: its result is about 262 KiB on the wire.
+    let addr = serve(db, unverified()).await;
+    let res = reqwest::Client::new()
+        .post(format!("http://{addr}/api/jobs"))
+        .json(&sim_worker::pt_job(128, 128, 128, 1, 1, 3))
+        .send()
+        .await
+        .unwrap();
+    let job: JobSummary = res.json().await.unwrap();
+    let stats = sim_worker::run(sim(&addr)).await.unwrap();
+    assert_eq!(stats.accepted, 1);
+    let job = get_job(&addr, job.id).await;
+    assert_eq!(job.status, JobStatus::Done, "{:?}", job.error);
+}

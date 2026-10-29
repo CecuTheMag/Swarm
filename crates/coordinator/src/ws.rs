@@ -21,8 +21,9 @@ use uuid::Uuid;
 /// Sent to clients banned for wrong results (spec 0004).
 const BLOCKED: &str = "this device is blocked: too many wrong results";
 
-/// Worker messages are small; anything larger is abuse.
-const MAX_WORKER_MESSAGE_BYTES: usize = 64 * 1024;
+/// The largest worker message is a path-tracer result for the largest tile (base64 of
+/// `MAX_TILE² × 3` f32, about 262 KiB); anything far beyond that is abuse.
+pub const MAX_WORKER_MESSAGE_BYTES: usize = 512 * 1024;
 
 pub async fn worker(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.max_message_size(MAX_WORKER_MESSAGE_BYTES)

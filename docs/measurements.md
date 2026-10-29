@@ -24,6 +24,7 @@ Every number used in the competition documents comes from this log.
 | 2026-10-28 | Nothing Phone (1), Chrome 156 | π, 2²⁸ samples/unit, 10.6 min | 2.83 | — | Sustained-load run: 1800 units (4.83·10¹¹ samples) submitted from the T540p's dashboard, computed by the phone alone. Unit time 332 ms average, 351 ms p95, flat from first to last minute: no thermal throttling. GPU 36–37 °C, skin 37–38 °C, battery 32 °C, on charger. 761 M samples/s wall-clock including coordinator round trips |
 
 | 2026-10-28 | ThinkPad T540p (i5-4300M, 2C/4T), Edge 156, CPU fallback (3 threads) | π, 2²⁷ samples/unit | 4.05 | — | 544 M samples/s: 128 units, 247 ms average, 255 ms p95, 36 s for the job. Self-test: 512 M samples/s. About two thirds of the phone's GPU, from a laptop with no usable WebGPU |
+| 2026-10-29 | Nothing Phone (1), Chrome 156, through the public address | path tracer, 128² tiles × 64 spp | — | — | 9.66 M paths/s while computing (109 ms per unit), about 7 server CPU workers (1.41 M paths/s each). Self-test: 5.96 M paths/s, bit-exact on all vectors. After the render: GPU 43 °C, battery 35 °C, on charger |
 | 2026-10-29 | magserver (Xeon E5-1620, 4C/8T, 2012), 8 native sim-workers | path tracer, 1280×720, 32² tiles, 16 spp × 16 passes | 310 | — | 14 720 units (2.36·10⁸ paths, 256 spp) in 47.5 s. 1.42 M paths/s per worker while computing, 5.0 M paths/s overall: units of ~11 ms are dominated by per-unit overhead on a server that also runs the coordinator and Postgres. Larger tiles or more samples per unit are needed for efficiency |
 | 2026-10-29 | Dev laptop, headless Chromium | path tracer self-test, 64² tile × 16 spp | — | — | SwiftShader (software WebGPU): 2.98 M paths/s, bit-exact with the reference. CPU fallback (WebAssembly): 8.19 M paths/s, bit-exact |
 | 2026-10-29 | Dev laptop, headless Chromium, through the public address (Tailscale Funnel) | path tracer, 160×90, 32² tiles, 8 spp × 2 passes | 1.5 | — | 30 units in 20.3 s although each computes in milliseconds: ~0.67 s round trip per unit through Funnel's relay. Units for remote devices must carry seconds of work |
@@ -55,6 +56,15 @@ that always return the same wrong result. Overhead = results computed per unit.
 | 2026-10-29 | Honest only | 628 338 914 | 1.20–1.21 | 318–322 of 400 | — | 0 |
 | 2026-10-29 | + 2 random cheaters | 628 338 914 (exact) | 1.24–1.26 | 313–317 | 2 of 2 | 0 |
 | 2026-10-29 | + 2 colluders | 628 338 914 (exact) | 1.20–1.25 | 319–324 | 2 of 2 | 0 |
+
+Real devices with verification on (2026-10-29): the phone (Adreno 642L, Chrome 156, through
+the public HTTPS address) and 8 native workers on the server rendered 1280×720 at 512 spp
+(128² tiles × 64 spp, 8 passes: 480 units) in 62.5 s. No disputes and no disagreements.
+Of the 23 units computed by both the phone's GPU and a server CPU, 18 were bit-identical
+and 5 differed slightly yet agreed within the tolerance: on full tiles a real GPU
+occasionally takes another branch, although it matched every self-test vector exactly.
+Exact comparison alone would have rejected the phone. The phone became trusted during
+the job and computed 54 units alone; 58 of 58 decided honeypots were answered correctly.
 
 Two rounds each. No wrong result was accepted in any run: every scenario produced the
 honest count. About 150 honeypots per round caught the cheaters (6–7 wrong answers).
