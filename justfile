@@ -52,6 +52,11 @@ deploy server=env_var_or_default("SWARM_SERVER", ""):
       | ssh {{server}} 'rm -rf ~/swarm && mkdir -p ~/swarm && tar -xf - -C ~/swarm'
     ssh {{server}} 'cd ~/swarm && docker compose -f deploy/compose.server.yaml up -d --build --remove-orphans'
 
+# Public HTTPS for the deployed server through Tailscale Funnel. The first run prints a
+# login link that adds the server to your tailnet; run it again to get the address.
+public server=env_var_or_default("SWARM_SERVER", ""):
+    ssh {{server}} 'sh ~/swarm/deploy/tailscale/public.sh'
+
 # Simulated CPU workers on the deployed server (0 stops them).
 fleet n="4" server=env_var_or_default("SWARM_SERVER", ""):
     ssh {{server}} 'cd ~/swarm && SIM_WORKERS={{n}} docker compose -f deploy/compose.server.yaml --profile fleet up -d sim {{ if n == "0" { "--scale sim=0" } else { "" } }}'
