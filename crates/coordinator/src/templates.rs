@@ -5,6 +5,7 @@
 //! ever run kernels shipped with the site; jobs carry parameters, never code.
 
 mod pi;
+pub mod pt;
 
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -29,7 +30,7 @@ pub struct Registered {
 }
 
 static REGISTRY: LazyLock<Vec<Registered>> = LazyLock::new(|| {
-    let all: [&'static dyn Template; 1] = [&pi::Pi];
+    let all: [&'static dyn Template; 2] = [&pi::Pi, &pt::Pt];
     all.into_iter()
         .map(|template| Registered {
             template,

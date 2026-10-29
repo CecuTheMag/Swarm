@@ -300,3 +300,92 @@ async fn next(ws: &mut Ws) -> CoordinatorMessage {
 async fn next_event(ws: &mut Ws) -> DashboardEvent {
     serde_json::from_str(&next_text(ws).await).unwrap()
 }
+
+fn decode_png(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
+    let mut reader = png::Decoder::new(std::io::Cursor::new(bytes))
+        .read_info()
+        .unwrap();
+    let mut rgba = vec![0; reader.output_buffer_size().unwrap()];
+    let info = reader.next_frame(&mut rgba).unwrap();
+    (info.width, info.height, rgba)
+}
+
+async fn image(addr: &str, id: uuid::Uuid) -> reqwest::Response {
+    reqwest::get(format!("http://{addr}/api/jobs/{id}/image.png"))
+        .await
+        .unwrap()
+}
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn several_workers_render_an_image(db: PgPool) {
+    let addr = serve(db.clone(), Config::default()).await;
+    let (width, height, spp, passes, seed) = (40, 24, 2, 2, 9);
+    let res = reqwest::Client::new()
+        .post(format!("http://{addr}/api/jobs"))
+        .json(&sim_worker::pt_job(width, height, 16, spp, passes, seed))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201);
+    let job: JobSummary = res.json().await.unwrap();
+
+    // Viewing the image before any work starts the live accumulator: nothing rendered.
+    let before = image(&addr, job.id).await;
+    assert_eq!(before.status(), 200);
+    assert_eq!(before.headers()["content-type"], "image/png");
+    let (w, h, rgba) = decode_png(&before.bytes().await.unwrap());
+    assert_eq!((w, h), (width, height));
+    assert!(rgba.chunks(4).all(|px| px[3] == 0));
+
+    let workers: Vec<_> = (0..3)
+        .map(|_| tokio::spawn(sim_worker::run(sim(&addr))))
+        .collect();
+    for w in workers {
+        w.await.unwrap().unwrap();
+    }
+    let job = get_job(&addr, job.id).await;
+    assert_eq!(job.status, JobStatus::Done);
+    let result: protocol::templates::pt::JobResult =
+        serde_json::from_value(job.result.unwrap()).unwrap();
+    assert_eq!(result.samples_per_pixel, spp * passes);
+
+    // The live image equals one rendered on a single machine (up to 8-bit rounding,
+    // since passes add their sums separately).
+    let live = image(&addr, job.id).await.bytes().await.unwrap();
+    let (_, _, rgba) = decode_png(&live);
+    let mut whole = vec![0.0; (width * height * 3) as usize];
+    kernels::pt::render_tile(
+        &kernels::pt::TileParams {
+            width,
+            height,
+            x: 0,
+            y: 0,
+            w: width,
+            h: height,
+            spp: spp * passes,
+            pass: 0,
+            seed,
+        },
+        &mut whole,
+    );
+    for (px, sums) in rgba.chunks(4).zip(whole.chunks(3)) {
+        assert_eq!(px[3], 255);
+        for c in 0..3 {
+            let mean = sums[c] / (spp * passes) as f32;
+            let expected = (mean.clamp(0.0, 1.0).powf(1.0 / 2.2) * 255.0 + 0.5) as i32;
+            assert!(
+                (i32::from(px[c]) - expected).abs() <= 1,
+                "{px:?} vs {sums:?}"
+            );
+        }
+    }
+
+    // A coordinator that rebuilds the image from the database gets the same picture.
+    let other = serve(db, Config::default()).await;
+    assert_eq!(image(&other, job.id).await.bytes().await.unwrap(), live);
+
+    // Only path-tracer jobs have images.
+    let pi_job = create_pi_job(&addr, 1, 10, 0).await;
+    assert_eq!(image(&addr, pi_job.id).await.status(), 404);
+    assert_eq!(image(&addr, uuid::Uuid::now_v7()).await.status(), 404);
+}

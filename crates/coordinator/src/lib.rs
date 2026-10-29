@@ -2,6 +2,7 @@
 
 pub mod api;
 pub mod db;
+pub mod render;
 pub mod state;
 pub mod templates;
 pub mod ws;
@@ -24,6 +25,7 @@ pub fn router(state: AppState) -> Router {
         .route("/healthz", get(api::healthz))
         .route("/api/jobs", post(api::create_job).get(api::list_jobs))
         .route("/api/jobs/{id}", get(api::get_job))
+        .route("/api/jobs/{id}/image.png", get(api::job_image))
         .route("/ws/worker", get(ws::worker))
         .route("/ws/dashboard", get(ws::dashboard))
         .with_state(state)

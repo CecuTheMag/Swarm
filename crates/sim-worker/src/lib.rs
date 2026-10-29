@@ -5,7 +5,8 @@
 use anyhow::{Context, bail};
 use futures_util::{SinkExt, StreamExt};
 use protocol::{
-    Backend, CoordinatorMessage, DeviceInfo, PROTOCOL_VERSION, WorkerMessage, templates::pi,
+    Backend, CoordinatorMessage, DeviceInfo, PROTOCOL_VERSION, WorkerMessage,
+    templates::{pi, pt},
 };
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -38,6 +39,27 @@ pub fn compute(template_id: &str, version: u32, params: &Value) -> anyhow::Resul
                 samples: p.samples,
             });
             Ok(serde_json::to_value(pi::UnitOutput { inside })?)
+        }
+        (pt::ID, pt::VERSION) => {
+            let p: pt::UnitParams = serde_json::from_value(params.clone())?;
+            let mut rgb = vec![0.0; p.w as usize * p.h as usize * 3];
+            kernels::pt::render_tile(
+                &kernels::pt::TileParams {
+                    width: p.width,
+                    height: p.height,
+                    x: p.x,
+                    y: p.y,
+                    w: p.w,
+                    h: p.h,
+                    spp: p.spp,
+                    pass: p.pass,
+                    seed: p.seed,
+                },
+                &mut rgb,
+            );
+            Ok(serde_json::to_value(pt::UnitOutput {
+                rgb: pt::encode_rgb(&rgb),
+            })?)
         }
         _ => bail!("unsupported template {template_id} v{version}"),
     }
@@ -111,6 +133,13 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
     }
     let _ = ws.close(None).await;
     Ok(stats)
+}
+
+/// Convenience for building a path-tracer job body.
+pub fn pt_job(width: u32, height: u32, tile: u32, spp: u32, passes: u32, seed: u32) -> Value {
+    json!({ "template": pt::ID, "params": {
+        "width": width, "height": height, "tile": tile, "spp": spp, "passes": passes, "seed": seed
+    } })
 }
 
 /// Convenience for building a pi job body.

@@ -1,45 +1,20 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { apply, emptyState, sortedJobs, unitsPerSecond } from '#lib/dashboard/state.ts';
-	import { wsUrl } from '#lib/net.ts';
-	import type { DashboardEvent } from '#lib/protocol/DashboardEvent.ts';
+	import { LiveDashboard } from '#lib/dashboard/live.svelte.ts';
+	import { sortedJobs, unitsPerSecond } from '#lib/dashboard/state.ts';
 	import type { JobStatus } from '#lib/protocol/JobStatus.ts';
 	import type { PiResult } from '#lib/protocol/PiResult.ts';
+	import type { PtResult } from '#lib/protocol/PtResult.ts';
 	import type { ApiError } from '#lib/protocol/ApiError.ts';
 
-	let dash = $state(emptyState());
-	let now = $state(Date.now());
-	let connected = $state(false);
-
-	let ws: WebSocket | null = null;
-	let closed = false;
-	let retry: ReturnType<typeof setTimeout> | undefined;
-	let tick: ReturnType<typeof setInterval> | undefined;
-
-	function connect() {
-		const socket = new WebSocket(wsUrl('/ws/dashboard'));
-		ws = socket;
-		socket.onopen = () => (connected = true);
-		socket.onmessage = (e) => {
-			dash = apply(dash, JSON.parse(e.data) as DashboardEvent, Date.now());
-		};
-		socket.onclose = () => {
-			connected = false;
-			if (!closed) retry = setTimeout(connect, 2000);
-		};
-	}
-
-	onMount(() => {
-		connect();
-		tick = setInterval(() => (now = Date.now()), 1000);
-	});
-	onDestroy(() => {
-		closed = true;
-		clearTimeout(retry);
-		clearInterval(tick);
-		ws?.close();
-	});
+	const live = new LiveDashboard();
+	onMount(() => live.start());
+	onDestroy(() => live.stop());
+	const dash = $derived(live.state);
+	const connected = $derived(live.connected);
+	const now = $derived(live.now);
 
 	const workers = $derived(Object.values(dash.workers));
 	const jobs = $derived(sortedJobs(dash));
@@ -52,9 +27,16 @@
 		failed: 'неуспешна'
 	};
 
+	let template = $state<'pt' | 'pi'>('pt');
 	let units = $state(64);
 	let samples = $state(16_777_216);
 	let seed = $state(42);
+	// 16:9, 32-pixel tiles: 920 tiles per pass.
+	let width = $state(1280);
+	let height = $state(720);
+	let tile = $state(32);
+	let spp = $state(16);
+	let passes = $state(16);
 	let submitError = $state<string | null>(null);
 	let submitting = $state(false);
 
@@ -66,12 +48,16 @@
 			const res = await fetch('/api/jobs', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({
-					template: 'pi',
-					params: { units, samples_per_unit: samples, seed }
-				})
+				body: JSON.stringify(
+					template === 'pi'
+						? { template, params: { units, samples_per_unit: samples, seed } }
+						: { template, params: { width, height, tile, spp, passes, seed } }
+				)
 			});
 			if (!res.ok) submitError = ((await res.json()) as ApiError).error;
+			else if (template === 'pt') {
+				await goto(resolve('/render/[id]', { id: ((await res.json()) as { id: string }).id }));
+			}
 		} catch (e) {
 			submitError = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -80,6 +66,7 @@
 	}
 
 	const piResult = (result: unknown) => result as PiResult;
+	const ptResult = (result: unknown) => result as PtResult;
 </script>
 
 <main>
@@ -129,7 +116,16 @@
 									</div>
 								</td>
 								<td>
-									{#if job.result && job.template === 'pi'}
+									{#if job.template === 'pt'}
+										<a href={resolve('/render/[id]', { id: job.id })}>Изображение</a>
+										{#if job.result}
+											<span class="muted">
+												{ptResult(job.result).width}×{ptResult(job.result).height}, {ptResult(
+													job.result
+												).samples_per_pixel} проби/пиксел
+											</span>
+										{/if}
+									{:else if job.result && job.template === 'pi'}
 										π ≈ <strong>{piResult(job.result).pi.toFixed(6)}</strong>
 										<span class="muted">
 											(грешка {Math.abs(piResult(job.result).pi - Math.PI).toExponential(1)})
@@ -171,13 +167,28 @@
 	</section>
 
 	<section class="card">
-		<h2>Нова задача: π по метода Монте Карло</h2>
+		<h2>Нова задача</h2>
 		<form onsubmit={submit} class="form">
-			<label>Единици <input type="number" min="1" max="10000" bind:value={units} /></label>
 			<label>
-				Проби на единица
-				<input type="number" min="1" max="1073741824" bind:value={samples} />
+				Шаблон
+				<select bind:value={template} data-testid="template">
+					<option value="pt">Трасиране на лъчи (изображение)</option>
+					<option value="pi">π по метода Монте Карло</option>
+				</select>
 			</label>
+			{#if template === 'pi'}
+				<label>Единици <input type="number" min="1" max="10000" bind:value={units} /></label>
+				<label>
+					Проби на единица
+					<input type="number" min="1" max="1073741824" bind:value={samples} />
+				</label>
+			{:else}
+				<label>Ширина <input type="number" min="16" max="2048" bind:value={width} /></label>
+				<label>Височина <input type="number" min="16" max="2048" bind:value={height} /></label>
+				<label>Плочка <input type="number" min="8" max="128" bind:value={tile} /></label>
+				<label>Проби на проход <input type="number" min="1" max="1024" bind:value={spp} /></label>
+				<label>Проходи <input type="number" min="1" max="256" bind:value={passes} /></label>
+			{/if}
 			<label>Начално число <input type="number" min="0" bind:value={seed} /></label>
 			<button type="submit" disabled={submitting}>Пусни</button>
 		</form>

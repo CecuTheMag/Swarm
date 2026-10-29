@@ -9,13 +9,19 @@
 
 import { GpuUnavailableError, requestGpu } from '#lib/gpu/device.ts';
 import { sha256Hex } from '#lib/gpu/hash.ts';
-import { createPiKernel, shaderSource as piSource } from '#lib/gpu/pi.ts';
-import { cpuThreads, createCpuPiKernel } from '#lib/cpu/pi.ts';
+import { createPiKernel } from '#lib/gpu/pi.ts';
+import { createPtKernel } from '#lib/gpu/pt.ts';
+import { cpuThreads, createCpuPool } from '#lib/cpu/pool.ts';
+import { runCpuPi } from '#lib/cpu/pi.ts';
+import { renderCpuPt } from '#lib/cpu/pt.ts';
+import { encodeRgb } from '#lib/pt.ts';
+import { piShader, ptShader } from '#lib/templates.ts';
 import type { ComputeRequest, ComputeResponse } from './compute-messages.ts';
 import type { Backend } from '#lib/protocol/Backend.ts';
 import type { DeviceInfo } from '#lib/protocol/DeviceInfo.ts';
 import type { JsonValue } from '#lib/protocol/serde_json/JsonValue.ts';
 import type { PiUnitParams } from '#lib/protocol/PiUnitParams.ts';
+import type { PtUnitParams } from '#lib/protocol/PtUnitParams.ts';
 
 interface Kernel {
 	sha256: string;
@@ -27,31 +33,37 @@ let current: AbortController | undefined;
 
 const post = (msg: ComputeResponse) => self.postMessage(msg);
 
+type Run = (params: JsonValue, signal: AbortSignal) => Promise<JsonValue>;
+
 /** Sets up the kernels on the GPU, or on the CPU if there is none or `backend` asks for it. */
 async function init(backend?: Backend): Promise<DeviceInfo> {
-	const piSha256 = await sha256Hex(piSource);
+	const hashes = { pi: await sha256Hex(piShader), pt: await sha256Hex(ptShader) };
 	if (backend !== 'wasm') {
 		try {
-			return await initGpu(piSha256);
+			return await initGpu(hashes);
 		} catch (e) {
 			if (!(e instanceof GpuUnavailableError)) throw e;
 		}
 	}
-	return initCpu(piSha256);
+	return initCpu(hashes);
 }
 
-async function initGpu(piSha256: string): Promise<DeviceInfo> {
+function register(hashes: { pi: string; pt: string }, pi: Run, pt: Run) {
+	kernels = new Map([
+		['pi@1', { sha256: hashes.pi, run: pi }],
+		['pt@1', { sha256: hashes.pt, run: pt }]
+	]);
+}
+
+async function initGpu(hashes: { pi: string; pt: string }): Promise<DeviceInfo> {
 	const gpu = await requestGpu();
 	const pi = createPiKernel(gpu.device);
-	kernels = new Map([
-		[
-			'pi@1',
-			{
-				sha256: piSha256,
-				run: async (params, signal) => ({ ...(await pi.run(params as PiUnitParams, signal)) })
-			}
-		]
-	]);
+	const pt = createPtKernel(gpu.device);
+	register(
+		hashes,
+		async (params, signal) => ({ ...(await pi.run(params as PiUnitParams, signal)) }),
+		async (params, signal) => ({ ...(await pt.run(params as PtUnitParams, signal)) })
+	);
 	gpu.device.lost.then((info: GPUDeviceLostInfo) => {
 		kernels = undefined;
 		post({ kind: 'device_lost', reason: info.message });
@@ -59,19 +71,16 @@ async function initGpu(piSha256: string): Promise<DeviceInfo> {
 	return gpu.info;
 }
 
-function initCpu(piSha256: string): DeviceInfo {
-	const threads = cpuThreads();
-	const pi = createCpuPiKernel(threads);
-	kernels = new Map([
-		[
-			'pi@1',
-			{
-				sha256: piSha256,
-				run: async (params, signal) => ({ ...(await pi.run(params as PiUnitParams, signal)) })
-			}
-		]
-	]);
-	return { backend: 'wasm', vendor: 'cpu', architecture: `${threads} threads` };
+function initCpu(hashes: { pi: string; pt: string }): DeviceInfo {
+	const pool = createCpuPool(cpuThreads());
+	register(
+		hashes,
+		async (params, signal) => ({ ...(await runCpuPi(pool, params as PiUnitParams, signal)) }),
+		async (params, signal) => ({
+			rgb: encodeRgb(await renderCpuPt(pool, params as PtUnitParams, signal))
+		})
+	);
+	return { backend: 'wasm', vendor: 'cpu', architecture: `${pool.threads} threads` };
 }
 
 self.onmessage = async (event: MessageEvent<ComputeRequest>) => {

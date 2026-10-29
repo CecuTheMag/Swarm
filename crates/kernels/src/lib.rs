@@ -4,4 +4,5 @@
 //! to WebAssembly as the fallback for devices without WebGPU.
 
 pub mod pi;
+pub mod pt;
 pub mod rng;

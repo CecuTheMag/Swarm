@@ -234,10 +234,15 @@ async fn handle_completion(
         Completion::Accepted {
             job_id,
             unit_id,
+            unit_params,
             units_done,
             units_total,
             job_finished,
         } => {
+            state
+                .renders
+                .unit_accepted(job_id, unit_id, &unit_params, output)
+                .await;
             if let Some(w) = state.workers.lock().unwrap().get_mut(&worker_id) {
                 w.units_done += 1;
             }

@@ -4,7 +4,7 @@ use crate::{db, state::AppState, templates};
 use axum::{
     Json,
     extract::{Path, State},
-    http::StatusCode,
+    http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
 use protocol::{ApiError, CreateJob, DashboardEvent, JobSummary};
@@ -62,6 +62,26 @@ pub async fn get_job(
         .await?
         .map(Json)
         .ok_or(AppError::NotFound)
+}
+
+/// The current image of a path-tracer job (spec 0003).
+pub async fn job_image(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Response, AppError> {
+    let png = state
+        .renders
+        .png(&state.db, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "image/png"),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        png,
+    )
+        .into_response())
 }
 
 pub async fn list_jobs(State(state): State<AppState>) -> Result<Json<Vec<JobSummary>>, AppError> {

@@ -1,3 +1,4 @@
+use crate::render::Renders;
 use protocol::{DashboardEvent, WorkerSummary};
 use sqlx::PgPool;
 use std::{
@@ -43,6 +44,8 @@ pub struct State {
     pub events: broadcast::Sender<DashboardEvent>,
     /// Workers connected to this instance. Moves to Redis with multiple instances.
     pub workers: Mutex<HashMap<Uuid, WorkerSummary>>,
+    /// Live images of path-tracer jobs.
+    pub renders: Renders,
 }
 
 impl State {
@@ -53,6 +56,7 @@ impl State {
             config,
             events,
             workers: Mutex::new(HashMap::new()),
+            renders: Renders::default(),
         })
     }
 

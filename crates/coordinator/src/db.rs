@@ -239,6 +239,7 @@ pub enum Completion {
     Accepted {
         job_id: Uuid,
         unit_id: Uuid,
+        unit_params: Value,
         units_done: u32,
         units_total: u32,
         /// Present when this completion finished the job.
@@ -358,6 +359,7 @@ pub async fn complete_lease(
     Ok(Completion::Accepted {
         job_id,
         unit_id,
+        unit_params,
         units_done: units_done as u32,
         units_total: units_total as u32,
         job_finished,
