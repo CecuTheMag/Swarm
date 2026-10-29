@@ -43,6 +43,19 @@ share-public:
 unshare:
     tailscale serve reset
 
+# Copy the working tree to a Docker host and (re)start Swarm there on port 7780.
+# `server` is user@host; set SWARM_SERVER to skip typing it.
+deploy server=env_var_or_default("SWARM_SERVER", ""):
+    @test -n "{{server}}" || { echo "usage: just deploy user@host (or set SWARM_SERVER)"; exit 1; }
+    git ls-files -z --cached --others --exclude-standard \
+      | tar --null --files-from=- --ignore-failed-read -cf - \
+      | ssh {{server}} 'rm -rf ~/swarm && mkdir -p ~/swarm && tar -xf - -C ~/swarm'
+    ssh {{server}} 'cd ~/swarm && docker compose -f deploy/compose.server.yaml up -d --build --remove-orphans'
+
+# Simulated CPU workers on the deployed server (0 stops them).
+fleet n="4" server=env_var_or_default("SWARM_SERVER", ""):
+    ssh {{server}} 'cd ~/swarm && SIM_WORKERS={{n}} docker compose -f deploy/compose.server.yaml --profile fleet up -d sim {{ if n == "0" { "--scale sim=0" } else { "" } }}'
+
 # Per-device speed of completed pi units.
 bench-report:
     docker compose exec -T postgres psql -U swarm swarm < deploy/sql/benchmarks.sql

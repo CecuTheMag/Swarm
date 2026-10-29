@@ -1,0 +1,13 @@
+# One origin for the site and the coordinator, as in development (vite.config.ts).
+:80 {
+	encode zstd gzip
+
+	@coordinator path /api/* /ws/* /healthz
+	handle @coordinator {
+		reverse_proxy coordinator:7700
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}
