@@ -184,18 +184,21 @@ async fn protocol_violations_are_rejected(db: PgPool) {
         CoordinatorMessage::Error { .. }
     ));
 
-    // Hoarding: a second request while holding the maximum number of leases.
+    // Hoarding: one more request while holding the maximum number of leases.
+    create_pi_job(&addr, 20, 100, 1).await;
     let (mut ws, _) = connect_async(format!("ws://{addr}/ws/worker"))
         .await
         .unwrap();
     hello(&mut ws).await;
-    ws.send(Message::text(r#"{"type":"request_work"}"#))
-        .await
-        .unwrap();
-    assert!(matches!(
-        next(&mut ws).await,
-        CoordinatorMessage::Assign { .. }
-    ));
+    for _ in 0..Config::default().max_leases_per_worker {
+        ws.send(Message::text(r#"{"type":"request_work"}"#))
+            .await
+            .unwrap();
+        assert!(matches!(
+            next(&mut ws).await,
+            CoordinatorMessage::Assign { .. }
+        ));
+    }
     ws.send(Message::text(r#"{"type":"request_work"}"#))
         .await
         .unwrap();

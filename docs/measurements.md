@@ -29,6 +29,17 @@ Every number used in the competition documents comes from this log.
 | 2026-10-29 | Dev laptop, headless Chromium | path tracer self-test, 64² tile × 16 spp | — | — | SwiftShader (software WebGPU): 2.98 M paths/s, bit-exact with the reference. CPU fallback (WebAssembly): 8.19 M paths/s, bit-exact |
 | 2026-10-29 | Dev laptop, headless Chromium, through the public address (Tailscale Funnel) | path tracer, 160×90, 32² tiles, 8 spp × 2 passes | 1.5 | — | 30 units in 20.3 s although each computes in milliseconds: ~0.67 s round trip per unit through Funnel's relay. Units for remote devices must carry seconds of work |
 
+Throughput through the public address (2026-10-29): one browser worker on the dev laptop
+(CPU fallback, 15 threads), connecting through Tailscale Funnel, path-tracer units of
+128² tiles × 64 spp (57–61 ms of compute, a 262 KiB result). Fetching one unit at a time:
+0.73 units/s, the device idle ~95 % of the time: every unit cost a round trip of about
+1.3 s through the relay. With units fetched in advance (as many as the round trip and
+unit time call for, up to 8): 1.62 units/s, 2.2× faster, now limited by bandwidth:
+uploads through the relay ran at ~300 KB/s against 17.5 MB/s on the LAN. Both ends were
+behind the same home connection here, so results crossed its slow upload; a phone
+elsewhere only uses the server's download. Default render jobs now use 64² tiles × 128
+spp: 4× fewer bytes per light path.
+
 Grid correctness (2026-10-28): a 128-unit π job (2²⁷ samples/unit, seed 2026) computed by
 the phone (52 units) and four CPU sim-workers (76 units) gave exactly the same count as a
 CPU-only run: 13 492 969 218 inside of 17 179 869 184. A 64-unit job (seed 7001) whose

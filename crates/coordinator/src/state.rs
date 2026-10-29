@@ -48,7 +48,9 @@ pub struct Config {
     pub idle_timeout: Duration,
     /// Back-off suggested to workers when the queue is empty.
     pub no_work_retry: Duration,
-    /// Maximum units a single worker may hold at once.
+    /// Maximum units a single worker may hold at once. Workers fetch units in advance so
+    /// round trips overlap the work; a fast device behind a slow link needs several in
+    /// flight to stay busy.
     pub max_leases_per_worker: usize,
 }
 
@@ -104,7 +106,7 @@ impl Default for Config {
             heartbeat_interval: Duration::from_secs(10),
             idle_timeout: Duration::from_secs(30),
             no_work_retry: Duration::from_secs(2),
-            max_leases_per_worker: 1,
+            max_leases_per_worker: 8,
         }
     }
 }

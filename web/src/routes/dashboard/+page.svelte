@@ -31,12 +31,14 @@
 	let units = $state(64);
 	let samples = $state(16_777_216);
 	let seed = $state(42);
-	// 16:9, 32-pixel tiles: 920 tiles per pass.
+	// 16:9 at 1024 samples per pixel: 240 tiles of 64 pixels, 8 passes of 128 samples.
+	// A unit is about 0.5 M light paths (a phone: ~0.1 s, a CPU thread: ~0.4 s) for a
+	// 65 KiB result, so neither round trips nor bandwidth dominate.
 	let width = $state(1280);
 	let height = $state(720);
-	let tile = $state(32);
-	let spp = $state(16);
-	let passes = $state(16);
+	let tile = $state(64);
+	let spp = $state(128);
+	let passes = $state(8);
 	let submitError = $state<string | null>(null);
 	let submitting = $state(false);
 
