@@ -30,7 +30,13 @@ export default defineConfig({
 			command: 'cargo run -p coordinator',
 			cwd: '..',
 			url: 'http://127.0.0.1:7700/healthz',
-			env: { DATABASE_URL, COORDINATOR_ADDR: '127.0.0.1:7700', RUST_LOG: 'warn' },
+			// One browser worker per test: it cannot verify itself (spec 0004).
+			env: {
+				DATABASE_URL,
+				COORDINATOR_ADDR: '127.0.0.1:7700',
+				RUST_LOG: 'warn',
+				SWARM_REDUNDANCY: '1'
+			},
 			reuseExistingServer: false,
 			timeout: 300_000
 		},

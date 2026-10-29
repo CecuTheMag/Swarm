@@ -48,7 +48,14 @@ pub async fn create_job(
         .template
         .split(&body.params)
         .map_err(AppError::BadRequest)?;
-    let job = db::create_job(&state.db, template, &body.params, units).await?;
+    let job = db::create_job(
+        &state.db,
+        template,
+        &body.params,
+        units,
+        state.config.redundancy,
+    )
+    .await?;
     tracing::info!(job_id = %job.id, template = %job.template, units = job.units_total, "job created");
     state.publish(DashboardEvent::JobUpdated { job: job.clone() });
     Ok((StatusCode::CREATED, Json(job)))

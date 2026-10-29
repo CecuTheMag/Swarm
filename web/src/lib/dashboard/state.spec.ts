@@ -10,6 +10,7 @@ const job = (id: string, created_at: number, units_done = 0): JobSummary => ({
 	params: {},
 	units_total: 10,
 	units_done,
+	error: null,
 	result: null,
 	created_at,
 	finished_at: null

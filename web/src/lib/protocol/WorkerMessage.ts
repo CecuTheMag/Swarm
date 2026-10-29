@@ -5,4 +5,9 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * Worker → coordinator.
  */
-export type WorkerMessage = { "type": "hello", protocol_version: number, client_version: string, device: DeviceInfo, } | { "type": "request_work" } | { "type": "heartbeat", lease_ids: Array<string>, } | { "type": "result", lease_id: string, output: JsonValue, elapsed_ms: number, } | { "type": "failed", lease_id: string, reason: string, };
+export type WorkerMessage = { "type": "hello", protocol_version: number, client_version: string, device: DeviceInfo, 
+/**
+ * The device's id across connections, kept by the client; its reputation is
+ * tracked under it (spec 0004). Without one, every connection starts afresh.
+ */
+client_id?: string, } | { "type": "request_work" } | { "type": "heartbeat", lease_ids: Array<string>, } | { "type": "result", lease_id: string, output: JsonValue, elapsed_ms: number, } | { "type": "failed", lease_id: string, reason: string, };

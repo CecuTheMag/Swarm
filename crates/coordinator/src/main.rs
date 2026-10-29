@@ -15,7 +15,9 @@ async fn main() -> anyhow::Result<()> {
     let db = coordinator::connect(&database_url)
         .await
         .context("connecting to the database")?;
-    let app = coordinator::router(State::new(db, Config::default()));
+    let state = State::new(db, Config::from_env());
+    coordinator::spawn_reaper(state.clone());
+    let app = coordinator::router(state);
 
     let listener = tokio::net::TcpListener::bind(&addr)
         .await

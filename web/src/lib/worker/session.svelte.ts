@@ -16,6 +16,26 @@ const REPLY_TIMEOUT_MS = 20_000;
 export type SessionStatus =
 	'stopped' | 'starting' | 'connecting' | 'computing' | 'waiting' | 'reconnecting' | 'unsupported';
 
+const CLIENT_ID_KEY = 'swarm-client-id';
+
+/**
+ * This browser's id across visits: the coordinator keeps its reputation under it
+ * (spec 0004). Without storage (private windows, blocked site data) every connection
+ * is a new, untrusted client, which still works.
+ */
+function clientId(): string | undefined {
+	try {
+		let id = localStorage.getItem(CLIENT_ID_KEY);
+		if (!id) {
+			id = crypto.randomUUID();
+			localStorage.setItem(CLIENT_ID_KEY, id);
+		}
+		return id;
+	} catch {
+		return undefined;
+	}
+}
+
 /** One contributor session: connects to the coordinator and computes units until stopped. */
 export class WorkerSession {
 	status = $state<SessionStatus>('stopped');
@@ -82,7 +102,8 @@ export class WorkerSession {
 				type: 'hello',
 				protocol_version: PROTOCOL_VERSION,
 				client_version: CLIENT_VERSION,
-				device: this.device!
+				device: this.device!,
+				client_id: clientId()
 			});
 		};
 		ws.onmessage = (event) => this.onMessage(JSON.parse(event.data) as CoordinatorMessage);

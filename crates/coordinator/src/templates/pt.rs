@@ -42,6 +42,33 @@ pub fn unit_rgb(unit: &UnitParams, output: &Value) -> Result<Vec<f32>, String> {
     Ok(rgb)
 }
 
+/// Whether two tiles are the same render. CPU backends agree bit for bit; GPUs may fuse
+/// or approximate floating-point operations, so now and then one sample takes another
+/// branch. Same rule as the browser self-test: at least 90 % of values within 0.1 % (or
+/// 0.001), and the totals within 5 %.
+pub fn tiles_agree(a: &[f32], b: &[f32]) -> bool {
+    if a.len() != b.len() || a.is_empty() {
+        return false;
+    }
+    if a == b {
+        return true;
+    }
+    let close = a
+        .iter()
+        .zip(b)
+        .filter(|(x, y)| (*x - *y).abs() <= 1e-3f32.max(1e-3 * y.abs()))
+        .count();
+    let (sum_a, sum_b): (f64, f64) = a.iter().zip(b).fold((0.0, 0.0), |(sa, sb), (x, y)| {
+        (sa + f64::from(*x), sb + f64::from(*y))
+    });
+    let sum_error = if sum_b == 0.0 {
+        sum_a.abs()
+    } else {
+        (sum_a - sum_b).abs() / sum_b
+    };
+    close * 10 >= a.len() * 9 && sum_error <= 0.05
+}
+
 impl Template for Pt {
     fn id(&self) -> &'static str {
         ID
@@ -92,6 +119,16 @@ impl Template for Pt {
     fn validate_output(&self, unit_params: &Value, output: &Value) -> Result<(), String> {
         let u: UnitParams = parse(unit_params, "unit params")?;
         unit_rgb(&u, output).map(|_| ())
+    }
+
+    fn agree(&self, unit_params: &Value, a: &Value, b: &Value) -> bool {
+        let Ok(u) = parse::<UnitParams>(unit_params, "unit params") else {
+            return false;
+        };
+        match (unit_rgb(&u, a), unit_rgb(&u, b)) {
+            (Ok(a), Ok(b)) => tiles_agree(&a, &b),
+            _ => false,
+        }
     }
 
     fn aggregate(&self, job_params: &Value, outputs: &[Value]) -> Result<Value, String> {
@@ -207,6 +244,32 @@ mod tests {
         assert!(ok(&[0.0, 0.0, 0.0, 0.0, 0.0, f32::NAN]).is_err());
         assert!(Pt.validate_output(&unit, &json!({"rgb": "%%%"})).is_err());
         assert!(Pt.validate_output(&unit, &json!({"inside": 3})).is_err());
+    }
+
+    #[test]
+    fn tiles_agree_exactly_or_within_gpu_tolerance() {
+        let reference: Vec<f32> = (1..=100).map(|i| i as f32).collect();
+        assert!(tiles_agree(&reference, &reference));
+        // Rounding everywhere and a few samples that took another branch.
+        let gpu: Vec<f32> = reference
+            .iter()
+            .enumerate()
+            .map(|(i, v)| if i < 5 { v * 1.5 } else { v * (1.0 + 1e-5) })
+            .collect();
+        assert!(tiles_agree(&gpu, &reference));
+        // A systematically different render, nothing at all, or a wrong size.
+        let brighter: Vec<f32> = reference.iter().map(|v| v * 1.1).collect();
+        assert!(!tiles_agree(&brighter, &reference));
+        assert!(!tiles_agree(&vec![0.0; 100], &reference));
+        assert!(!tiles_agree(&reference[..99], &reference));
+        assert!(!tiles_agree(&[], &[]));
+
+        let unit = json!({"width": 8, "height": 8, "x": 0, "y": 0, "w": 2, "h": 1, "spp": 2, "pass": 0, "seed": 0});
+        let out = |v: &[f32]| json!({ "rgb": encode_rgb(v) });
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        assert!(Pt.agree(&unit, &out(&a), &out(&a)));
+        assert!(!Pt.agree(&unit, &out(&a), &out(&[0.0; 6])));
+        assert!(!Pt.agree(&unit, &out(&a), &json!({"rgb": "%%%"})));
     }
 
     #[test]

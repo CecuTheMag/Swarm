@@ -12,6 +12,7 @@ workspace = true
 anyhow = "1.0.104"
 axum = { version = "0.8.9", features = ["ws"] }
 dotenvy = "0.15.7"
+fastrand = "2.5.0"
 hex = "0.4.3"
 kernels = { version = "0.1.0", path = "../kernels" }
 png = "0.18.1"

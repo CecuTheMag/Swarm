@@ -20,6 +20,8 @@ pub trait Template: Send + Sync {
     fn split(&self, params: &Value) -> Result<Vec<Value>, String>;
     /// Checks that `output` is well-formed and plausible for `unit_params`.
     fn validate_output(&self, unit_params: &Value, output: &Value) -> Result<(), String>;
+    /// Whether two valid outputs for the same unit count as the same answer (spec 0004).
+    fn agree(&self, unit_params: &Value, a: &Value, b: &Value) -> bool;
     /// Reduces unit outputs (in unit order) into the job result.
     fn aggregate(&self, job_params: &Value, outputs: &[Value]) -> Result<Value, String>;
 }

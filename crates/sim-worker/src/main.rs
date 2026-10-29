@@ -1,7 +1,7 @@
 //! Runs one or more simulated workers against a coordinator.
 
 use clap::Parser;
-use sim_worker::{Options, Stats, run};
+use sim_worker::{Cheat, Options, Stats, run};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
@@ -19,6 +19,12 @@ struct Args {
     /// Exit when the queue is empty instead of polling forever.
     #[arg(long)]
     exit_when_idle: bool,
+    /// Fault injection: share of results each worker makes up (0..=1).
+    #[arg(long, default_value_t = 0.0)]
+    cheat_rate: f64,
+    /// Made-up results differ (`random`) or all cheaters return the same (`constant`).
+    #[arg(long, default_value = "random")]
+    cheat_mode: String,
 }
 
 #[tokio::main]
@@ -28,10 +34,18 @@ async fn main() -> anyhow::Result<()> {
         .init();
     let args = Args::parse();
 
+    let cheat = match (args.cheat_rate, args.cheat_mode.as_str()) {
+        (rate, _) if rate <= 0.0 => Cheat::Honest,
+        (rate, "random") => Cheat::Random { rate },
+        (rate, "constant") => Cheat::Constant { rate },
+        (_, other) => anyhow::bail!("unknown cheat mode {other:?}"),
+    };
     let opts = Options {
         url: args.url,
         max_units: args.max_units,
         exit_when_idle: args.exit_when_idle,
+        client_id: None,
+        cheat,
     };
     let handles: Vec<_> = (0..args.workers)
         .map(|_| tokio::spawn(run(opts.clone())))

@@ -14,9 +14,32 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 async fn serve(db: PgPool, config: Config) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap().to_string();
-    let app = coordinator::router(State::new(db, config));
+    let state = State::new(db, config);
+    coordinator::spawn_reaper(state.clone());
+    let app = coordinator::router(state);
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     addr
+}
+
+/// One result decides a unit and there are no honeypots: for tests about scheduling
+/// with a single worker, which cannot verify its own results (spec 0004).
+fn unverified() -> Config {
+    Config {
+        redundancy: 1,
+        honeypot_rate: 0.0,
+        new_client_honeypot_rate: 0.0,
+        ..Config::default()
+    }
+}
+
+/// Full verification, but no honeypots: once a job is done, a worker asking for more
+/// work may otherwise get a copy of one of its units, which would skew exact counts.
+fn without_honeypots() -> Config {
+    Config {
+        honeypot_rate: 0.0,
+        new_client_honeypot_rate: 0.0,
+        ..Config::default()
+    }
 }
 
 fn sim(addr: &str) -> sim_worker::Options {
@@ -24,6 +47,8 @@ fn sim(addr: &str) -> sim_worker::Options {
         url: format!("ws://{addr}/ws/worker"),
         max_units: None,
         exit_when_idle: true,
+        client_id: None,
+        cheat: sim_worker::Cheat::Honest,
     }
 }
 
@@ -49,7 +74,7 @@ async fn get_job(addr: &str, id: uuid::Uuid) -> JobSummary {
 
 #[sqlx::test(migrator = "coordinator::MIGRATOR")]
 async fn several_workers_complete_a_job_exactly(db: PgPool) {
-    let addr = serve(db, Config::default()).await;
+    let addr = serve(db, without_honeypots()).await;
     let (units, samples, seed) = (24, 50_000, 2026);
     let job = create_pi_job(&addr, units, samples, seed).await;
     assert_eq!(job.status, JobStatus::Queued);
@@ -61,7 +86,8 @@ async fn several_workers_complete_a_job_exactly(db: PgPool) {
     for w in workers {
         accepted += w.await.unwrap().unwrap().accepted;
     }
-    assert_eq!(accepted, units);
+    // Every unit was computed by two different workers whose results agreed.
+    assert_eq!(accepted, units * Config::default().redundancy);
 
     let job = get_job(&addr, job.id).await;
     assert_eq!(job.status, JobStatus::Done);
@@ -80,7 +106,7 @@ async fn several_workers_complete_a_job_exactly(db: PgPool) {
 
 #[sqlx::test(migrator = "coordinator::MIGRATOR")]
 async fn worker_that_disconnects_mid_job_loses_its_unit(db: PgPool) {
-    let addr = serve(db, Config::default()).await;
+    let addr = serve(db, without_honeypots()).await;
     let job = create_pi_job(&addr, 5, 1000, 1).await;
 
     // A raw worker takes a unit and vanishes without answering.
@@ -97,7 +123,8 @@ async fn worker_that_disconnects_mid_job_loses_its_unit(db: PgPool) {
     ));
     drop(ws);
 
-    // The remaining worker still finishes every unit, including the abandoned one.
+    // The remaining workers still finish every unit, including the abandoned one; each
+    // unit is verified by two of them.
     let mut stats = sim_worker::Stats::default();
     for _ in 0..50 {
         let s = sim_worker::run(sim(&addr)).await.unwrap();
@@ -107,7 +134,7 @@ async fn worker_that_disconnects_mid_job_loses_its_unit(db: PgPool) {
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    assert_eq!(stats.accepted, 5);
+    assert_eq!(stats.accepted, 5 * Config::default().redundancy);
     assert_eq!(get_job(&addr, job.id).await.status, JobStatus::Done);
 }
 
@@ -231,7 +258,7 @@ async fn rest_api_validates_input(db: PgPool) {
 
 #[sqlx::test(migrator = "coordinator::MIGRATOR")]
 async fn dashboard_streams_live_events(db: PgPool) {
-    let addr = serve(db, Config::default()).await;
+    let addr = serve(db, unverified()).await;
     let (mut dash, _) = connect_async(format!("ws://{addr}/ws/dashboard"))
         .await
         .unwrap();
@@ -388,4 +415,250 @@ async fn several_workers_render_an_image(db: PgPool) {
     let pi_job = create_pi_job(&addr, 1, 10, 0).await;
     assert_eq!(image(&addr, pi_job.id).await.status(), 404);
     assert_eq!(image(&addr, uuid::Uuid::now_v7()).await.status(), 404);
+}
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn a_hung_worker_loses_its_unit_to_a_healthy_one(db: PgPool) {
+    let config = Config {
+        lease_ttl: Duration::from_secs(1),
+        max_lease_duration: Duration::from_secs(2),
+        reap_interval: Duration::from_millis(200),
+        no_work_retry: Duration::from_millis(200),
+        ..unverified()
+    };
+    let addr = serve(db.clone(), config).await;
+    let job = create_pi_job(&addr, 1, 1000, 4).await;
+
+    // Takes the only unit, then stays connected and keeps sending heartbeats for it,
+    // but never sends a result: a GPU that hung inside a tab, say.
+    let (mut hung, _) = connect_async(format!("ws://{addr}/ws/worker"))
+        .await
+        .unwrap();
+    hello(&mut hung).await;
+    hung.send(Message::text(r#"{"type":"request_work"}"#))
+        .await
+        .unwrap();
+    let CoordinatorMessage::Assign {
+        lease_id, params, ..
+    } = next(&mut hung).await
+    else {
+        panic!("expected an assignment");
+    };
+    let beats = tokio::spawn(async move {
+        for _ in 0..20 {
+            let beat = json!({"type": "heartbeat", "lease_ids": [lease_id]}).to_string();
+            if hung.send(Message::text(beat)).await.is_err() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+        hung
+    });
+
+    // A healthy worker waits for work; it gets the unit once the lease reaches its
+    // maximum lifetime and the reaper returns it to the queue.
+    let healthy = sim_worker::run(sim_worker::Options {
+        max_units: Some(1),
+        exit_when_idle: false,
+        ..sim(&addr)
+    });
+    let stats = tokio::time::timeout(Duration::from_secs(10), healthy)
+        .await
+        .expect("the unit was never handed to the healthy worker")
+        .unwrap();
+    assert_eq!(stats.accepted, 1);
+    assert_eq!(get_job(&addr, job.id).await.status, JobStatus::Done);
+
+    let reason: String = sqlx::query_scalar("SELECT release_reason FROM leases WHERE id = $1")
+        .bind(lease_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(reason, "expired");
+
+    // The hung worker's result, if it ever comes, is not counted.
+    let mut hung = beats.await.unwrap();
+    let output = sim_worker::compute(pi::ID, pi::VERSION, &params).unwrap();
+    hung.send(Message::text(
+        json!({"type": "result", "lease_id": lease_id, "output": output, "elapsed_ms": 1})
+            .to_string(),
+    ))
+    .await
+    .unwrap();
+    let reply = next(&mut hung).await;
+    assert!(
+        matches!(
+            reply,
+            CoordinatorMessage::Ack {
+                accepted: false,
+                ..
+            }
+        ),
+        "unexpected {reply:?}"
+    );
+}
+
+async fn client_banned(db: &PgPool, client_id: uuid::Uuid) -> bool {
+    sqlx::query_scalar("SELECT banned_at IS NOT NULL FROM clients WHERE id = $1")
+        .bind(client_id)
+        .fetch_one(db)
+        .await
+        .unwrap()
+}
+
+/// Runs fresh honest workers (each a new client) until the job is decided.
+async fn finish_with_honest_workers(addr: &str, job: uuid::Uuid) -> JobSummary {
+    for _ in 0..40 {
+        let workers: Vec<_> = (0..3)
+            .map(|_| tokio::spawn(sim_worker::run(sim(addr))))
+            .collect();
+        for w in workers {
+            w.await.unwrap().unwrap();
+        }
+        let j = get_job(addr, job).await;
+        if j.status != JobStatus::Running && j.status != JobStatus::Queued {
+            return j;
+        }
+    }
+    panic!("job {job} did not finish");
+}
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn an_honest_majority_outvotes_cheaters_and_bans_them(db: PgPool) {
+    let addr = serve(db.clone(), Config::default()).await;
+    let (units, samples, seed) = (30, 20_000, 77);
+    let job = create_pi_job(&addr, units, samples, seed).await;
+
+    // Two workers that always make up their results, alongside honest ones.
+    let cheaters: Vec<uuid::Uuid> = (0..2).map(|_| uuid::Uuid::now_v7()).collect();
+    let cheating: Vec<_> = cheaters
+        .iter()
+        .map(|id| {
+            tokio::spawn(sim_worker::run(sim_worker::Options {
+                client_id: Some(*id),
+                cheat: sim_worker::Cheat::Random { rate: 1.0 },
+                ..sim(&addr)
+            }))
+        })
+        .collect();
+    let job = finish_with_honest_workers(&addr, job.id).await;
+    for c in cheating {
+        // Blocked mid-session, or done: either way it stops.
+        let _ = c.await.unwrap();
+    }
+
+    assert_eq!(job.status, JobStatus::Done);
+    let result: pi::JobResult = serde_json::from_value(job.result.unwrap()).unwrap();
+    let expected: u64 = (0..units)
+        .map(|unit_index| {
+            u64::from(kernels::pi::count_inside(kernels::pi::UnitParams {
+                seed,
+                unit_index,
+                samples,
+            }))
+        })
+        .sum();
+    assert_eq!(result.inside, expected, "a made-up result got through");
+    for id in &cheaters {
+        assert!(client_banned(&db, *id).await, "cheater {id} was not banned");
+    }
+    // A banned client cannot reconnect.
+    let blocked = sim_worker::run(sim_worker::Options {
+        client_id: Some(cheaters[0]),
+        ..sim(&addr)
+    })
+    .await;
+    assert!(blocked.unwrap_err().to_string().contains("blocked"));
+}
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn colluders_are_caught_by_honeypots_and_their_work_redone(db: PgPool) {
+    // One coordinator without honeypots, one where every request from an untrusted
+    // client is a honeypot; both serve the same database.
+    let plain = serve(
+        db.clone(),
+        Config {
+            honeypot_rate: 0.0,
+            new_client_honeypot_rate: 0.0,
+            ..Config::default()
+        },
+    )
+    .await;
+    let traps = serve(
+        db.clone(),
+        Config {
+            honeypot_rate: 1.0,
+            new_client_honeypot_rate: 1.0,
+            ..Config::default()
+        },
+    )
+    .await;
+
+    // A finished, verified job provides the known answers.
+    let seeded = create_pi_job(&plain, 6, 5_000, 1).await;
+    assert_eq!(
+        finish_with_honest_workers(&plain, seeded.id).await.status,
+        JobStatus::Done
+    );
+
+    // Two colluders return the same wrong answer, so they agree with each other and get
+    // units of the next job accepted.
+    let (units, samples, seed) = (10, 5_000, 2);
+    let job = create_pi_job(&plain, units, samples, seed).await;
+    let colluders: Vec<uuid::Uuid> = (0..2).map(|_| uuid::Uuid::now_v7()).collect();
+    let collude = |addr: String, client: uuid::Uuid, max_units: u32| {
+        tokio::spawn(async move {
+            sim_worker::run(sim_worker::Options {
+                client_id: Some(client),
+                cheat: sim_worker::Cheat::Constant { rate: 1.0 },
+                max_units: Some(max_units),
+                ..sim(&addr)
+            })
+            .await
+        })
+    };
+    let first: Vec<_> = colluders
+        .iter()
+        .map(|c| collude(plain.clone(), *c, 4))
+        .collect();
+    for c in first {
+        c.await.unwrap().unwrap();
+    }
+    let fooled = get_job(&plain, job.id).await.units_done;
+    assert!(
+        fooled > 0,
+        "the colluders should have fooled the vote on some units"
+    );
+
+    // Through the second coordinator they only get honeypots, fail them, and are banned.
+    let second: Vec<_> = colluders
+        .iter()
+        .map(|c| collude(traps.clone(), *c, 30))
+        .collect();
+    for c in second {
+        let _ = c.await.unwrap();
+    }
+    for id in &colluders {
+        assert!(
+            client_banned(&db, *id).await,
+            "colluder {id} was not banned"
+        );
+    }
+    // What they decided is back in the queue...
+    assert!(get_job(&plain, job.id).await.units_done < fooled);
+
+    // ...and honest workers finish the job exactly.
+    let job = finish_with_honest_workers(&plain, job.id).await;
+    assert_eq!(job.status, JobStatus::Done);
+    let result: pi::JobResult = serde_json::from_value(job.result.unwrap()).unwrap();
+    let expected: u64 = (0..units)
+        .map(|unit_index| {
+            u64::from(kernels::pi::count_inside(kernels::pi::UnitParams {
+                seed,
+                unit_index,
+                samples,
+            }))
+        })
+        .sum();
+    assert_eq!(result.inside, expected, "a colluders' result survived");
 }

@@ -18,6 +18,9 @@ use std::{collections::HashSet, time::Duration};
 use tokio::sync::broadcast::error::RecvError;
 use uuid::Uuid;
 
+/// Sent to clients banned for wrong results (spec 0004).
+const BLOCKED: &str = "this device is blocked: too many wrong results";
+
 /// Worker messages are small; anything larger is abuse.
 const MAX_WORKER_MESSAGE_BYTES: usize = 64 * 1024;
 
@@ -69,11 +72,12 @@ async fn reject(socket: &mut WebSocket, message: impl Into<String>) {
 
 async fn worker_session(mut socket: WebSocket, state: AppState) {
     let cfg = &state.config;
-    let (client_version, device) = match recv(&mut socket, cfg.idle_timeout).await {
+    let (client_version, device, client_id) = match recv(&mut socket, cfg.idle_timeout).await {
         Incoming::Message(WorkerMessage::Hello {
             protocol_version,
             client_version,
             device,
+            client_id,
         }) => {
             if protocol_version != PROTOCOL_VERSION {
                 return reject(
@@ -82,7 +86,12 @@ async fn worker_session(mut socket: WebSocket, state: AppState) {
                 )
                 .await;
             }
-            (client_version, device)
+            // Without an id of its own, the connection is a new client.
+            (
+                client_version,
+                device,
+                client_id.unwrap_or_else(Uuid::now_v7),
+            )
         }
         Incoming::Message(_) => return reject(&mut socket, "expected hello").await,
         Incoming::Invalid(e) => return reject(&mut socket, e).await,
@@ -90,14 +99,15 @@ async fn worker_session(mut socket: WebSocket, state: AppState) {
     };
 
     let worker_id = Uuid::now_v7();
-    let connected_at = match db::insert_worker(&state.db, worker_id, &device, &client_version).await
-    {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "failed to register worker");
-            return reject(&mut socket, "internal error").await;
-        }
-    };
+    let connected_at =
+        match db::insert_worker(&state.db, worker_id, &device, &client_version, client_id).await {
+            Ok(Some(t)) => t,
+            Ok(None) => return reject(&mut socket, BLOCKED).await,
+            Err(e) => {
+                tracing::error!(error = %e, "failed to register worker");
+                return reject(&mut socket, "internal error").await;
+            }
+        };
     let summary = WorkerSummary {
         id: worker_id,
         device,
@@ -110,7 +120,7 @@ async fn worker_session(mut socket: WebSocket, state: AppState) {
         .unwrap()
         .insert(worker_id, summary.clone());
     state.publish(DashboardEvent::WorkerJoined { worker: summary });
-    tracing::info!(%worker_id, %client_version, "worker joined");
+    tracing::info!(%worker_id, %client_id, %client_version, "worker joined");
 
     let welcome = CoordinatorMessage::Welcome {
         worker_id,
@@ -123,9 +133,13 @@ async fn worker_session(mut socket: WebSocket, state: AppState) {
     }
 
     // Whatever the reason the session ended, give its units back to the queue.
-    match db::release_worker_leases(&state.db, worker_id).await {
-        Ok(0) => {}
-        Ok(n) => tracing::info!(%worker_id, released = n, "released leases of departed worker"),
+    match db::retrying(|| db::release_worker_leases(&state.db, worker_id, &state.config)).await {
+        Ok(released) => {
+            if released.leases > 0 {
+                tracing::info!(%worker_id, released = released.leases, "released leases of departed worker");
+            }
+            state.publish_released(released);
+        }
         Err(e) => tracing::error!(%worker_id, error = %e, "failed to release leases"),
     }
     if let Err(e) = db::mark_worker_disconnected(&state.db, worker_id).await {
@@ -165,7 +179,7 @@ async fn worker_loop(
                     reject(socket, "lease limit reached").await;
                     return Ok(());
                 }
-                match db::claim_unit(&state.db, worker_id, cfg.lease_ttl).await? {
+                match db::retrying(|| db::claim_unit(&state.db, worker_id, cfg)).await? {
                     Some(claim) => {
                         active.insert(claim.lease_id);
                         if let Some(job) = claim.job_started {
@@ -191,7 +205,7 @@ async fn worker_loop(
                     .into_iter()
                     .filter(|id| active.contains(id))
                     .collect();
-                db::heartbeat(&state.db, worker_id, &owned, cfg.lease_ttl).await?;
+                db::retrying(|| db::heartbeat(&state.db, worker_id, &owned, cfg)).await?;
                 continue;
             }
 
@@ -200,15 +214,25 @@ async fn worker_loop(
                 output,
                 elapsed_ms,
             } => {
-                let accepted = active.remove(&lease_id)
-                    && handle_completion(state, worker_id, lease_id, &output, elapsed_ms).await?;
+                let (accepted, banned) = if active.remove(&lease_id) {
+                    handle_completion(state, worker_id, lease_id, &output, elapsed_ms).await?
+                } else {
+                    (false, false)
+                };
+                if banned {
+                    reject(socket, BLOCKED).await;
+                    return Ok(());
+                }
                 CoordinatorMessage::Ack { lease_id, accepted }
             }
 
             WorkerMessage::Failed { lease_id, reason } => {
                 if active.remove(&lease_id) {
                     tracing::warn!(%worker_id, %lease_id, %reason, "worker failed a unit");
-                    db::release_lease(&state.db, worker_id, lease_id).await?;
+                    let released =
+                        db::retrying(|| db::release_lease(&state.db, worker_id, lease_id, cfg))
+                            .await?;
+                    state.publish_released(released);
                 }
                 CoordinatorMessage::Ack {
                     lease_id,
@@ -223,25 +247,52 @@ async fn worker_loop(
     }
 }
 
+/// Records a result and announces what it changed. Returns whether the worker is told
+/// its result was accepted, and whether its client got banned by it.
 async fn handle_completion(
     state: &AppState,
     worker_id: Uuid,
     lease_id: Uuid,
     output: &serde_json::Value,
     elapsed_ms: u32,
-) -> Result<bool, sqlx::Error> {
-    match db::complete_lease(&state.db, worker_id, lease_id, output, elapsed_ms).await? {
-        Completion::Accepted {
+) -> Result<(bool, bool), sqlx::Error> {
+    let completion = db::retrying(|| {
+        db::complete_lease(
+            &state.db,
+            worker_id,
+            lease_id,
+            output,
+            elapsed_ms,
+            &state.config,
+        )
+    })
+    .await?;
+    let accepted = completion.accepted();
+
+    // A ban reopened units in these jobs: their images and progress changed.
+    for job_id in completion.reopened() {
+        state.renders.forget(*job_id).await;
+        if let Some(job) = db::get_job(&state.db, *job_id).await? {
+            tracing::warn!(%job_id, units_done = job.units_done, "reopened units of a banned client");
+            state.publish(DashboardEvent::JobUpdated { job });
+        }
+    }
+
+    let suspicious = match completion {
+        Completion::Decided {
             job_id,
             unit_id,
             unit_params,
+            output,
+            agreed,
             units_done,
             units_total,
             job_finished,
+            ..
         } => {
             state
                 .renders
-                .unit_accepted(job_id, unit_id, &unit_params, output)
+                .unit_accepted(job_id, unit_id, &unit_params, &output)
                 .await;
             if let Some(w) = state.workers.lock().unwrap().get_mut(&worker_id) {
                 w.units_done += 1;
@@ -257,14 +308,33 @@ async fn handle_completion(
                 tracing::info!(%job_id, status = ?job.status, "job finished");
                 state.publish(DashboardEvent::JobUpdated { job });
             }
-            Ok(true)
+            !agreed
         }
-        Completion::InvalidOutput(reason) => {
+        Completion::Unresolved { job } => {
+            if let Some(job) = job {
+                tracing::warn!(job_id = %job.id, error = job.error.as_deref().unwrap_or(""), "job failed");
+                state.publish(DashboardEvent::JobUpdated { job });
+            }
+            false
+        }
+        Completion::Honeypot { correct, .. } => {
+            if !correct {
+                tracing::warn!(%worker_id, %lease_id, "wrong answer to a known-answer unit");
+            }
+            !correct
+        }
+        Completion::Late { agreed, .. } => !agreed,
+        Completion::InvalidOutput {
+            reason, released, ..
+        } => {
             tracing::warn!(%worker_id, %lease_id, %reason, "rejected invalid output");
-            Ok(false)
+            state.publish_released(released);
+            true
         }
-        Completion::StaleLease | Completion::AlreadyDone => Ok(false),
-    }
+        Completion::Recorded | Completion::Disputed { .. } | Completion::StaleLease => false,
+    };
+    let banned = suspicious && db::worker_banned(&state.db, worker_id).await?;
+    Ok((accepted, banned))
 }
 
 async fn dashboard_session(mut socket: WebSocket, state: AppState) {

@@ -11,6 +11,7 @@ use protocol::{
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -20,6 +21,62 @@ pub struct Options {
     pub max_units: Option<u32>,
     /// Disconnect the first time the queue is empty instead of polling.
     pub exit_when_idle: bool,
+    /// The client id to report; `None` makes a new one per run.
+    pub client_id: Option<Uuid>,
+    /// Fault injection: return wrong results.
+    pub cheat: Cheat,
+}
+
+/// How a simulated worker cheats (spec 0004 fault injection).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum Cheat {
+    #[default]
+    Honest,
+    /// With probability `rate`, a made-up result (different every time).
+    Random { rate: f64 },
+    /// With probability `rate`, the same wrong result every cheater returns, so
+    /// colluding cheaters agree with each other.
+    Constant { rate: f64 },
+}
+
+impl Cheat {
+    /// The result to return in place of the real one, if cheating this time.
+    pub fn falsify(self, template_id: &str, params: &Value) -> Option<Value> {
+        let constant = match self {
+            Self::Honest => return None,
+            Self::Random { rate } | Self::Constant { rate } if fastrand::f64() >= rate => {
+                return None;
+            }
+            Self::Random { .. } => false,
+            Self::Constant { .. } => true,
+        };
+        match template_id {
+            pi::ID => {
+                let samples = params.get("samples")?.as_u64()? as u32;
+                let inside = if constant {
+                    samples / 2
+                } else {
+                    fastrand::u32(0..=samples)
+                };
+                Some(json!({ "inside": inside }))
+            }
+            pt::ID => {
+                let p: pt::UnitParams = serde_json::from_value(params.clone()).ok()?;
+                let n = p.w as usize * p.h as usize * 3;
+                let rgb: Vec<f32> = (0..n)
+                    .map(|_| {
+                        if constant {
+                            0.25 * p.spp as f32
+                        } else {
+                            fastrand::f32() * p.spp as f32
+                        }
+                    })
+                    .collect();
+                Some(json!({ "rgb": pt::encode_rgb(&rgb) }))
+            }
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -79,6 +136,7 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
             vendor: "cpu".into(),
             architecture: std::env::consts::ARCH.into(),
         },
+        client_id: Some(opts.client_id.unwrap_or_else(Uuid::new_v4)),
     }))
     .await?;
 
@@ -100,7 +158,11 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
                 ..
             } => {
                 let started = Instant::now();
-                let msg = match compute(&template.id, template.version, &params) {
+                let computed = match opts.cheat.falsify(&template.id, &params) {
+                    Some(fake) => Ok(fake),
+                    None => compute(&template.id, template.version, &params),
+                };
+                let msg = match computed {
                     Ok(output) => WorkerMessage::Result {
                         lease_id,
                         output,

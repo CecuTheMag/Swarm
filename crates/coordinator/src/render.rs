@@ -102,6 +102,12 @@ impl Renders {
         }
     }
 
+    /// Drops a job's image so the next request rebuilds it from the database: some of
+    /// its units were reopened (spec 0004).
+    pub async fn forget(&self, job_id: Uuid) {
+        self.jobs.lock().await.remove(&job_id);
+    }
+
     /// The job's current image, or `None` if there is no such path-tracer job.
     pub async fn png(&self, db: &PgPool, job_id: Uuid) -> sqlx::Result<Option<Vec<u8>>> {
         let mut jobs = self.jobs.lock().await;

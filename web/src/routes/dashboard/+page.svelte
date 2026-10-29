@@ -106,6 +106,7 @@
 								<td>{job.template}</td>
 								<td class:ok={job.status === 'done'} class:bad={job.status === 'failed'}>
 									{statusText[job.status]}
+									{#if job.error}<div class="muted job-error">{job.error}</div>{/if}
 								</td>
 								<td>
 									<div class="progress-cell">
@@ -199,6 +200,9 @@
 <style>
 	section {
 		margin-top: 16px;
+	}
+	.job-error {
+		font-size: 0.8125rem;
 	}
 	.progress-cell {
 		display: flex;

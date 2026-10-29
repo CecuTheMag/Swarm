@@ -41,6 +41,31 @@ Shared test vectors now include a unit of five 2²² chunks, and the browser tes
 on that build. It is also a concrete case for result verification (spec 0004): a
 faulty client, not only a malicious one, can return plausible wrong counts.
 
+## Result verification (spec 0004)
+
+Method: a coordinator with production settings (2 agreeing results per unit, honeypots
+5 % / 20 % for untrusted clients, 10 % spot checks for trusted ones) on a fresh database.
+A 20-unit job is verified first so honeypots have known answers. Then the same 400-unit
+π job (2·10⁶ samples per unit, seed 2026) runs three times with 6 honest simulated
+workers: alone, with 2 workers that always make up random results, and with 2 colluders
+that always return the same wrong result. Overhead = results computed per unit.
+
+| Date | Scenario | Result | Results per unit | Units decided alone by trusted clients | Cheaters banned | Honest clients marked wrong |
+|---|---|---|---|---|---|---|
+| 2026-10-29 | Honest only | 628 338 914 | 1.20–1.21 | 318–322 of 400 | — | 0 |
+| 2026-10-29 | + 2 random cheaters | 628 338 914 (exact) | 1.24–1.26 | 313–317 | 2 of 2 | 0 |
+| 2026-10-29 | + 2 colluders | 628 338 914 (exact) | 1.20–1.25 | 319–324 | 2 of 2 | 0 |
+
+Two rounds each. No wrong result was accepted in any run: every scenario produced the
+honest count. About 150 honeypots per round caught the cheaters (6–7 wrong answers).
+Without adaptive replication the overhead would be at least 2.0; trusted clients halve it.
+
+Found by these runs and fixed: a deadlock between a ban (which reverses verdicts on
+other clients' leases) and a concurrent completion dropped a worker's connection
+(transactions are now retried on `40P01`/`40001`); and reversing verdicts read the new,
+not the old, value from `RETURNING`, so honest clients kept marks earned against
+colluders' answers.
+
 ## Random number generator validation (π template)
 
 Method: 16 units × 2²² samples per run (67.1M samples), independent seeds per

@@ -31,6 +31,27 @@ pub fn router(state: AppState) -> Router {
         .with_state(state)
 }
 
+/// Returns expired leases to the queue every `reap_interval` (spec 0002). Several
+/// coordinators may run it at once.
+pub fn spawn_reaper(state: AppState) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(state.config.reap_interval);
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tick.tick().await;
+            match db::retrying(|| db::reap_expired(&state.db, &state.config)).await {
+                Ok(released) => {
+                    if released.leases > 0 {
+                        tracing::info!(released = released.leases, "reaped expired leases");
+                    }
+                    state.publish_released(released);
+                }
+                Err(e) => tracing::error!(error = %e, "reaping expired leases failed"),
+            }
+        }
+    })
+}
+
 /// Connects to PostgreSQL, creating the database if needed, and applies
 /// pending migrations.
 pub async fn connect(database_url: &str) -> anyhow::Result<PgPool> {

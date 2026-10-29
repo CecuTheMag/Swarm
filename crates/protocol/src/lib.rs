@@ -52,6 +52,11 @@ pub enum WorkerMessage {
         protocol_version: u32,
         client_version: String,
         device: DeviceInfo,
+        /// The device's id across connections, kept by the client; its reputation is
+        /// tracked under it (spec 0004). Without one, every connection starts afresh.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        client_id: Option<Uuid>,
     },
     RequestWork,
     Heartbeat {
@@ -139,6 +144,8 @@ pub struct JobSummary {
     pub units_total: u32,
     pub units_done: u32,
     pub result: Option<Value>,
+    /// Why the job failed, when it did.
+    pub error: Option<String>,
     #[ts(type = "number")]
     pub created_at: i64,
     #[ts(type = "number | null")]
@@ -218,7 +225,7 @@ mod tests {
         }))
         .unwrap();
         assert!(
-            matches!(parsed, WorkerMessage::Hello { device, .. } if device.backend == Backend::Webgpu)
+            matches!(parsed, WorkerMessage::Hello { device, client_id: None, .. } if device.backend == Backend::Webgpu)
         );
     }
 

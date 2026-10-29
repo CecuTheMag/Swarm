@@ -57,6 +57,17 @@ impl Template for Pi {
         Ok(())
     }
 
+    /// Integer counts: every device computes exactly the same answer.
+    fn agree(&self, _unit_params: &Value, a: &Value, b: &Value) -> bool {
+        match (
+            parse::<UnitOutput>(a, "output"),
+            parse::<UnitOutput>(b, "output"),
+        ) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => false,
+        }
+    }
+
     fn aggregate(&self, job_params: &Value, outputs: &[Value]) -> Result<Value, String> {
         let p: JobParams = parse(job_params, "params")?;
         if outputs.len() != p.units as usize {
@@ -124,6 +135,15 @@ mod tests {
             Pi.validate_output(&unit, &json!({"inside": 1, "x": 0}))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn agreement_is_equality() {
+        let unit = json!({"seed": 1, "unit_index": 0, "samples": 10});
+        let (a, b) = (json!({"inside": 7}), json!({"inside": 8}));
+        assert!(Pi.agree(&unit, &a, &a));
+        assert!(!Pi.agree(&unit, &a, &b));
+        assert!(!Pi.agree(&unit, &a, &json!({"rgb": ""})));
     }
 
     #[test]
