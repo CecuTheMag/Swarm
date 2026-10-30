@@ -134,10 +134,16 @@ completion holds that lock.
 | 2026-10-30 | Through Funnel (3 ingress addresses × 3) | 2.0 MB PNG download | median 534 KB/s (216–1384), first byte 0.30–0.90 s |
 | 2026-10-30 | Direct tailnet path, same file | 2.0 MB PNG download | 18.2 MB/s, first byte 0.03 s |
 | 2026-10-29 | Phone through Funnel (commit b12fa25) | path-tracer results upload | ~300 KB/s, 1.62 units/s |
+| 2026-10-30 | Through Funnel, one stream (3 ingress addresses) | 1.87 MB request body upload | 0.72, 0.91, 1.43 MB/s |
+| 2026-10-30 | Through Funnel, 4 / 12 parallel streams | 1.87 MB each | 1.36 / 1.74 MB/s in total |
+| 2026-10-30 | Direct tailnet path, same body | 1.87 MB upload | 21.4 MB/s |
 
-A 64-pixel tile result is 65.5 KB (64·64·3 floats in base64). Funnel carries roughly
-5–8 such results per second for the whole grid; 30 phones at one tile per second each
-need ~2 MB/s. The relay, not the coordinator or the home line, limits the demo.
+A 64-pixel tile result is 65.5 KB (64·64·3 floats in base64), so Funnel's ~1.5 MB/s of
+upload carries about 25 results per second for the whole grid. With the demo defaults a
+phone finishes a tile in ~0.1 s (~650 KB/s of results each), and every tile is computed
+twice until devices are trusted: through Funnel the room computes at the speed of two or
+three phones, however many join. The relay, not the coordinator or the home line,
+limits the demo.
 
 ## Scale (load tests)
 

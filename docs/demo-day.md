@@ -35,8 +35,13 @@ the whole segment fits one 1920×1080 or 1600×900 screen. Optional: `just fleet
 the server's processor as 8 more devices, `just fleet 0` removes them.
 
 Defaults (1280×720, 64² tiles × 128 samples, 8 passes) take a phone ~0.1 s per unit and
-a lab PC's processor ~0.4 s. Capacity is not a concern: the server handled 1 000
-simultaneous devices at ~1 000 results/s ([measurements](measurements.md)).
+a lab PC's processor ~0.4 s. The coordinator is not the limit: the server handled 1 000
+simultaneous devices at ~1 000 results/s. **Funnel is**: it uploads ~1.5 MB/s in total,
+about 25 tile results per second, which two or three phones already fill at these
+defaults ([measurements](measurements.md#public-relay-tailscale-funnel)). Through Funnel
+the image still fills in for any number of devices, but the speed-up stays near ×2–3. A
+direct HTTPS path to the server (a VPS or a forwarded port with a domain) removes the
+limit.
 
 ## Plan B: the server or its internet is down
 
