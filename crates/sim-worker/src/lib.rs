@@ -9,8 +9,16 @@ use protocol::{
     templates::{pi, pt},
 };
 use serde_json::{Value, json};
-use std::time::{Duration, Instant};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use std::{
+    collections::HashMap,
+    future::pending,
+    net::SocketAddr,
+    time::{Duration, Instant},
+};
+use tokio::{net::TcpStream, time::sleep_until};
+use tokio_tungstenite::{
+    MaybeTlsStream, WebSocketStream, client_async_tls, connect_async, tungstenite::Message,
+};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -25,6 +33,28 @@ pub struct Options {
     pub client_id: Option<Uuid>,
     /// Fault injection: return wrong results.
     pub cheat: Cheat,
+    /// Units kept requested at once; the browser keeps 2–8 in flight.
+    pub in_flight: u32,
+    /// Open the TCP connection here instead of resolving the URL's host. TLS still
+    /// uses the host name.
+    pub connect_to: Option<SocketAddr>,
+    /// Disconnect at this instant.
+    pub deadline: Option<Instant>,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            url: "ws://localhost:7700/ws/worker".into(),
+            max_units: None,
+            exit_when_idle: false,
+            client_id: None,
+            cheat: Cheat::Honest,
+            in_flight: 1,
+            connect_to: None,
+            deadline: None,
+        }
+    }
 }
 
 /// How a simulated worker cheats (spec 0004 fault injection).
@@ -79,10 +109,33 @@ impl Cheat {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Stats {
     pub completed: u32,
     pub accepted: u32,
+    pub bytes_sent: u64,
+    pub bytes_received: u64,
+    /// Result sent → ack received, per completed unit, in milliseconds.
+    pub round_trips_ms: Vec<u32>,
+}
+
+impl Stats {
+    pub fn merge(&mut self, other: Stats) {
+        self.completed += other.completed;
+        self.accepted += other.accepted;
+        self.bytes_sent += other.bytes_sent;
+        self.bytes_received += other.bytes_received;
+        self.round_trips_ms.extend(other.round_trips_ms);
+    }
+}
+
+/// Nearest-rank percentile of `sorted` (ascending), `q` in 0..=1; 0 when empty.
+pub fn percentile(sorted: &[u32], q: f64) -> u32 {
+    if sorted.is_empty() {
+        return 0;
+    }
+    let rank = (q * sorted.len() as f64).ceil() as usize;
+    sorted[rank.clamp(1, sorted.len()) - 1]
 }
 
 /// Computes one unit with the reference kernel.
@@ -122,46 +175,143 @@ pub fn compute(template_id: &str, version: u32, params: &Value) -> anyhow::Resul
     }
 }
 
+type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+
+async fn connect(opts: &Options) -> anyhow::Result<Socket> {
+    // Both rustls providers end up in the workspace; pick one. Errors when already set.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let ws = match opts.connect_to {
+        None => connect_async(&opts.url).await?.0,
+        Some(addr) => {
+            let tcp = TcpStream::connect(addr).await?;
+            client_async_tls(opts.url.as_str(), tcp).await?.0
+        }
+    };
+    Ok(ws)
+}
+
+enum Event {
+    Stop,
+    Retry,
+    Beat,
+    Frame(Option<Result<Message, tokio_tungstenite::tungstenite::Error>>),
+}
+
+/// Sleeps until `at`, or forever when there is no such instant.
+async fn sleep_until_opt(at: Option<tokio::time::Instant>) {
+    match at {
+        Some(at) => sleep_until(at).await,
+        None => pending().await,
+    }
+}
+
 pub async fn run(opts: Options) -> anyhow::Result<Stats> {
-    let (mut ws, _) = connect_async(&opts.url)
+    let mut ws = connect(&opts)
         .await
         .with_context(|| format!("connecting to {}", opts.url))?;
 
-    let send = |msg: WorkerMessage| Message::text(serde_json::to_string(&msg).unwrap());
-    ws.send(send(WorkerMessage::Hello {
-        protocol_version: PROTOCOL_VERSION,
-        client_version: concat!("sim-worker-", env!("CARGO_PKG_VERSION")).into(),
-        device: DeviceInfo {
-            backend: Backend::Native,
-            vendor: "cpu".into(),
-            architecture: std::env::consts::ARCH.into(),
+    let mut stats = Stats::default();
+    let send = async |ws: &mut Socket, stats: &mut Stats, msg: WorkerMessage| {
+        let text = serde_json::to_string(&msg).unwrap();
+        stats.bytes_sent += text.len() as u64;
+        ws.send(Message::text(text)).await
+    };
+    send(
+        &mut ws,
+        &mut stats,
+        WorkerMessage::Hello {
+            protocol_version: PROTOCOL_VERSION,
+            client_version: concat!("sim-worker-", env!("CARGO_PKG_VERSION")).into(),
+            device: DeviceInfo {
+                backend: Backend::Native,
+                vendor: "cpu".into(),
+                architecture: std::env::consts::ARCH.into(),
+            },
+            client_id: Some(opts.client_id.unwrap_or_else(Uuid::new_v4)),
         },
-        client_id: Some(opts.client_id.unwrap_or_else(Uuid::new_v4)),
-    }))
+    )
     .await?;
 
-    let mut stats = Stats::default();
-    ws.send(send(WorkerMessage::RequestWork)).await?;
+    // Replies the coordinator still owes: an assign or no_work per request, an ack per
+    // result. Draining stops new requests; the worker leaves once nothing is owed.
+    let mut owed = 0u32;
+    let mut draining = false;
+    for _ in 0..opts.in_flight.max(1) {
+        send(&mut ws, &mut stats, WorkerMessage::RequestWork).await?;
+        owed += 1;
+    }
 
-    while let Some(frame) = ws.next().await {
-        let text = match frame? {
-            Message::Text(t) => t,
-            Message::Close(_) => break,
-            _ => continue,
+    let deadline = opts.deadline.map(tokio::time::Instant::from_std);
+    let mut retry_at = None;
+    let mut retries = 0u32;
+    let mut heartbeat = None::<tokio::time::Interval>;
+    let mut held: HashMap<Uuid, Instant> = HashMap::new();
+
+    loop {
+        let beat = async {
+            match heartbeat.as_mut() {
+                Some(h) => h.tick().await,
+                None => pending().await,
+            }
         };
+        let event = tokio::select! {
+            _ = sleep_until_opt(deadline) => Event::Stop,
+            _ = sleep_until_opt(retry_at) => Event::Retry,
+            _ = beat => Event::Beat,
+            frame = ws.next() => Event::Frame(frame),
+        };
+        let frame = match event {
+            Event::Stop => break,
+            Event::Retry => {
+                retry_at = None;
+                for _ in 0..std::mem::take(&mut retries) {
+                    send(&mut ws, &mut stats, WorkerMessage::RequestWork).await?;
+                    owed += 1;
+                }
+                continue;
+            }
+            Event::Beat => {
+                let lease_ids = held.keys().copied().collect();
+                send(&mut ws, &mut stats, WorkerMessage::Heartbeat { lease_ids }).await?;
+                continue;
+            }
+            Event::Frame(frame) => frame,
+        };
+        let text = match frame {
+            None => break,
+            Some(frame) => match frame? {
+                Message::Text(t) => t,
+                Message::Close(_) => break,
+                _ => continue,
+            },
+        };
+        stats.bytes_received += text.len() as u64;
         match serde_json::from_str::<CoordinatorMessage>(&text)? {
-            CoordinatorMessage::Welcome { .. } => {}
+            CoordinatorMessage::Welcome {
+                heartbeat_interval_ms,
+                ..
+            } => {
+                let period = Duration::from_millis(heartbeat_interval_ms.into());
+                let mut h = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
+                h.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                heartbeat = Some(h);
+            }
             CoordinatorMessage::Assign {
                 lease_id,
                 template,
                 params,
                 ..
             } => {
+                owed -= 1;
                 let started = Instant::now();
-                let computed = match opts.cheat.falsify(&template.id, &params) {
-                    Some(fake) => Ok(fake),
-                    None => compute(&template.id, template.version, &params),
-                };
+                let cheat = opts.cheat;
+                let computed = tokio::task::spawn_blocking(move || {
+                    match cheat.falsify(&template.id, &params) {
+                        Some(fake) => Ok(fake),
+                        None => compute(&template.id, template.version, &params),
+                    }
+                })
+                .await?;
                 let msg = match computed {
                     Ok(output) => WorkerMessage::Result {
                         lease_id,
@@ -173,24 +323,42 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
                         reason: e.to_string(),
                     },
                 };
-                ws.send(send(msg)).await?;
+                held.insert(lease_id, Instant::now());
+                send(&mut ws, &mut stats, msg).await?;
+                owed += 1;
             }
-            CoordinatorMessage::Ack { accepted, .. } => {
+            CoordinatorMessage::Ack {
+                lease_id, accepted, ..
+            } => {
+                owed -= 1;
+                if let Some(sent) = held.remove(&lease_id) {
+                    stats.round_trips_ms.push(sent.elapsed().as_millis() as u32);
+                }
                 stats.completed += 1;
                 stats.accepted += u32::from(accepted);
                 if opts.max_units.is_some_and(|max| stats.completed >= max) {
-                    break;
+                    draining = true;
                 }
-                ws.send(send(WorkerMessage::RequestWork)).await?;
+                if !draining {
+                    send(&mut ws, &mut stats, WorkerMessage::RequestWork).await?;
+                    owed += 1;
+                }
             }
             CoordinatorMessage::NoWork { retry_after_ms } => {
+                owed -= 1;
                 if opts.exit_when_idle {
-                    break;
+                    draining = true;
+                } else if !draining {
+                    retries += 1;
+                    retry_at.get_or_insert_with(|| {
+                        tokio::time::Instant::now() + Duration::from_millis(retry_after_ms.into())
+                    });
                 }
-                tokio::time::sleep(Duration::from_millis(retry_after_ms.into())).await;
-                ws.send(send(WorkerMessage::RequestWork)).await?;
             }
             CoordinatorMessage::Error { message } => bail!("coordinator error: {message}"),
+        }
+        if draining && owed == 0 {
+            break;
         }
     }
     let _ = ws.close(None).await;
@@ -207,4 +375,22 @@ pub fn pt_job(width: u32, height: u32, tile: u32, spp: u32, passes: u32, seed: u
 /// Convenience for building a pi job body.
 pub fn pi_job(units: u32, samples_per_unit: u32, seed: u32) -> Value {
     json!({ "template": pi::ID, "params": { "units": units, "samples_per_unit": samples_per_unit, "seed": seed } })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::percentile;
+
+    #[test]
+    fn percentiles_use_nearest_rank() {
+        let v: Vec<u32> = (1..=100).collect();
+        assert_eq!(percentile(&v, 0.5), 50);
+        assert_eq!(percentile(&v, 0.95), 95);
+        assert_eq!(percentile(&v, 0.99), 99);
+        assert_eq!(percentile(&v, 1.0), 100);
+        assert_eq!(percentile(&v, 0.0), 1);
+        assert_eq!(percentile(&[7], 0.5), 7);
+        assert_eq!(percentile(&[], 0.5), 0);
+        assert_eq!(percentile(&[1, 2, 3], 0.5), 2);
+    }
 }

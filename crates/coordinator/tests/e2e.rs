@@ -45,10 +45,8 @@ fn without_honeypots() -> Config {
 fn sim(addr: &str) -> sim_worker::Options {
     sim_worker::Options {
         url: format!("ws://{addr}/ws/worker"),
-        max_units: None,
         exit_when_idle: true,
-        client_id: None,
-        cheat: sim_worker::Cheat::Honest,
+        ..Default::default()
     }
 }
 

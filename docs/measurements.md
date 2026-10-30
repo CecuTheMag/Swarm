@@ -87,6 +87,39 @@ other clients' leases) and a concurrent completion dropped a worker's connection
 not the old, value from `RETURNING`, so honest clients kept marks earned against
 colluders' answers.
 
+## Coordinator capacity (load test, spec 0006)
+
+Setup: dev PC (20 threads), release coordinator and PostgreSQL 18 (Docker) on the same
+machine, redundancy 2 with honeypots on, π units of 2¹⁶ samples (≈ free to compute), so
+the coordinator is the only bottleneck. `sim-worker --in-flight 4`, connections ramped
+over 2–5 s. Round trip = result sent → ack received.
+
+| Date | Workers | Run | Results/s | Round trip p50 / p95 / p99 | Failed |
+|---|---|---|---|---|---|
+| 2026-10-30 | 10 | 20 s | 508 | 37 / 92 / 123 ms | 0 |
+| 2026-10-30 | 100 | 20 s | 564 | 355 / 516 / 613 ms | 0 |
+| 2026-10-30 | 300 | 15 s | 718 | 741 / 1249 / 1378 ms | 0 |
+| 2026-10-30 | 1000 | 30 s | 841 | 2147 / 3209 / 3905 ms | 0 |
+
+Limit: every completion updates its job's row, so results for one job queue on that row
+lock. PostgreSQL wait events during the run are almost all `Lock:tuple` and
+`Lock:transactionid`; the coordinator used ~33 % of one core and each database backend
+~14 %. Real units take seconds (a phone renders about one 64-pixel tile per second), so
+one job serves several hundred devices before this lock binds.
+
+## Public relay (Tailscale Funnel)
+
+| Date | Path | Measured | Result |
+|---|---|---|---|
+| 2026-10-30 | Home line (Cloudflare speed test) | 20 MB up ×2, 50 MB down | 4.5 MB/s up, 21.9 MB/s down |
+| 2026-10-30 | Through Funnel (3 ingress addresses × 3) | 2.0 MB PNG download | median 534 KB/s (216–1384), first byte 0.30–0.90 s |
+| 2026-10-30 | Direct tailnet path, same file | 2.0 MB PNG download | 18.2 MB/s, first byte 0.03 s |
+| 2026-10-29 | Phone through Funnel (commit b12fa25) | path-tracer results upload | ~300 KB/s, 1.62 units/s |
+
+A 64-pixel tile result is 65.5 KB (64·64·3 floats in base64). Funnel carries roughly
+5–8 such results per second for the whole grid; 30 phones at one tile per second each
+need ~2 MB/s. The relay, not the coordinator or the home line, limits the demo.
+
 ## Random number generator validation (π template)
 
 Method: 16 units × 2²² samples per run (67.1M samples), independent seeds per
