@@ -2,6 +2,7 @@
 	import { onDestroy } from 'svelte';
 	import { page } from '$app/state';
 	import { WorkerSession, type SessionStatus } from '#lib/worker/session.svelte.ts';
+	import { ScreenAwake } from '#lib/worker/wake-lock.svelte.ts';
 	import { wsUrl } from '#lib/net.ts';
 	import type { Backend } from '#lib/protocol/Backend.ts';
 
@@ -10,7 +11,11 @@
 		wsUrl('/ws/worker'),
 		page.url.searchParams.get('backend') === 'wasm' ? 'wasm' : undefined
 	);
-	onDestroy(() => session.destroy());
+	const awake = new ScreenAwake();
+	onDestroy(() => {
+		session.destroy();
+		awake.destroy();
+	});
 
 	const backendText: Record<Backend, string> = {
 		webgpu: 'видеокарта',
@@ -29,6 +34,10 @@
 	};
 
 	const active = $derived(!['stopped', 'unsupported'].includes(session.status));
+	// A phone's screen stays on while it takes part.
+	$effect(() => {
+		void awake.set(active);
+	});
 </script>
 
 <main>
@@ -48,6 +57,9 @@
 			</button>
 		{/if}
 		<span data-testid="status" data-status={session.status}>{statusText[session.status]}</span>
+		{#if active && awake.held}
+			<span class="muted" data-testid="screen-awake">Екранът остава включен</span>
+		{/if}
 	</div>
 
 	{#if session.status === 'unsupported'}

@@ -240,7 +240,7 @@ Bulgarian schools have **thousands of computers idle most of the day and all nig
 |---|---|
 | 0–2 | "There are N idle computers in Bulgarian schools right now." (Your measured estimate.) |
 | 2–3 | The QR code: "Please join." |
-| 3–10 | **Live:** judges' devices appear on the grid map → a path-traced image fills in tile by tile → GFLOPS counter → you kill your own laptop mid-job: the job continues; a "cheater" node is injected and gets caught |
+| 3–10 | **Live:** judges' devices appear on the grid map → a path-traced image fills in tile by tile → live counters (light paths per second, ×speed-up over the fastest single device) → you kill your own laptop mid-job: the job continues; a "cheater" node is injected and gets caught (run sheet: `docs/demo-day.md`) |
 | 10–14 | Architecture: leases, verification, signed templates; speed-up curve from the school lab; scaling test to 1,000 simulated nodes |
 | 14–15 | Security and ethics: why it can never become a botnet or a miner |
 | 15–20 | Questions |

@@ -86,13 +86,20 @@ The worker refuses to run a unit whose `sha256` differs from the hash of the ker
 has bundled.
 
 Coordinator → dashboard (`/ws/dashboard`): `snapshot` on connect (and again if the
-dashboard falls behind), then `worker_joined`, `worker_left`,
-`unit_completed { job_id, unit_id, worker_id, units_done, units_total }`,
-`job_updated { job }` (created, started, finished).
+dashboard falls behind), then `worker_joined`, `worker_left { worker_id, units_returned }`
+(units it held that go back to the queue), `worker_banned { worker_id, wrong_results,
+units_redone }` (spec 0004),
+`units_completed { units, jobs: [{ job_id, units_done, units_total }], workers: [{ worker_id, units }] }`,
+`job_updated { job }` (created, started, finished). Decided units are announced in
+batches every 250 ms, not one event per unit: with a thousand devices a browser cannot
+draw a thousand events a second (load tests, [measurements](../measurements.md)).
 
 Rules enforced by the coordinator: `hello` first and only once; matching
-`protocol_version`; at most one active lease per worker; messages ≤ 64 KiB; a
-connection silent for 30 s is closed (workers heartbeat every 10 s).
+`protocol_version`; at most 8 active leases per worker (units are fetched in advance);
+messages ≤ 512 KiB (a 128² path-tracer tile is 192 KiB); a
+connection silent for 30 s is closed (workers heartbeat every 10 s). WebSocket pings
+and pongs do not count as signs of life: a proxy can exchange them on behalf of a worker
+that is gone.
 
 ## Data model (PostgreSQL)
 

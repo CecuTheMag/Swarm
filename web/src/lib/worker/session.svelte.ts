@@ -264,8 +264,10 @@ export class WorkerSession {
 	/** Computes queued units one at a time. */
 	private async computeNext() {
 		if (this.computing) return;
-		const ws = this.ws;
 		for (let unit = this.queue.shift(); unit; unit = this.queue.shift()) {
+			// The queue only holds units of the current connection, but the connection may
+			// be lost and replaced while this one computes.
+			const ws = this.ws;
 			this.computing = true;
 			this.status = 'computing';
 			let reply: WorkerMessage;
@@ -279,8 +281,9 @@ export class WorkerSession {
 				const reason = e instanceof Error ? e.message : String(e);
 				reply = { type: 'failed', lease_id: unit.lease_id, reason };
 			}
-			// A unit of a connection that has since been lost is not ours to answer.
-			if (this.ws !== ws || !this.held.delete(unit.lease_id)) break;
+			// A unit of a connection that has since been lost is not ours to answer; units
+			// of the new connection may already be queued behind it.
+			if (this.ws !== ws || !this.held.delete(unit.lease_id)) continue;
 			// The result goes out before any new request, so the coordinator never sees more
 			// leases than this worker means to hold.
 			this.sendExpectingReply(reply);

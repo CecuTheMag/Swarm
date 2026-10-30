@@ -23,7 +23,11 @@ export default defineConfig({
 			}
 		},
 		// Without the flags there is no WebGPU, so workers fall back to the CPU.
-		{ name: 'cpu' }
+		{ name: 'cpu' },
+		{ name: 'firefox', use: { browserName: 'firefox' } },
+		// Safari's engine. Needs system libraries Playwright supports on Ubuntu only:
+		// `just e2e-webkit` runs it in Playwright's container.
+		{ name: 'webkit', use: { browserName: 'webkit' } }
 	],
 	webServer: [
 		{
@@ -35,7 +39,9 @@ export default defineConfig({
 				DATABASE_URL,
 				COORDINATOR_ADDR: '127.0.0.1:7700',
 				RUST_LOG: 'warn',
-				SWARM_REDUNDANCY: '1'
+				SWARM_REDUNDANCY: '1',
+				// As on the public server; the same password as e2e/submit.ts.
+				SWARM_SUBMIT_TOKEN: 'e2e-submit-password'
 			},
 			reuseExistingServer: false,
 			timeout: 300_000

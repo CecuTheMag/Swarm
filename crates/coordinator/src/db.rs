@@ -90,6 +90,11 @@ pub async fn create_job(
 ) -> sqlx::Result<JobSummary> {
     let job_id = Uuid::now_v7();
     let mut tx = db.begin().await?;
+    // Results are committed without waiting for the disk (see `connect`); a job the
+    // API confirmed must survive a crash.
+    sqlx::query("SET LOCAL synchronous_commit = on")
+        .execute(&mut *tx)
+        .await?;
     let job: JobRow = sqlx::query_as(concat!(
         "INSERT INTO jobs (id, template, template_version, template_sha256, params, status,
                            units_total)
@@ -388,13 +393,14 @@ async fn pick_honeypot(
     client_id: Uuid,
 ) -> sqlx::Result<Option<(Uuid, Uuid, Json<Value>)>> {
     sqlx::query_as(
+        // The unit's number is drawn once, with the job: a random() in the join
+        // condition would be drawn again for every unit of the job, scanning them all and
+        // matching none or several.
         "SELECT u.id, u.job_id, u.params
-         FROM (SELECT id, units_total FROM jobs
-               WHERE status = 'done' AND template_sha256 = ANY($3)
+         FROM (SELECT id, floor(random() * units_total)::int AS seq
+               FROM jobs WHERE status = 'done' AND template_sha256 = ANY($3)
                ORDER BY random() LIMIT 1) j
-         JOIN units u ON u.job_id = j.id
-             AND u.seq = floor(random() * j.units_total)::int
-             AND u.status = 'done'
+         JOIN units u ON u.job_id = j.id AND u.seq = j.seq AND u.status = 'done'
          WHERE NOT EXISTS (
              SELECT 1 FROM leases l JOIN workers w ON w.id = l.worker_id
              WHERE l.unit_id = u.id AND l.released_at IS NULL
@@ -489,17 +495,17 @@ pub enum Completion {
         units_total: u32,
         /// Present when this completion finished the job.
         job_finished: Option<JobSummary>,
-        /// Jobs whose solo results were reopened because their client was banned.
-        reopened: Vec<Uuid>,
+        /// Clients this completion got banned, and what that reopened.
+        bans: Bans,
     },
     /// The results disagree; the unit asks one more client to break the tie.
-    Disputed { reopened: Vec<Uuid> },
+    Disputed { bans: Bans },
     /// The results never agreed: the unit and its job failed.
     Unresolved { job: Option<JobSummary> },
     /// A copy of a verified unit; `correct` says whether the result matched.
-    Honeypot { correct: bool, reopened: Vec<Uuid> },
+    Honeypot { correct: bool, bans: Bans },
     /// The unit was already decided; the result only counted for reputation.
-    Late { agreed: bool, reopened: Vec<Uuid> },
+    Late { agreed: bool, bans: Bans },
     /// The lease is unknown, not owned by this worker, or no longer active.
     StaleLease,
     /// The output failed template validation; the unit was returned to the queue
@@ -507,8 +513,36 @@ pub enum Completion {
     InvalidOutput {
         reason: String,
         released: Released,
-        reopened: Vec<Uuid>,
+        bans: Bans,
     },
+}
+
+/// A client banned for wrong results (spec 0004).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Ban {
+    pub client_id: Uuid,
+    /// Wrong results it returned, known answers included.
+    pub wrong_results: u32,
+    /// Units it had helped decide that go back to the queue.
+    pub units_redone: u32,
+}
+
+/// Bans caused by one completion, and the jobs whose units they reopened.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Bans {
+    pub clients: Vec<Ban>,
+    pub reopened_jobs: Vec<Uuid>,
+}
+
+impl Bans {
+    fn extend(&mut self, other: Bans) {
+        self.clients.extend(other.clients);
+        for job in other.reopened_jobs {
+            if !self.reopened_jobs.contains(&job) {
+                self.reopened_jobs.push(job);
+            }
+        }
+    }
 }
 
 impl Completion {
@@ -522,16 +556,21 @@ impl Completion {
         }
     }
 
+    /// Clients this completion got banned, and the jobs whose results that reopened.
+    pub fn bans(&self) -> Option<&Bans> {
+        match self {
+            Self::Decided { bans, .. }
+            | Self::Disputed { bans }
+            | Self::Honeypot { bans, .. }
+            | Self::Late { bans, .. }
+            | Self::InvalidOutput { bans, .. } => Some(bans),
+            _ => None,
+        }
+    }
+
     /// Jobs whose accepted results were reopened by a ban in this completion.
     pub fn reopened(&self) -> &[Uuid] {
-        match self {
-            Self::Decided { reopened, .. }
-            | Self::Disputed { reopened }
-            | Self::Honeypot { reopened, .. }
-            | Self::Late { reopened, .. }
-            | Self::InvalidOutput { reopened, .. } => reopened,
-            _ => &[],
-        }
+        self.bans().map_or(&[], |b| &b.reopened_jobs)
     }
 }
 
@@ -578,12 +617,12 @@ pub async fn complete_lease(
             incorrect: 1,
             ..Standing::default()
         };
-        let reopened = adjust_client(&mut tx, client.id, change, cfg).await?;
+        let bans = adjust_client(&mut tx, client.id, change, cfg).await?;
         tx.commit().await?;
         return Ok(Completion::InvalidOutput {
             reason,
             released,
-            reopened,
+            bans,
         });
     }
     let template = template.expect("checked above");
@@ -617,15 +656,15 @@ pub async fn complete_lease(
             (false, true) => "agreed",
             (false, false) => "disagreed",
         };
-        let reopened = record_verdicts(&mut tx, &[(lease_id, verdict)], cfg).await?;
+        let bans = record_verdicts(&mut tx, &[(lease_id, verdict)], cfg).await?;
         tx.commit().await?;
         return Ok(if honeypot {
             Completion::Honeypot {
                 correct: agreed,
-                reopened,
+                bans,
             }
         } else {
-            Completion::Late { agreed, reopened }
+            Completion::Late { agreed, bans }
         });
     }
     if status == "failed" {
@@ -635,7 +674,7 @@ pub async fn complete_lease(
 
     // A trusted client's solo unit, or no verification at all: one result decides.
     if solo || cfg.redundancy <= 1 {
-        let reopened = record_verdicts(&mut tx, &[(lease_id, "trusted")], cfg).await?;
+        let bans = record_verdicts(&mut tx, &[(lease_id, "trusted")], cfg).await?;
         let decided = decide(
             &mut tx,
             template,
@@ -644,7 +683,7 @@ pub async fn complete_lease(
             unit_params,
             output.clone(),
             true,
-            reopened,
+            bans,
         )
         .await?;
         tx.commit().await?;
@@ -698,7 +737,7 @@ pub async fn complete_lease(
             let agreed = verdicts
                 .iter()
                 .any(|(id, v)| *id == lease_id && *v == "agreed");
-            let reopened = record_verdicts(&mut tx, &verdicts, cfg).await?;
+            let bans = record_verdicts(&mut tx, &verdicts, cfg).await?;
             let accepted = results[best].1.0.clone();
             let decided = decide(
                 &mut tx,
@@ -708,7 +747,7 @@ pub async fn complete_lease(
                 unit_params,
                 accepted,
                 agreed,
-                reopened,
+                bans,
             )
             .await?;
             tx.commit().await?;
@@ -733,7 +772,7 @@ pub async fn complete_lease(
         update_assignment(&mut tx, unit_id, target).await?;
         tx.commit().await?;
         return Ok(Completion::Disputed {
-            reopened: Vec::new(),
+            bans: Bans::default(),
         });
     }
 
@@ -774,7 +813,7 @@ async fn decide(
     unit_params: Value,
     output: Value,
     agreed: bool,
-    reopened: Vec<Uuid>,
+    bans: Bans,
 ) -> sqlx::Result<Completion> {
     sqlx::query("UPDATE units SET status = 'done', output = $2 WHERE id = $1")
         .bind(unit_id)
@@ -830,8 +869,24 @@ async fn decide(
         units_done: units_done as u32,
         units_total: units_total as u32,
         job_finished,
-        reopened,
+        bans,
     })
+}
+
+/// The error of a job its organiser stopped.
+pub const CANCELLED: &str = "cancelled";
+
+/// Stops a queued or running job: no more of its units are handed out, and results
+/// still in flight are ignored. Returns the job as it now is, or `None` if there is no
+/// such job; a finished job stays as it was.
+pub async fn cancel_job(db: &PgPool, job_id: Uuid) -> sqlx::Result<Option<JobSummary>> {
+    let mut tx = db.begin().await?;
+    let cancelled = fail_job(&mut tx, job_id, CANCELLED).await?;
+    tx.commit().await?;
+    match cancelled {
+        Some(job) => Ok(Some(job)),
+        None => get_job(db, job_id).await,
+    }
 }
 
 /// Fails a running job and stops handing out its units.
@@ -863,13 +918,13 @@ async fn fail_job(
     Ok(job.map(Into::into))
 }
 
-/// Stores verdicts on leases and updates their clients' reputation. Returns jobs
-/// reopened by bans this caused.
+/// Stores verdicts on leases and updates their clients' reputation. Returns the bans
+/// this caused.
 async fn record_verdicts(
     tx: &mut Transaction<'_, Postgres>,
     verdicts: &[(Uuid, &str)],
     cfg: &Config,
-) -> sqlx::Result<Vec<Uuid>> {
+) -> sqlx::Result<Bans> {
     let ids: Vec<Uuid> = verdicts.iter().map(|(id, _)| *id).collect();
     let values: Vec<String> = verdicts.iter().map(|(_, v)| (*v).to_owned()).collect();
     let per_client: Vec<(Uuid, i64, i64, i64)> = sqlx::query_as(
@@ -891,7 +946,7 @@ async fn record_verdicts(
     .bind(&values)
     .fetch_all(&mut **tx)
     .await?;
-    let mut reopened = Vec::new();
+    let mut bans = Bans::default();
     for (client_id, correct, incorrect, honeypot_failures) in per_client {
         if correct > 0 || incorrect > 0 {
             let change = Standing {
@@ -899,14 +954,12 @@ async fn record_verdicts(
                 incorrect: incorrect as i32,
                 honeypot_failures: honeypot_failures as i32,
             };
-            reopened.extend(adjust_client(tx, client_id, change, cfg).await?);
+            bans.extend(adjust_client(tx, client_id, change, cfg).await?);
         }
     }
-    Ok(reopened)
+    Ok(bans)
 }
 
-/// Adds to a client's counts of correct and incorrect results and bans it if it falls
-/// below the bar. Returns the jobs a ban reopened (see [`reopen_after_ban`]).
 /// Changes to a client's record.
 #[derive(Default)]
 struct Standing {
@@ -915,12 +968,15 @@ struct Standing {
     honeypot_failures: i32,
 }
 
+/// Adds to a client's counts of correct and incorrect results and bans it if it falls
+/// below the bar. Returns the ban, if any, and what it reopened (see
+/// [`reopen_after_ban`]).
 async fn adjust_client(
     tx: &mut Transaction<'_, Postgres>,
     client_id: Uuid,
     change: Standing,
     cfg: &Config,
-) -> sqlx::Result<Vec<Uuid>> {
+) -> sqlx::Result<Bans> {
     let row: Option<(i32, i32, i32, bool)> = sqlx::query_as(
         "UPDATE clients SET correct = correct + $2, incorrect = incorrect + $3,
                             honeypot_failures = honeypot_failures + $4
@@ -933,10 +989,10 @@ async fn adjust_client(
     .fetch_optional(&mut **tx)
     .await?;
     let Some((correct, incorrect, honeypot_failures, banned)) = row else {
-        return Ok(Vec::new());
+        return Ok(Bans::default());
     };
     if banned || !cfg.should_ban(correct, incorrect, honeypot_failures) {
-        return Ok(Vec::new());
+        return Ok(Bans::default());
     }
     sqlx::query("UPDATE clients SET banned_at = now() WHERE id = $1")
         .bind(client_id)
@@ -944,7 +1000,15 @@ async fn adjust_client(
         .await?;
     tracing::warn!(%client_id, correct, incorrect, honeypot_failures, "client banned");
 
-    reopen_after_ban(tx, client_id, cfg).await
+    let (reopened_jobs, units_redone) = reopen_after_ban(tx, client_id, cfg).await?;
+    Ok(Bans {
+        clients: vec![Ban {
+            client_id,
+            wrong_results: incorrect as u32,
+            units_redone,
+        }],
+        reopened_jobs,
+    })
 }
 
 /// Undoes what a banned client's results decided in jobs still running: every unit it
@@ -957,7 +1021,7 @@ async fn reopen_after_ban(
     tx: &mut Transaction<'_, Postgres>,
     client_id: Uuid,
     cfg: &Config,
-) -> sqlx::Result<Vec<Uuid>> {
+) -> sqlx::Result<(Vec<Uuid>, u32)> {
     let units: Vec<(Uuid, Uuid)> = sqlx::query_as(
         "SELECT DISTINCT u.id, u.job_id FROM leases l
          JOIN workers w ON w.id = l.worker_id
@@ -976,7 +1040,7 @@ async fn reopen_after_ban(
     .fetch_all(&mut **tx)
     .await?;
     if units.is_empty() {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), 0));
     }
     let unit_ids: Vec<Uuid> = units.iter().map(|(u, _)| *u).collect();
 
@@ -1042,7 +1106,7 @@ async fn reopen_after_ban(
             .execute(&mut **tx)
             .await?;
     }
-    Ok(per_job.into_keys().collect())
+    Ok((per_job.into_keys().collect(), units.len() as u32))
 }
 
 /// Why a lease ended without a result.

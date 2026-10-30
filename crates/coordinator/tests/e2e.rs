@@ -16,6 +16,7 @@ async fn serve(db: PgPool, config: Config) -> String {
     let addr = listener.local_addr().unwrap().to_string();
     let state = State::new(db, config);
     coordinator::spawn_reaper(state.clone());
+    coordinator::spawn_progress(state.clone());
     let app = coordinator::router(state);
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     addr
@@ -106,6 +107,9 @@ async fn several_workers_complete_a_job_exactly(db: PgPool) {
 async fn worker_that_disconnects_mid_job_loses_its_unit(db: PgPool) {
     let addr = serve(db, without_honeypots()).await;
     let job = create_pi_job(&addr, 5, 1000, 1).await;
+    let (mut dash, _) = connect_async(format!("ws://{addr}/ws/dashboard"))
+        .await
+        .unwrap();
 
     // A raw worker takes a unit and vanishes without answering.
     let (mut ws, _) = connect_async(format!("ws://{addr}/ws/worker"))
@@ -120,6 +124,13 @@ async fn worker_that_disconnects_mid_job_loses_its_unit(db: PgPool) {
         CoordinatorMessage::Assign { .. }
     ));
     drop(ws);
+    // The projector shows the unit going back to the queue.
+    loop {
+        if let DashboardEvent::WorkerLeft { units_returned, .. } = next_event(&mut dash).await {
+            assert_eq!(units_returned, 1);
+            break;
+        }
+    }
 
     // The remaining workers still finish every unit, including the abandoned one; each
     // unit is verified by two of them.
@@ -224,6 +235,84 @@ async fn idle_connections_are_closed(db: PgPool) {
 }
 
 #[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn pings_do_not_keep_a_silent_worker_connected(db: PgPool) {
+    let config = Config {
+        idle_timeout: Duration::from_millis(300),
+        ..Config::default()
+    };
+    let addr = serve(db, config).await;
+    let (mut ws, _) = connect_async(format!("ws://{addr}/ws/worker"))
+        .await
+        .unwrap();
+    hello(&mut ws).await;
+    // Only WebSocket pings, as a proxy might send for a worker that is gone.
+    let started = std::time::Instant::now();
+    let closing = loop {
+        ws.send(Message::Ping(Vec::new().into())).await.unwrap();
+        match tokio::time::timeout(Duration::from_millis(50), ws.next()).await {
+            Ok(Some(Ok(Message::Text(t)))) => break t,
+            Ok(Some(Ok(_))) | Err(_) => {}
+            other => panic!("connection ended without a message: {other:?}"),
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "still connected"
+        );
+    };
+    let msg: CoordinatorMessage = serde_json::from_str(&closing).unwrap();
+    assert!(matches!(msg, CoordinatorMessage::Error { .. }), "{msg:?}");
+}
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn the_organiser_can_stop_a_job(db: PgPool) {
+    let config = Config {
+        submit_token: Some("pw".into()),
+        ..unverified()
+    };
+    let addr = serve(db, config).await;
+    let client = reqwest::Client::new();
+    let job: JobSummary = client
+        .post(format!("http://{addr}/api/jobs"))
+        .header("authorization", "Bearer pw")
+        .json(&sim_worker::pi_job(50, 1000, 3))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let cancel = |auth: &'static str| {
+        client
+            .post(format!("http://{addr}/api/jobs/{}/cancel", job.id))
+            .header("authorization", auth)
+            .send()
+    };
+    assert_eq!(cancel("Bearer guess").await.unwrap().status(), 401);
+
+    let res = cancel("Bearer pw").await.unwrap();
+    assert_eq!(res.status(), 200);
+    let stopped: JobSummary = res.json().await.unwrap();
+    assert_eq!(stopped.status, JobStatus::Failed);
+    assert_eq!(stopped.error.as_deref(), Some(coordinator::db::CANCELLED));
+
+    // None of its units are handed out any more.
+    let stats = sim_worker::run(sim(&addr)).await.unwrap();
+    assert_eq!(stats.completed, 0);
+    // Stopping it again changes nothing; an unknown job is not found.
+    assert_eq!(cancel("Bearer pw").await.unwrap().status(), 200);
+    let missing = client
+        .post(format!(
+            "http://{addr}/api/jobs/{}/cancel",
+            uuid::Uuid::now_v7()
+        ))
+        .header("authorization", "Bearer pw")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), 404);
+}
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
 async fn rest_api_validates_input(db: PgPool) {
     let addr = serve(db, Config::default()).await;
     let client = reqwest::Client::new();
@@ -258,6 +347,47 @@ async fn rest_api_validates_input(db: PgPool) {
 }
 
 #[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn submitting_needs_the_password_when_set(db: PgPool) {
+    let config = Config {
+        submit_token: Some("correct horse".into()),
+        ..Config::default()
+    };
+    let addr = serve(db, config).await;
+    let client = reqwest::Client::new();
+    let post = |auth: Option<&str>| {
+        let mut req = client
+            .post(format!("http://{addr}/api/jobs"))
+            .json(&sim_worker::pi_job(4, 1024, 1));
+        if let Some(auth) = auth {
+            req = req.header("authorization", auth);
+        }
+        req.send()
+    };
+    for wrong in [
+        None,
+        Some("Bearer wrong"),
+        Some("correct horse"),
+        Some("Bearer "),
+    ] {
+        let res = post(wrong).await.unwrap();
+        assert_eq!(res.status(), 401, "{wrong:?}");
+        let body: protocol::ApiError = res.json().await.unwrap();
+        assert!(!body.error.is_empty());
+    }
+    assert_eq!(
+        post(Some("Bearer correct horse")).await.unwrap().status(),
+        201
+    );
+    // Reading stays open: the render page and dashboard are public.
+    let jobs = reqwest::get(format!("http://{addr}/api/jobs"))
+        .await
+        .unwrap();
+    assert_eq!(jobs.status(), 200);
+    let jobs: Vec<JobSummary> = jobs.json().await.unwrap();
+    assert_eq!(jobs.len(), 1);
+}
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
 async fn dashboard_streams_live_events(db: PgPool) {
     let addr = serve(db, unverified()).await;
     let (mut dash, _) = connect_async(format!("ws://{addr}/ws/dashboard"))
@@ -281,9 +411,24 @@ async fn dashboard_streams_live_events(db: PgPool) {
         match next_event(&mut dash).await {
             DashboardEvent::WorkerJoined { .. } => saw.0 = true,
             DashboardEvent::JobUpdated { job: j } if j.status == JobStatus::Running => saw.1 = true,
-            DashboardEvent::UnitCompleted { .. } => saw.2 += 1,
+            DashboardEvent::UnitsCompleted {
+                units,
+                jobs,
+                workers,
+            } => {
+                saw.2 += units;
+                assert!(
+                    jobs.iter()
+                        .all(|j| j.job_id == job.id && j.units_total == 2)
+                );
+                assert_eq!(workers.iter().map(|w| w.units).sum::<u32>(), units);
+            }
             DashboardEvent::JobUpdated { job: j } if j.status == JobStatus::Done => saw.3 = true,
-            DashboardEvent::WorkerLeft { .. } => saw.4 = true,
+            DashboardEvent::WorkerLeft { units_returned, .. } => {
+                // It finished everything it held.
+                assert_eq!(units_returned, 0);
+                saw.4 = true;
+            }
             other => panic!("unexpected {other:?}"),
         }
     }
@@ -529,6 +674,12 @@ async fn an_honest_majority_outvotes_cheaters_and_bans_them(db: PgPool) {
     let addr = serve(db.clone(), Config::default()).await;
     let (units, samples, seed) = (30, 20_000, 77);
     let job = create_pi_job(&addr, units, samples, seed).await;
+    // The projector watches: it must see the cheaters caught.
+    let (dash, _) = connect_async(format!("ws://{addr}/ws/dashboard"))
+        .await
+        .unwrap();
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    tokio::spawn(record_events(dash, seen.clone()));
 
     // Two workers that always make up their results, alongside honest ones.
     let cheaters: Vec<uuid::Uuid> = (0..2).map(|_| uuid::Uuid::now_v7()).collect();
@@ -570,6 +721,40 @@ async fn an_honest_majority_outvotes_cheaters_and_bans_them(db: PgPool) {
     })
     .await;
     assert!(blocked.unwrap_err().to_string().contains("blocked"));
+
+    // Each cheater appeared on the dashboard as banned, with its wrong results, and
+    // then left; nobody else was banned.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let seen = seen.lock().unwrap().clone();
+    let banned: Vec<uuid::Uuid> = seen
+        .iter()
+        .filter_map(|e| match e {
+            DashboardEvent::WorkerBanned {
+                worker_id,
+                wrong_results,
+                ..
+            } => {
+                assert!(*wrong_results >= 1);
+                Some(*worker_id)
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(banned.len(), cheaters.len(), "{banned:?}");
+    for worker in &banned {
+        assert!(seen.iter().any(
+            |e| matches!(e, DashboardEvent::WorkerLeft { worker_id, .. } if worker_id == worker)
+        ));
+    }
+}
+
+/// Keeps every dashboard event in `seen`.
+async fn record_events(mut dash: Ws, seen: std::sync::Arc<std::sync::Mutex<Vec<DashboardEvent>>>) {
+    while let Some(Ok(frame)) = dash.next().await {
+        if let Message::Text(t) = frame {
+            seen.lock().unwrap().push(serde_json::from_str(&t).unwrap());
+        }
+    }
 }
 
 #[sqlx::test(migrator = "coordinator::MIGRATOR")]

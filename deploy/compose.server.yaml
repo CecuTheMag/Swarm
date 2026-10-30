@@ -38,6 +38,8 @@ services:
     environment:
       DATABASE_URL: postgres://swarm:swarm@postgres:5432/swarm
       RUST_LOG: info
+      # Only whoever knows it starts jobs; anyone may still join as a worker.
+      SWARM_SUBMIT_TOKEN: ${SWARM_SUBMIT_TOKEN:?set it in ~/swarm.env on the server}
     depends_on:
       postgres: { condition: service_healthy }
 

@@ -94,8 +94,10 @@ jobs:
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
         working-directory: web
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install --with-deps chromium firefox webkit
         working-directory: web
+      # Decodes the render page's QR code in the dashboard test.
+      - run: sudo apt-get install -y zbar-tools
       - run: cargo build -p coordinator
       - run: pnpm exec playwright test
         working-directory: web

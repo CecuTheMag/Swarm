@@ -3,7 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { LiveDashboard } from '#lib/dashboard/live.svelte.ts';
-	import { sortedJobs, unitsPerSecond } from '#lib/dashboard/state.ts';
+	import SwarmMap from '#lib/dashboard/SwarmMap.svelte';
+	import { caughtDevices, deviceGroups, sortedJobs, unitsPerSecond } from '#lib/dashboard/state.ts';
 	import type { JobStatus } from '#lib/protocol/JobStatus.ts';
 	import type { PiResult } from '#lib/protocol/PiResult.ts';
 	import type { PtResult } from '#lib/protocol/PtResult.ts';
@@ -17,6 +18,8 @@
 	const now = $derived(live.now);
 
 	const workers = $derived(Object.values(dash.workers));
+	const groups = $derived(deviceGroups(dash));
+	const caught = $derived(caughtDevices(dash, now));
 	const jobs = $derived(sortedJobs(dash));
 	const rate = $derived(unitsPerSecond(dash, now));
 
@@ -42,20 +45,43 @@
 	let submitError = $state<string | null>(null);
 	let submitting = $state(false);
 
+	// Only the organiser starts jobs on a public address (SWARM_SUBMIT_TOKEN); the
+	// password is kept on this device so it is typed once.
+	const PASSWORD_KEY = 'swarm-submit-password';
+	let password = $state('');
+	onMount(() => {
+		try {
+			password = localStorage.getItem(PASSWORD_KEY) ?? '';
+		} catch {
+			// Storage may be unavailable (private mode); the field still works.
+		}
+	});
+
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
 		submitting = true;
 		submitError = null;
 		try {
+			const headers: Record<string, string> = { 'content-type': 'application/json' };
+			if (password) headers.authorization = `Bearer ${password}`;
 			const res = await fetch('/api/jobs', {
 				method: 'POST',
-				headers: { 'content-type': 'application/json' },
+				headers,
 				body: JSON.stringify(
 					template === 'pi'
 						? { template, params: { units, samples_per_unit: samples, seed } }
 						: { template, params: { width, height, tile, spp, passes, seed } }
 				)
 			});
+			if (res.status === 401) {
+				submitError = password ? 'Грешна парола.' : 'Нужна е парола, за да пуснете задача.';
+				return;
+			}
+			try {
+				localStorage.setItem(PASSWORD_KEY, password);
+			} catch {
+				// Not remembered; nothing else depends on it.
+			}
 			if (!res.ok) submitError = ((await res.json()) as ApiError).error;
 			else if (template === 'pt') {
 				await goto(resolve('/render/[id]', { id: ((await res.json()) as { id: string }).id }));
@@ -66,6 +92,23 @@
 			submitting = false;
 		}
 	}
+
+	// Stopping a job needs the same password as starting one.
+	let stopError = $state<string | null>(null);
+	async function stopJob(id: string) {
+		stopError = null;
+		const res = await fetch(`/api/jobs/${id}/cancel`, {
+			method: 'POST',
+			headers: password ? { authorization: `Bearer ${password}` } : {}
+		});
+		if (res.status === 401) {
+			stopError = password ? 'Грешна парола.' : 'Нужна е парола, за да спрете задача.';
+		} else if (!res.ok) {
+			stopError = ((await res.json()) as ApiError).error;
+		}
+	}
+	// The coordinator's error for a stopped job (db::CANCELLED).
+	const CANCELLED = 'cancelled';
 
 	const piResult = (result: unknown) => result as PiResult;
 	const ptResult = (result: unknown) => result as PtResult;
@@ -107,8 +150,17 @@
 							<tr data-testid="job" data-job-id={job.id} data-status={job.status}>
 								<td>{job.template}</td>
 								<td class:ok={job.status === 'done'} class:bad={job.status === 'failed'}>
-									{statusText[job.status]}
-									{#if job.error}<div class="muted job-error">{job.error}</div>{/if}
+									{job.error === CANCELLED ? 'спряна' : statusText[job.status]}
+									{#if job.error && job.error !== CANCELLED}
+										<div class="muted job-error">{job.error}</div>
+									{/if}
+									{#if job.status === 'queued' || job.status === 'running'}
+										<button
+											class="secondary stop"
+											onclick={() => stopJob(job.id)}
+											data-testid="stop-job">Спри</button
+										>
+									{/if}
 								</td>
 								<td>
 									<div class="progress-cell">
@@ -143,6 +195,7 @@
 				</table>
 			</div>
 		{/if}
+		{#if stopError}<p class="bad" role="alert">{stopError}</p>{/if}
 	</section>
 
 	<section class="card">
@@ -152,15 +205,19 @@
 				Няма включени устройства. Отворете <a href={resolve('/worker')}>„Включи се“</a> на друго устройство.
 			</p>
 		{:else}
+			<div class="map"><SwarmMap {workers} {caught} /></div>
 			<div class="table-wrap">
 				<table>
-					<thead><tr><th>Устройство</th><th>Среда</th><th>Единици</th></tr></thead>
+					<thead>
+						<tr><th>Устройство</th><th>Среда</th><th>Брой</th><th>Единици</th></tr>
+					</thead>
 					<tbody>
-						{#each workers as w (w.id)}
-							<tr>
-								<td>{w.device.vendor} · {w.device.architecture}</td>
-								<td>{w.device.backend}</td>
-								<td>{w.units_done}</td>
+						{#each groups as g (g.key)}
+							<tr data-testid="device-group">
+								<td>{g.vendor} · {g.architecture}</td>
+								<td>{g.backend}</td>
+								<td>{g.count}</td>
+								<td>{g.units_done}</td>
 							</tr>
 						{/each}
 					</tbody>
@@ -193,6 +250,16 @@
 				<label>Проходи <input type="number" min="1" max="256" bind:value={passes} /></label>
 			{/if}
 			<label>Начално число <input type="number" min="0" bind:value={seed} /></label>
+			<label>
+				Парола
+				<input
+					type="password"
+					autocomplete="current-password"
+					placeholder="ако е зададена"
+					bind:value={password}
+					data-testid="password"
+				/>
+			</label>
 			<button type="submit" disabled={submitting}>Пусни</button>
 		</form>
 		{#if submitError}<p class="bad" role="alert">{submitError}</p>{/if}
@@ -202,6 +269,15 @@
 <style>
 	section {
 		margin-top: 16px;
+	}
+	.map {
+		max-width: 560px;
+		margin-bottom: 12px;
+	}
+	.stop {
+		margin-left: 8px;
+		padding: 2px 10px;
+		font-size: 0.8125rem;
 	}
 	.job-error {
 		font-size: 0.8125rem;

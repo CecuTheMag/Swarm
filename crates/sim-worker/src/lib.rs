@@ -40,6 +40,9 @@ pub struct Options {
     pub connect_to: Option<SocketAddr>,
     /// Disconnect at this instant.
     pub deadline: Option<Instant>,
+    /// Extra time each unit takes, as if on a slower device. Load tests use it to act as
+    /// many devices without needing their processors.
+    pub delay: Duration,
 }
 
 impl Default for Options {
@@ -53,6 +56,7 @@ impl Default for Options {
             in_flight: 1,
             connect_to: None,
             deadline: None,
+            delay: Duration::ZERO,
         }
     }
 }
@@ -323,6 +327,9 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
                         reason: e.to_string(),
                     },
                 };
+                if !opts.delay.is_zero() {
+                    tokio::time::sleep(opts.delay).await;
+                }
                 held.insert(lease_id, Instant::now());
                 send(&mut ws, &mut stats, msg).await?;
                 owed += 1;

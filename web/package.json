@@ -42,6 +42,7 @@
 		"#lib/*": "./src/lib/*"
 	},
 	"dependencies": {
-		"echarts": "^6.1.0"
+		"echarts": "^6.1.0",
+		"uqr": "0.1.3"
 	}
 }

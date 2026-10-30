@@ -774,6 +774,42 @@ async fn honeypots_come_only_from_jobs_computed_with_todays_kernel(db: PgPool) {
 }
 
 #[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn honeypots_are_drawn_from_the_whole_job(db: PgPool) {
+    // A finished job of 64 units, decided by one result each.
+    let once = Config {
+        redundancy: 1,
+        ..verifying()
+    };
+    pi_job_with(&db, &once, 64, 1000, 8).await;
+    let w = worker(&db).await;
+    while let Some(c) = db::claim_unit(&db, w, &once).await.unwrap() {
+        complete(&db, w, &c, &honest(&c), &once).await;
+    }
+
+    // With nothing else to do, every new client asking for work gets a known unit, and
+    // over many clients they come from all over the job.
+    let traps = Config {
+        new_client_honeypot_rate: 1.0,
+        ..verifying()
+    };
+    let mut seqs = std::collections::BTreeSet::new();
+    for _ in 0..100 {
+        let c = db::claim_unit(&db, worker(&db).await, &traps)
+            .await
+            .unwrap()
+            .expect("a honeypot for a client that has answered nothing");
+        let seq: i32 = sqlx::query_scalar("SELECT seq FROM units WHERE id = $1")
+            .bind(c.unit_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        seqs.insert(seq);
+    }
+    assert!(seqs.len() > 32, "{} distinct units", seqs.len());
+    assert!(*seqs.last().unwrap() >= 56, "{seqs:?}");
+}
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
 async fn trusted_clients_work_alone_except_for_spot_checks(db: PgPool) {
     let cfg = verifying();
     pi_job_with(&db, &cfg, 2, 1000, 6).await;
@@ -1000,4 +1036,46 @@ async fn colluders_who_agree_on_a_wrong_answer_are_undone_when_caught(db: PgPool
     assert_eq!(job.status, JobStatus::Done);
     let result: pi::JobResult = serde_json::from_value(job.result.unwrap()).unwrap();
     assert_eq!(result.inside, reference_inside(2, 1000, 4));
+}
+
+// ---- Live images (spec 0003) -----------------------------------------------------------
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn images_are_shared_until_a_unit_changes_them(db: PgPool) {
+    let cfg = Config {
+        redundancy: 1,
+        ..verifying()
+    };
+    // 2 × 1 tiles of 16 pixels, one pass.
+    let params = json!({ "width": 32, "height": 16, "tile": 16, "spp": 1, "passes": 1, "seed": 3 });
+    let t = templates::get(protocol::templates::pt::ID).unwrap();
+    let job = db::create_job(&db, t, &params, t.template.split(&params).unwrap(), 1)
+        .await
+        .unwrap();
+    let w = worker(&db).await;
+    let first = db::claim_unit(&db, w, &cfg).await.unwrap().unwrap();
+    complete(&db, w, &first, &honest(&first), &cfg).await;
+
+    // Loaded from the database, then the same encoded image for every viewer.
+    let renders = coordinator::render::Renders::default();
+    let a = renders.png(&db, job.id).await.unwrap().unwrap();
+    let b = renders.png(&db, job.id).await.unwrap().unwrap();
+    assert_eq!(a.as_ptr(), b.as_ptr(), "encoded once");
+
+    // A newly accepted unit changes the image.
+    let second = db::claim_unit(&db, w, &cfg).await.unwrap().unwrap();
+    let out = honest(&second);
+    complete(&db, w, &second, &out, &cfg).await;
+    renders
+        .unit_accepted(job.id, second.unit_id, &second.params, &out)
+        .await;
+    let c = renders.png(&db, job.id).await.unwrap().unwrap();
+    assert_ne!(a, c);
+    // The same as an image built from scratch from the database.
+    let fresh = coordinator::render::Renders::default();
+    assert_eq!(c, fresh.png(&db, job.id).await.unwrap().unwrap());
+
+    // Not a path-tracer job: no image.
+    let pi = pi_job_with(&db, &cfg, 1, 100, 1).await;
+    assert!(renders.png(&db, pi).await.unwrap().is_none());
 }

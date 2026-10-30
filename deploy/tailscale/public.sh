@@ -8,7 +8,7 @@
 set -eu
 cd "$(dirname "$0")/../.."
 
-compose="docker compose -f deploy/compose.server.yaml --profile public"
+compose="docker compose --env-file $HOME/swarm.env -f deploy/compose.server.yaml --profile public"
 service=swarm-tailscale-1
 login=swarm-tailscale-login
 sock=--socket=/tmp/tailscaled.sock

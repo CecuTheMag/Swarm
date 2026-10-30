@@ -64,6 +64,14 @@ banned (found by the load test, spec 0006).
   goes back to the queue, the other clients' verdicts on it are reversed, and their
   results count again in the new decision. This bounds what colluders get accepted.
 
+## Visibility
+
+A ban is announced to dashboards (`worker_banned`) with the wrong results the client
+returned and the units being computed again; the projector page shows it at once, and
+the device's connection is closed at its next message, also when its ban came from
+another client's result. Jobs can be stopped by the organiser
+(`POST /api/jobs/{id}/cancel`, with the submit password).
+
 ## Interaction with lease limits (0002)
 
 Releasing a lease never touches a decided unit. Honeypot leases count for nothing but

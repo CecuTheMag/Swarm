@@ -19,24 +19,27 @@ coordinator:
 web:
     cd web && pnpm dev
 
+# `url` picks another coordinator, e.g. ws://localhost:7780/ws/worker for `just stack`.
 # Run N simulated workers until the queue is empty.
-sim n="4":
-    cargo run --release -p sim-worker -- --workers {{n}} --exit-when-idle
+sim n="4" url="ws://localhost:7700/ws/worker":
+    cargo run --release -p sim-worker -- --url {{url}} --workers {{n}} --exit-when-idle
 
 # Submit a pi job to the local coordinator.
 job units="64" samples="16777216" seed="42":
     curl -sf -X POST localhost:7700/api/jobs -H 'content-type: application/json' \
       -d '{"template":"pi","params":{"units":{{units}},"samples_per_unit":{{samples}},"seed":{{seed}}}}'
 
+# `port` 7780 shares the stack of `just stack` instead of the dev server.
 # Serve the web app over HTTPS to devices on the tailnet (WebGPU needs a secure context).
-share:
-    tailscale serve --bg 7701
+share port="7701":
+    tailscale serve --bg {{port}}
     @tailscale serve status
 
+# Submitting jobs needs the password only where the coordinator has one (`just stack`
+# does; the dev coordinator does not). Run `just unshare` after.
 # Serve the web app over HTTPS on the public internet, for devices without Tailscale.
-# There is no auth yet: anyone with the URL can join or submit jobs. Run `just unshare` after.
-share-public:
-    tailscale funnel --bg 7701
+share-public port="7701":
+    tailscale funnel --bg {{port}}
     @tailscale funnel status
 
 # Stop serving the web app over Tailscale.
@@ -44,22 +47,41 @@ unshare:
     tailscale serve reset
 
 # Copy the working tree to a Docker host and (re)start Swarm there on port 7780.
-# `server` is user@host; set SWARM_SERVER to skip typing it.
+# `server` is user@host; set SWARM_SERVER to skip typing it. Secrets stay on the
+# server in ~/swarm.env (the first deploy creates it with a random submit password).
 deploy server=env_var_or_default("SWARM_SERVER", ""):
     @test -n "{{server}}" || { echo "usage: just deploy user@host (or set SWARM_SERVER)"; exit 1; }
     git ls-files -z --cached --others --exclude-standard \
       | tar --null --files-from=- --ignore-failed-read -cf - \
       | ssh {{server}} 'rm -rf ~/swarm && mkdir -p ~/swarm && tar -xf - -C ~/swarm'
-    ssh {{server}} 'cd ~/swarm && docker compose -f deploy/compose.server.yaml up -d --build --remove-orphans'
+    ssh {{server}} 'test -f ~/swarm.env || (umask 077 && echo "SWARM_SUBMIT_TOKEN=$(openssl rand -hex 12)" > ~/swarm.env)'
+    ssh {{server}} 'cd ~/swarm && docker compose --env-file ~/swarm.env -f deploy/compose.server.yaml up -d --build --remove-orphans'
 
 # Public HTTPS for the deployed server through Tailscale Funnel. The first run prints a
 # login link that adds the server to your tailnet; run it again to get the address.
 public server=env_var_or_default("SWARM_SERVER", ""):
     ssh {{server}} 'sh ~/swarm/deploy/tailscale/public.sh'
 
+# The fallback for a demo when the server or its connection is down (docs/demo-day.md).
+# Kept apart from the dev services; the submit password is in ~/swarm.env, created on
+# first use.
+# The whole server stack on this machine, on port 7780.
+stack:
+    test -f ~/swarm.env || (umask 077 && echo "SWARM_SUBMIT_TOKEN=$(openssl rand -hex 12)" > ~/swarm.env)
+    docker compose -p swarm-stack --env-file ~/swarm.env -f deploy/compose.server.yaml up -d --build --remove-orphans
+
+# Stop the stack of `just stack` (its data stays).
+stack-down:
+    docker compose -p swarm-stack --env-file ~/swarm.env -f deploy/compose.server.yaml down
+
 # Simulated CPU workers on the deployed server (0 stops them).
 fleet n="4" server=env_var_or_default("SWARM_SERVER", ""):
-    ssh {{server}} 'cd ~/swarm && SIM_WORKERS={{n}} docker compose -f deploy/compose.server.yaml --profile fleet up -d sim {{ if n == "0" { "--scale sim=0" } else { "" } }}'
+    ssh {{server}} 'cd ~/swarm && SIM_WORKERS={{n}} docker compose --env-file ~/swarm.env -f deploy/compose.server.yaml --profile fleet up -d sim {{ if n == "0" { "--scale sim=0" } else { "" } }}'
+
+# For the live demo (docs/demo-day.md); it stops by itself once blocked.
+# A device that makes up every result joins the server's grid and is caught (spec 0004).
+cheater server=env_var_or_default("SWARM_SERVER", ""):
+    ssh {{server}} 'docker run --rm --network swarm_default --label com.centurylinklabs.watchtower.enable=false swarm-coordinator sim-worker --url ws://coordinator:7700/ws/worker --cheat-rate 1 --delay-ms 1000'
 
 # Per-device speed of completed pi units.
 bench-report:
@@ -72,6 +94,17 @@ check:
     cargo nextest run --workspace
     cd web && pnpm check && pnpm lint && pnpm test:unit --run
 
-# Browser tests against the real coordinator (WebGPU via SwiftShader).
+# Browser tests against the real coordinator: Chromium with WebGPU (SwiftShader) and
+# without, and Firefox. WebKit needs Ubuntu's libraries: see `e2e-webkit`.
 e2e:
-    cd web && pnpm exec playwright test
+    cd web && pnpm exec playwright test --project webgpu --project cpu --project firefox
+
+# The browser tests in WebKit (Safari's engine), from Playwright's container.
+e2e-webkit:
+    docker rm -f swarm-pw-webkit >/dev/null 2>&1 || true
+    docker run -d --name swarm-pw-webkit --network host --init \
+      mcr.microsoft.com/playwright:v1.64.1-noble \
+      npx -y playwright@1.64.1 run-server --port 7790 --host 127.0.0.1
+    sleep 10
+    cd web && PW_TEST_CONNECT_WS_ENDPOINT=ws://127.0.0.1:7790/ pnpm exec playwright test --project webkit; \
+      status=$?; docker rm -f swarm-pw-webkit >/dev/null; exit $status

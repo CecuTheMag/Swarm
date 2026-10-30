@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { expectedBackend } from './backend.ts';
+import { SUBMIT_HEADERS } from './submit.ts';
 import type { JobSummary } from '../src/lib/protocol/JobSummary.ts';
 import type { PtResult } from '../src/lib/protocol/PtResult.ts';
 
@@ -10,11 +12,12 @@ test('a browser worker renders an image that the render page shows', async ({
 	await page.getByRole('button', { name: 'Включи се' }).click();
 	await expect(page.getByTestId('device')).toHaveAttribute(
 		'data-backend',
-		testInfo.project.name === 'cpu' ? 'wasm' : 'webgpu'
+		expectedBackend(testInfo)
 	);
 
 	// 4 × 3 tiles, two passes.
 	const res = await request.post('/api/jobs', {
+		headers: SUBMIT_HEADERS,
 		data: {
 			template: 'pt',
 			params: { width: 64, height: 36, tile: 16, spp: 2, passes: 2, seed: 5 }
@@ -30,6 +33,11 @@ test('a browser worker renders an image that the render page shows', async ({
 		timeout: 45_000
 	});
 	await expect(render.getByTestId('render-image')).toBeVisible();
+	// The device is a cell of the swarm map, and its departure is told in the feed.
+	await expect(render.getByTestId('swarm-cell')).toHaveCount(1);
+	await page.close();
+	await expect(render.getByTestId('swarm-cell')).toHaveCount(0);
+	await expect(render.getByTestId('feed')).toContainText('Изключи се');
 
 	const done = (await (await request.get(`/api/jobs/${job.id}`)).json()) as JobSummary;
 	const result = done.result as unknown as PtResult;

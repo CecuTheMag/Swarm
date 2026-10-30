@@ -40,9 +40,13 @@ enum Incoming {
     Invalid(String),
 }
 
+/// The next message from the worker, or `Invalid` if none comes within `timeout`.
+/// WebSocket pings and pongs do not count: a proxy or library may exchange them on a
+/// connection whose worker is long gone, and would keep its units from the queue.
 async fn recv(socket: &mut WebSocket, timeout: Duration) -> Incoming {
+    let deadline = tokio::time::Instant::now() + timeout;
     loop {
-        let msg = match tokio::time::timeout(timeout, socket.recv()).await {
+        let msg = match tokio::time::timeout_at(deadline, socket.recv()).await {
             Err(_) => return Incoming::Invalid("idle timeout".into()),
             Ok(None | Some(Err(_)) | Some(Ok(Message::Close(_)))) => return Incoming::Closed,
             Ok(Some(Ok(msg))) => msg,
@@ -115,12 +119,7 @@ async fn worker_session(mut socket: WebSocket, state: AppState) {
         connected_at: db::unix_ms(connected_at),
         units_done: 0,
     };
-    state
-        .workers
-        .lock()
-        .unwrap()
-        .insert(worker_id, summary.clone());
-    state.publish(DashboardEvent::WorkerJoined { worker: summary });
+    state.worker_joined(summary, client_id);
     tracing::info!(%worker_id, %client_id, %client_version, "worker joined");
 
     let welcome = CoordinatorMessage::Welcome {
@@ -134,8 +133,10 @@ async fn worker_session(mut socket: WebSocket, state: AppState) {
     }
 
     // Whatever the reason the session ended, give its units back to the queue.
+    let mut units_returned = 0;
     match db::retrying(|| db::release_worker_leases(&state.db, worker_id, &state.config)).await {
         Ok(released) => {
+            units_returned = released.leases as u32;
             if released.leases > 0 {
                 tracing::info!(%worker_id, released = released.leases, "released leases of departed worker");
             }
@@ -146,8 +147,7 @@ async fn worker_session(mut socket: WebSocket, state: AppState) {
     if let Err(e) = db::mark_worker_disconnected(&state.db, worker_id).await {
         tracing::error!(%worker_id, error = %e, "failed to mark worker disconnected");
     }
-    state.workers.lock().unwrap().remove(&worker_id);
-    state.publish(DashboardEvent::WorkerLeft { worker_id });
+    state.worker_left(worker_id, units_returned);
     tracing::info!(%worker_id, "worker left");
 }
 
@@ -168,6 +168,12 @@ async fn worker_loop(
                 return Ok(());
             }
         };
+        // Banned through another connection's result (an agreeing cheater, or the same
+        // client on two devices).
+        if state.is_banned(worker_id) {
+            reject(socket, BLOCKED).await;
+            return Ok(());
+        }
 
         let reply = match msg {
             WorkerMessage::Hello { .. } => {
@@ -270,6 +276,9 @@ async fn handle_completion(
     .await?;
     let accepted = completion.accepted();
 
+    if let Some(bans) = completion.bans() {
+        state.clients_banned(&bans.clients);
+    }
     // A ban reopened units in these jobs: their images and progress changed.
     for job_id in completion.reopened() {
         state.renders.forget(*job_id).await;
@@ -298,13 +307,7 @@ async fn handle_completion(
             if let Some(w) = state.workers.lock().unwrap().get_mut(&worker_id) {
                 w.units_done += 1;
             }
-            state.publish(DashboardEvent::UnitCompleted {
-                job_id,
-                unit_id,
-                worker_id,
-                units_done,
-                units_total,
-            });
+            state.unit_decided(job_id, worker_id, units_done, units_total);
             if let Some(job) = job_finished {
                 tracing::info!(%job_id, status = ?job.status, "job finished");
                 state.publish(DashboardEvent::JobUpdated { job });

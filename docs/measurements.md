@@ -10,6 +10,23 @@ Every number used in the competition documents comes from this log.
 | 2026-10-28 | Nothing Phone (1) | Adreno 642L (Snapdragon 778G+) | Android 15 | Chrome 156 | Yes | Adapter `qualcomm` / `adreno-6xx`; self-test bit-exact on all vectors |
 | 2026-10-28 | Lenovo ThinkPad T540p (2014) | Intel HD Graphics 4600, driver 20.19.15.5126 (2020) | Windows 10 22H2 | Edge 156 | No | `edge://gpu` reports WebGPU enabled, but `requestAdapter()` returns null for default, high-performance, low-power, compatibility and fallback adapters. Joins through the CPU fallback (spec 0005) |
 
+## Browser engines (automated tests)
+
+Every browser test (self-test against the Rust reference, a worker computing exact π, a
+worker rendering, the dashboard, losing the connection mid-unit, keeping the screen on)
+runs in each engine. Headless Firefox and WebKit on Linux expose no WebGPU, so there they
+test the CPU fallback, which is what a browser without WebGPU gets.
+
+| Date | Engine | Version | Backend | Result |
+|---|---|---|---|---|
+| 2026-10-29 | Chromium (headless, SwiftShader) | Playwright 1.64 | WebGPU | All pass; π exact, path tracer within tolerance |
+| 2026-10-29 | Chromium (headless, no WebGPU) | Playwright 1.64 | CPU (WebAssembly) | All pass, bit-exact |
+| 2026-10-29 | Firefox (headless) | Playwright 1.64 | CPU (WebAssembly) | All pass, bit-exact; screen wake lock works |
+| 2026-10-29 | WebKit, Safari's engine (headless, Ubuntu container) | Playwright 1.64 | CPU (WebAssembly) | All pass, bit-exact; wake lock not tested (WebKit on Linux has none) |
+
+Not yet tested on real devices: Safari on an iPhone (iOS 26 ships WebGPU, so it would
+take the GPU path) and Firefox with WebGPU (Windows, macOS).
+
 ## School lab idle time
 
 | Date | Lab | PCs | Observed idle hours | Method |
@@ -105,7 +122,9 @@ Limit: every completion updates its job's row, so results for one job queue on t
 lock. PostgreSQL wait events during the run are almost all `Lock:tuple` and
 `Lock:transactionid`; the coordinator used ~33 % of one core and each database backend
 ~14 %. Real units take seconds (a phone renders about one 64-pixel tile per second), so
-one job serves several hundred devices before this lock binds.
+one job serves several hundred devices before this lock binds. These runs predate
+the changes under [Scale](#scale-load-tests) below, which shorten the time each
+completion holds that lock.
 
 ## Public relay (Tailscale Funnel)
 
@@ -119,6 +138,56 @@ one job serves several hundred devices before this lock binds.
 A 64-pixel tile result is 65.5 KB (64·64·3 floats in base64). Funnel carries roughly
 5–8 such results per second for the whole grid; 30 phones at one tile per second each
 need ~2 MB/s. The relay, not the coordinator or the home line, limits the demo.
+
+## Scale (load tests)
+
+Method: a second coordinator on the server (Xeon E5-1620, 4C/8T, 2012; it also runs
+other services) with its own database and production settings (2 agreeing results per
+unit, honeypots, spot checks). Simulated workers run on the dev laptop and connect over
+the LAN; each waits a set time per unit, as a device would, instead of computing for it
+(`sim-worker --delay-ms`). New clients, so no worker is trusted yet: about 2.3 results
+per unit (two copies plus 20 % honeypots for new clients).
+
+| Date | Workers | Unit time | Job | Results/s (steady) | Request → unit (p50 / p95 / p99) | Failed workers | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-10-29 | 100 | 1 s | π, 2 000 units | 92 (of ~100 ideal) | 6 / 9 / 12 ms | 0 | Exact |
+| 2026-10-29 | 1 000 | 1 s | π, 10 000 units | 930–980 (of ~1 000 ideal) | 19 / 209 / 356 ms | 0 | Exact |
+| 2026-10-29 | 1 000 | none (saturation) | π, 10 000 units | 1 000–1 100 | 462 / 553 / 703 ms | 0 | Exact |
+| 2026-10-29 | 1 000 | 1 s | path tracer 1280×720, 7 200 units, render page open | 600–850 | 200 / 469 / 653 ms | 0 | Done in 43 s |
+
+All 1 000 workers connected within 5 s (and at once without a ramp) and none failed.
+At saturation the server runs out of processor (PostgreSQL ~5 cores, coordinator ~1);
+path-tracer results are larger, and in that run other services on the server took two
+cores. For comparison, a school lab of 30 PCs needs about 75 results/s and 30 phones on
+the GPU about 200.
+
+Found by these runs and fixed:
+
+- The projector page fell 15 s and more behind with 1 000 devices (it showed 8 % while
+  the job was at 96 %): the coordinator sent one event per decided unit, and the browser
+  copied the whole state for each. Decided units now go out in batches every 250 ms;
+  the page then showed every job finished within a second of the real end.
+- Picking a known-answer unit (honeypot) scanned every unit of a finished job and found
+  none in about a third of the tries: `random()` in the join condition was drawn anew
+  for every row. It is now drawn once and uses the index.
+- Every decided unit updates its job's row, and each commit waited for the disk while
+  holding that row, so a job's results went one at a time. Results are now committed
+  without waiting for the disk (a database crash may lose the last fraction of a second
+  of results, which are then computed again; job creation still waits). Short queries
+  no longer pay for JIT compilation either. p95 latency with 1 000 workers went from
+  246 ms to 173 ms.
+- Each image request held the lock that every accepted unit needs while it read the
+  database and encoded the PNG. Units now update their own tile, and one cached PNG is
+  shared by all viewers.
+
+Also found (outside the load tests):
+
+- A worker that lost its connection while computing, and got new units on the new
+  connection before the old one finished, stopped computing: it held the new units
+  (keeping them alive with heartbeats) for up to the 10-minute lease limit. Found with
+  a unit test that drops the connection at exactly that moment.
+- WebSocket pings reset the coordinator's idle timer, so a connection kept open by a
+  proxy, with the worker gone, held its units indefinitely.
 
 ## Random number generator validation (π template)
 

@@ -4,16 +4,19 @@ use crate::{db, state::AppState, templates};
 use axum::{
     Json,
     extract::{Path, State},
-    http::{StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use protocol::{ApiError, CreateJob, DashboardEvent, JobSummary};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("{0}")]
     BadRequest(String),
+    #[error("wrong or missing password")]
+    Unauthorized,
     #[error("not found")]
     NotFound,
     #[error(transparent)]
@@ -24,6 +27,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let status = match &self {
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::Database(e) => {
                 tracing::error!(error = %e, "database error");
@@ -38,10 +42,30 @@ impl IntoResponse for AppError {
     }
 }
 
+/// Checks `Authorization: Bearer <token>` when submitting needs a password. Both sides
+/// are hashed first so the comparison takes the same time whatever the guess.
+fn authorize(state: &AppState, headers: &HeaderMap) -> Result<(), AppError> {
+    let Some(token) = &state.config.submit_token else {
+        return Ok(());
+    };
+    let given = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .unwrap_or("");
+    if Sha256::digest(given.as_bytes()) == Sha256::digest(token.as_bytes()) {
+        Ok(())
+    } else {
+        Err(AppError::Unauthorized)
+    }
+}
+
 pub async fn create_job(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(body): Json<CreateJob>,
 ) -> Result<(StatusCode, Json<JobSummary>), AppError> {
+    authorize(&state, &headers)?;
     let template = templates::get(&body.template)
         .ok_or_else(|| AppError::BadRequest(format!("unknown template {:?}", body.template)))?;
     let units = template
@@ -59,6 +83,24 @@ pub async fn create_job(
     tracing::info!(job_id = %job.id, template = %job.template, units = job.units_total, "job created");
     state.publish(DashboardEvent::JobUpdated { job: job.clone() });
     Ok((StatusCode::CREATED, Json(job)))
+}
+
+/// Stops a job (organiser only): for a demo, nothing must queue behind a forgotten job.
+pub async fn cancel_job(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<JobSummary>, AppError> {
+    authorize(&state, &headers)?;
+    let job = db::cancel_job(&state.db, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if job.error.as_deref() == Some(db::CANCELLED) {
+        tracing::info!(job_id = %id, "job cancelled");
+        state.renders.forget(id).await;
+        state.publish(DashboardEvent::JobUpdated { job: job.clone() });
+    }
+    Ok(Json(job))
 }
 
 pub async fn get_job(

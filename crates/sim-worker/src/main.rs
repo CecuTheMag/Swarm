@@ -43,6 +43,9 @@ struct Args {
     /// name). On a tailnet machine this forces traffic through the public relay.
     #[arg(long)]
     connect_to: Option<IpAddr>,
+    /// Extra milliseconds each unit takes, as if on a slower device.
+    #[arg(long, default_value_t = 0)]
+    delay_ms: u64,
     /// Print a JSON summary when done.
     #[arg(long)]
     report: bool,
@@ -89,6 +92,7 @@ async fn main() -> anyhow::Result<()> {
         in_flight: args.in_flight,
         connect_to,
         deadline: args.duration.map(|s| started + Duration::from_secs_f64(s)),
+        delay: Duration::from_millis(args.delay_ms),
     };
     let handles: Vec<_> = (0..args.workers)
         .map(|i| {

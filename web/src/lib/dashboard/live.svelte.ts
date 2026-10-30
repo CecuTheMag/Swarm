@@ -7,7 +7,8 @@ import type { DashboardEvent } from '#lib/protocol/DashboardEvent.ts';
  * reconnects when the connection drops, and ticks `now` once a second for rates.
  */
 export class LiveDashboard {
-	state = $state(emptyState());
+	// Replaced whole by every event, never mutated: no deep proxy needed.
+	state = $state.raw(emptyState());
 	connected = $state(false);
 	now = $state(Date.now());
 

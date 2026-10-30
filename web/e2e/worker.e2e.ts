@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { expectedBackend } from './backend.ts';
+import { SUBMIT_HEADERS } from './submit.ts';
 import vectors from '../../templates/pi/vectors.json' with { type: 'json' };
 import type { JobSummary } from '../src/lib/protocol/JobSummary.ts';
 import type { PiResult } from '../src/lib/protocol/PiResult.ts';
@@ -14,11 +16,12 @@ test('a browser worker computes a job with an exact result', async ({
 	});
 	await expect(page.getByTestId('device')).toHaveAttribute(
 		'data-backend',
-		testInfo.project.name === 'cpu' ? 'wasm' : 'webgpu'
+		expectedBackend(testInfo)
 	);
 
 	// Units 0 and 1 of seed 42 are pinned test vectors, so the exact answer is known.
 	const res = await request.post('/api/jobs', {
+		headers: SUBMIT_HEADERS,
 		data: { template: 'pi', params: { units: 2, samples_per_unit: 65536, seed: 42 } }
 	});
 	expect(res.status()).toBe(201);
@@ -44,6 +47,7 @@ test('a browser worker computes a job with an exact result', async ({
 	// CPU on several threads at once.
 	const big = vectors.find((v) => v.samples > 1 << 24)!;
 	const bigRes = await request.post('/api/jobs', {
+		headers: SUBMIT_HEADERS,
 		data: {
 			template: 'pi',
 			params: { units: 1, samples_per_unit: big.samples, seed: big.seed }

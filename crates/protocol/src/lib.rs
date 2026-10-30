@@ -162,6 +162,23 @@ pub struct WorkerSummary {
     pub units_done: u32,
 }
 
+/// A job's progress as of a [`DashboardEvent::UnitsCompleted`] batch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct JobProgress {
+    pub job_id: Uuid,
+    pub units_done: u32,
+    pub units_total: u32,
+}
+
+/// Units a worker decided within a [`DashboardEvent::UnitsCompleted`] batch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct WorkerProgress {
+    pub worker_id: Uuid,
+    pub units: u32,
+}
+
 /// Coordinator → dashboard.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -176,13 +193,25 @@ pub enum DashboardEvent {
     },
     WorkerLeft {
         worker_id: Uuid,
+        /// Units it held that went back to the queue for other devices.
+        units_returned: u32,
     },
-    UnitCompleted {
-        job_id: Uuid,
-        unit_id: Uuid,
+    /// The worker's client returned wrong results and is blocked (spec 0004). Its
+    /// connection closes next, with a `worker_left`.
+    WorkerBanned {
         worker_id: Uuid,
-        units_done: u32,
-        units_total: u32,
+        /// Wrong results it returned, known answers included.
+        wrong_results: u32,
+        /// Units it had helped decide that are computed again.
+        units_redone: u32,
+    },
+    /// Units decided since the previous event, sent a few times a second rather than
+    /// once per unit, so dashboards keep up however many devices take part.
+    UnitsCompleted {
+        /// Units decided in this batch.
+        units: u32,
+        jobs: Vec<JobProgress>,
+        workers: Vec<WorkerProgress>,
     },
     JobUpdated {
         job: JobSummary,

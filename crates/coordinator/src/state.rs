@@ -1,8 +1,11 @@
-use crate::{db::Released, render::Renders};
-use protocol::{DashboardEvent, WorkerSummary};
+use crate::{
+    db::{Ban, Released},
+    render::Renders,
+};
+use protocol::{DashboardEvent, JobProgress, WorkerProgress, WorkerSummary};
 use sqlx::PgPool;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -52,6 +55,9 @@ pub struct Config {
     /// round trips overlap the work; a fast device behind a slow link needs several in
     /// flight to stay busy.
     pub max_leases_per_worker: usize,
+    /// Password for submitting jobs (`SWARM_SUBMIT_TOKEN`). Anyone may join as a worker,
+    /// but on a public address only the organiser starts jobs. None leaves submitting open.
+    pub submit_token: Option<String>,
 }
 
 impl Config {
@@ -66,6 +72,9 @@ impl Config {
         {
             cfg.redundancy = r;
         }
+        cfg.submit_token = std::env::var("SWARM_SUBMIT_TOKEN")
+            .ok()
+            .filter(|t| !t.is_empty());
         cfg
     }
 
@@ -107,6 +116,7 @@ impl Default for Config {
             idle_timeout: Duration::from_secs(30),
             no_work_retry: Duration::from_secs(2),
             max_leases_per_worker: 8,
+            submit_token: None,
         }
     }
 }
@@ -120,8 +130,25 @@ pub struct State {
     pub events: broadcast::Sender<DashboardEvent>,
     /// Workers connected to this instance. Moves to Redis with multiple instances.
     pub workers: Mutex<HashMap<Uuid, WorkerSummary>>,
+    /// The client of each connected worker.
+    clients: Mutex<HashMap<Uuid, Uuid>>,
+    /// Connected workers whose client was banned; each session ends at its next message.
+    banned: Mutex<HashSet<Uuid>>,
     /// Live images of path-tracer jobs.
     pub renders: Renders,
+    /// Units decided since dashboards were last told (see [`State::flush_progress`]).
+    progress: Mutex<Progress>,
+}
+
+/// How often dashboards hear about decided units.
+pub const PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
+
+#[derive(Default)]
+struct Progress {
+    units: u32,
+    /// Highest `units_done` seen and `units_total`, by job.
+    jobs: HashMap<Uuid, (u32, u32)>,
+    workers: HashMap<Uuid, u32>,
 }
 
 impl State {
@@ -132,13 +159,103 @@ impl State {
             config,
             events,
             workers: Mutex::new(HashMap::new()),
+            clients: Mutex::new(HashMap::new()),
+            banned: Mutex::new(HashSet::new()),
             renders: Renders::default(),
+            progress: Mutex::new(Progress::default()),
         })
     }
 
-    /// Sends an event to all dashboards; having no dashboards connected is fine.
+    /// Sends an event to all dashboards; having no dashboards connected is fine. Units
+    /// decided before it are announced first, so a dashboard sees events in order.
     pub fn publish(&self, event: DashboardEvent) {
+        self.flush_progress();
         let _ = self.events.send(event);
+    }
+
+    /// Registers a connected worker and announces it.
+    pub fn worker_joined(&self, worker: WorkerSummary, client_id: Uuid) {
+        self.clients.lock().unwrap().insert(worker.id, client_id);
+        self.workers
+            .lock()
+            .unwrap()
+            .insert(worker.id, worker.clone());
+        self.publish(DashboardEvent::WorkerJoined { worker });
+    }
+
+    /// Forgets a worker whose connection ended and announces it.
+    pub fn worker_left(&self, worker_id: Uuid, units_returned: u32) {
+        self.workers.lock().unwrap().remove(&worker_id);
+        self.clients.lock().unwrap().remove(&worker_id);
+        self.banned.lock().unwrap().remove(&worker_id);
+        self.publish(DashboardEvent::WorkerLeft {
+            worker_id,
+            units_returned,
+        });
+    }
+
+    /// Marks the connected workers of banned clients, so their sessions end, and
+    /// announces each: on the projector, this is the cheater being caught.
+    pub fn clients_banned(&self, bans: &[Ban]) {
+        for ban in bans {
+            let workers: Vec<Uuid> = self
+                .clients
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(_, client)| **client == ban.client_id)
+                .map(|(worker, _)| *worker)
+                .collect();
+            for worker_id in workers {
+                self.banned.lock().unwrap().insert(worker_id);
+                self.publish(DashboardEvent::WorkerBanned {
+                    worker_id,
+                    wrong_results: ban.wrong_results,
+                    units_redone: ban.units_redone,
+                });
+            }
+        }
+    }
+
+    /// Whether the worker's client was banned while it was connected.
+    pub fn is_banned(&self, worker_id: Uuid) -> bool {
+        self.banned.lock().unwrap().contains(&worker_id)
+    }
+
+    /// Records a decided unit for the next [`DashboardEvent::UnitsCompleted`].
+    pub fn unit_decided(&self, job_id: Uuid, worker_id: Uuid, units_done: u32, units_total: u32) {
+        let mut p = self.progress.lock().unwrap();
+        p.units += 1;
+        let job = p.jobs.entry(job_id).or_insert((0, units_total));
+        job.0 = job.0.max(units_done);
+        *p.workers.entry(worker_id).or_default() += 1;
+    }
+
+    /// Announces the units decided since the last call, if any. Runs every
+    /// [`PROGRESS_INTERVAL`]: one event per batch instead of one per unit, which with a
+    /// thousand devices would be more than a browser can draw.
+    pub fn flush_progress(&self) {
+        let p = std::mem::take(&mut *self.progress.lock().unwrap());
+        if p.units == 0 {
+            return;
+        }
+        let _ = self.events.send(DashboardEvent::UnitsCompleted {
+            units: p.units,
+            jobs: p
+                .jobs
+                .into_iter()
+                .map(|(job_id, (units_done, units_total))| JobProgress {
+                    job_id,
+                    units_done,
+                    units_total,
+                })
+                .collect(),
+            workers: p
+                .workers
+                .into_iter()
+                .map(|(worker_id, units)| WorkerProgress { worker_id, units })
+                .collect(),
+        });
     }
 
     /// Announces jobs that failed because a released unit was released too often.

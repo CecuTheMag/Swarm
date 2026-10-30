@@ -47,8 +47,10 @@ carry more than the light's emission).
 
 ## Live image
 
-The coordinator keeps an accumulator per job (sum and sample count per pixel), fed by
-accepted units and rebuilt from the database when needed.
+The coordinator keeps an accumulator per job (sum and sample count per pixel, and the
+pixels as shown), fed by accepted units and rebuilt from the database when needed. A
+unit updates only its own tile; the PNG is encoded outside the lock and shared by every
+viewer until the next unit changes it, so viewers never hold up results.
 `GET /api/jobs/{id}/image.png` returns the current image (RGBA; pixels without samples
 are transparent). The job result holds the size and samples per pixel. `/render/{id}` shows
 the image live, refreshed on dashboard events, with devices and throughput.
