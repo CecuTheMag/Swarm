@@ -83,14 +83,16 @@ impl Config {
         (f64::from(correct) + 1.0) / (f64::from(correct) + f64::from(incorrect) + 2.0)
     }
 
+    // Counts are compared as i64: a `u32` limit above `i32::MAX` must not wrap negative
+    // and trust (or ban) everyone.
     pub fn is_trusted(&self, correct: i32, incorrect: i32) -> bool {
-        correct >= self.trust_min_correct as i32
+        i64::from(correct) >= i64::from(self.trust_min_correct)
             && Self::trust(correct, incorrect) >= self.trust_threshold
     }
 
     pub fn should_ban(&self, correct: i32, incorrect: i32, honeypot_failures: i32) -> bool {
-        honeypot_failures >= self.ban_honeypot_failures as i32
-            || (incorrect >= self.ban_min_incorrect as i32
+        i64::from(honeypot_failures) >= i64::from(self.ban_honeypot_failures)
+            || (i64::from(incorrect) >= i64::from(self.ban_min_incorrect)
                 && Self::trust(correct, incorrect) < self.ban_trust_below)
     }
 }
@@ -270,5 +272,25 @@ impl State {
         let mut workers: Vec<_> = self.workers.lock().unwrap().values().cloned().collect();
         workers.sort_by_key(|w| w.connected_at);
         workers
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+
+    #[test]
+    fn limits_above_i32_max_switch_trust_and_bans_off() {
+        let cfg = Config {
+            trust_min_correct: u32::MAX,
+            ban_min_incorrect: u32::MAX,
+            ban_honeypot_failures: u32::MAX,
+            ..Config::default()
+        };
+        assert!(!cfg.is_trusted(1_000, 0));
+        assert!(!cfg.should_ban(0, 1_000, 1_000));
+        let default = Config::default();
+        assert!(default.is_trusted(default.trust_min_correct as i32, 0));
+        assert!(default.should_ban(0, 0, default.ban_honeypot_failures as i32));
     }
 }
