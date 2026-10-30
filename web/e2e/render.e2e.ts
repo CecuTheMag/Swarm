@@ -8,7 +8,9 @@ test('a browser worker renders an image that the render page shows', async ({
 	page,
 	request
 }, testInfo) => {
-	await page.goto('/worker');
+	// The render page opens in another tab, which hides this one: keep computing, as the
+	// presenting laptop does behind the projector (spec 0007).
+	await page.goto('/worker?background');
 	await page.getByRole('button', { name: 'Включи се' }).click();
 	await expect(page.getByTestId('device')).toHaveAttribute(
 		'data-backend',

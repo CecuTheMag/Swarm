@@ -9,7 +9,8 @@ test('a browser worker computes a job with an exact result', async ({
 	page,
 	request
 }, testInfo) => {
-	await page.goto('/worker');
+	// The dashboard opens in another tab later, which hides this one: stay connected.
+	await page.goto('/worker?background');
 	await page.getByRole('button', { name: 'Включи се' }).click();
 	await expect(page.getByTestId('status')).toHaveAttribute('data-status', /waiting|computing/, {
 		timeout: 30_000

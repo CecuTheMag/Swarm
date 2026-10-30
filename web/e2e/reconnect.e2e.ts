@@ -5,10 +5,18 @@ import { SUBMIT_HEADERS } from './submit.ts';
 // A phone that loses its signal mid-unit: the coordinator takes back the units of the
 // lost connection, the page reconnects, and the units of the new connection must be
 // computed even though the old unit is still running when they arrive.
+let jobId: string | undefined;
+
+// A job left unfinished would hold up every later test's job (jobs run in order).
+test.afterEach(async ({ request }) => {
+	if (jobId) await request.post(`/api/jobs/${jobId}/cancel`, { headers: SUBMIT_HEADERS });
+	jobId = undefined;
+});
+
 test('a worker that loses its connection mid-unit carries on after reconnecting', async ({
 	page,
 	request
-}) => {
+}, testInfo) => {
 	test.setTimeout(120_000);
 	let connections = 0;
 	let current: [WebSocketRoute, WebSocketRoute] | undefined;
@@ -26,17 +34,21 @@ test('a worker that loses its connection mid-unit carries on after reconnecting'
 	await page.getByRole('button', { name: 'Включи се' }).click();
 	await expect(page.getByTestId('device')).toHaveAttribute('data-backend', /.+/);
 
-	// Units of about two seconds each on a CPU (128² pixels × 1024 samples), so the
+	// Units of about two seconds each (128² pixels × 1024 samples on a CPU), so the
 	// connection drops while one is computing and the next ones arrive before it ends.
+	// SwiftShader, the software GPU of headless Chromium, is several times slower than
+	// the CPU path on a two-core CI runner: an eighth of the samples there.
+	const spp = testInfo.project.name === 'webgpu' ? 128 : 1024;
 	const res = await request.post('/api/jobs', {
 		headers: SUBMIT_HEADERS,
 		data: {
 			template: 'pt',
-			params: { width: 512, height: 128, tile: 128, spp: 1024, passes: 1, seed: 77 }
+			params: { width: 512, height: 128, tile: 128, spp, passes: 1, seed: 77 }
 		}
 	});
 	expect(res.status()).toBe(201);
 	const job = (await res.json()) as JobSummary;
+	jobId = job.id;
 
 	await expect(page.getByTestId('status')).toHaveAttribute('data-status', 'computing', {
 		timeout: 30_000
