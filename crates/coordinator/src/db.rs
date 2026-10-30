@@ -91,8 +91,9 @@ pub async fn create_job(
     let job_id = Uuid::now_v7();
     let mut tx = db.begin().await?;
     let job: JobRow = sqlx::query_as(concat!(
-        "INSERT INTO jobs (id, template, template_version, params, status, units_total)
-         VALUES ($1, $2, $3, $4, 'queued', $5)
+        "INSERT INTO jobs (id, template, template_version, template_sha256, params, status,
+                           units_total)
+         VALUES ($1, $2, $3, $4, $5, 'queued', $6)
          RETURNING ",
         job_columns!(),
         ""
@@ -100,6 +101,7 @@ pub async fn create_job(
     .bind(job_id)
     .bind(template.template.id())
     .bind(template.template.version() as i32)
+    .bind(&template.sha256)
     .bind(Json(params))
     .bind(unit_params.len() as i32)
     .fetch_one(&mut *tx)
@@ -378,6 +380,8 @@ async fn claim_honeypot(
 const HONEYPOT_PICKS: usize = 4;
 
 /// A random verified unit of a random finished job that this client has not answered.
+/// Only jobs computed with today's kernels qualify: a known answer from another kernel
+/// would fail honest workers.
 async fn pick_honeypot(
     tx: &mut Transaction<'_, Postgres>,
     worker_id: Uuid,
@@ -385,7 +389,9 @@ async fn pick_honeypot(
 ) -> sqlx::Result<Option<(Uuid, Uuid, Json<Value>)>> {
     sqlx::query_as(
         "SELECT u.id, u.job_id, u.params
-         FROM (SELECT id, units_total FROM jobs WHERE status = 'done' ORDER BY random() LIMIT 1) j
+         FROM (SELECT id, units_total FROM jobs
+               WHERE status = 'done' AND template_sha256 = ANY($3)
+               ORDER BY random() LIMIT 1) j
          JOIN units u ON u.job_id = j.id
              AND u.seq = floor(random() * j.units_total)::int
              AND u.status = 'done'
@@ -397,6 +403,7 @@ async fn pick_honeypot(
     )
     .bind(client_id)
     .bind(worker_id)
+    .bind(templates::current_hashes())
     .fetch_optional(&mut **tx)
     .await
 }

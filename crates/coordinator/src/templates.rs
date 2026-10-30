@@ -45,6 +45,11 @@ pub fn get(id: &str) -> Option<&'static Registered> {
     REGISTRY.iter().find(|r| r.template.id() == id)
 }
 
+/// Hashes of the kernels workers run today.
+pub fn current_hashes() -> Vec<String> {
+    REGISTRY.iter().map(|r| r.sha256.clone()).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

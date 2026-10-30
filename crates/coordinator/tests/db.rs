@@ -734,6 +734,46 @@ async fn honeypots_are_checked_against_the_known_answer(db: PgPool) {
 }
 
 #[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn honeypots_come_only_from_jobs_computed_with_todays_kernel(db: PgPool) {
+    let cfg = verifying();
+    let job = pi_job_with(&db, &cfg, 2, 1000, 5).await;
+    let (a, b) = (worker(&db).await, worker(&db).await);
+    for _ in 0..2 {
+        let ca = db::claim_unit(&db, a, &cfg).await.unwrap().unwrap();
+        let cb = db::claim_unit(&db, b, &cfg).await.unwrap().unwrap();
+        complete(&db, a, &ca, &honest(&ca), &cfg).await;
+        complete(&db, b, &cb, &honest(&cb), &cfg).await;
+    }
+    let traps = Config {
+        new_client_honeypot_rate: 1.0,
+        ..cfg.clone()
+    };
+    assert!(
+        db::claim_unit(&db, worker(&db).await, &traps)
+            .await
+            .unwrap()
+            .is_some(),
+        "the finished job provides honeypots"
+    );
+
+    // The kernel changed since: its known answers no longer apply.
+    sqlx::query("UPDATE jobs SET template_sha256 = 'an older kernel' WHERE id = $1")
+        .bind(job)
+        .execute(&db)
+        .await
+        .unwrap();
+    for _ in 0..20 {
+        let claim = db::claim_unit(&db, worker(&db).await, &traps)
+            .await
+            .unwrap();
+        assert!(
+            claim.is_none(),
+            "a known answer from another kernel was handed out"
+        );
+    }
+}
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
 async fn trusted_clients_work_alone_except_for_spot_checks(db: PgPool) {
     let cfg = verifying();
     pi_job_with(&db, &cfg, 2, 1000, 6).await;

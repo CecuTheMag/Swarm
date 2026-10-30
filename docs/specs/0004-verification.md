@@ -41,6 +41,11 @@ a finished job. Nothing distinguishes it from real work. The answer is compared 
 known output and counts for reputation only. Honeypots catch what redundancy cannot:
 colluding clients that return the same wrong answer.
 
+A known answer only holds for the kernel that produced it. Jobs record their kernel's
+hash, and honeypots come only from jobs whose hash matches a kernel workers run today;
+otherwise a kernel change would make every honest client fail old honeypots and get
+banned (found by the load test, spec 0006).
+
 ## Reputation and adaptive replication
 
 - A client's trust is the mean of its Beta posterior, `(correct + 1) / (correct +
