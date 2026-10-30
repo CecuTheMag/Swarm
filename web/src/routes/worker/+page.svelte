@@ -8,6 +8,7 @@
 		LOW_BATTERY,
 		POWER_LEVELS,
 		loadPower,
+		pauseReason,
 		savePower,
 		type PauseReason,
 		type Power
@@ -34,9 +35,13 @@
 		savePower(power);
 	}
 
+	// `?background` keeps computing while the page is hidden: the presenting laptop's
+	// worker tab behind the projector, later lab PCs. The battery still pauses.
+	const background = page.url.searchParams.has('background');
+
 	// Hidden page or low battery: pause; back to normal: resume (spec 0007).
 	$effect(() => {
-		session.setPause(conditions.reason);
+		session.setPause(pauseReason(conditions.hidden && !background, conditions.battery));
 	});
 
 	const backendText: Record<Backend, string> = {
@@ -105,6 +110,7 @@
 		{session.power === 100
 			? 'Устройството изчислява без почивка.'
 			: `Устройството изчислява ${session.power} % от времето и почива останалото.`}
+		{background ? 'Продължава и когато страницата е скрита.' : ''}
 	</p>
 
 	{#if active && session.pausedFor}

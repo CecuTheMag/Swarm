@@ -31,3 +31,18 @@ test('the power level is remembered, and hiding the page pauses the device', asy
 	await expect(page.getByTestId('status')).toHaveAttribute('data-status', /waiting|computing/);
 	await expect(page.getByTestId('paused')).toHaveCount(0);
 });
+
+test('?background keeps computing while the page is hidden', async ({ page }) => {
+	await page.goto('/worker?background');
+	await page.getByRole('button', { name: 'Включи се' }).click();
+	await expect(page.getByTestId('status')).toHaveAttribute('data-status', /waiting|computing/, {
+		timeout: 30_000
+	});
+	await page.evaluate(() => {
+		Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+		document.dispatchEvent(new Event('visibilitychange'));
+	});
+	await page.waitForTimeout(500);
+	await expect(page.getByTestId('status')).toHaveAttribute('data-status', /waiting|computing/);
+	await expect(page.getByTestId('paused')).toHaveCount(0);
+});

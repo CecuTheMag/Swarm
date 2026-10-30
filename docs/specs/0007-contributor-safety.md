@@ -35,8 +35,10 @@ reconnects. A device that is never resumed costs the grid nothing.
 
 The page says why it is paused. "Спри" still stops everything.
 
-Lab PCs (school mode, later) will be able to keep computing while hidden; that is a
-different consent and belongs with the school admin console.
+`/worker?background` keeps computing while the page is hidden (the battery still
+pauses it). It is for a device whose owner set it up on purpose: the presenting laptop's
+worker tab behind the projector page, and later lab PCs, where the school admin console
+will turn it on.
 
 ## Tests
 
@@ -44,5 +46,7 @@ different consent and belongs with the school admin console.
   ahead; a pause during a unit sends that unit's result and then closes the connection
   without reconnecting; a resume reconnects; a pause while idle closes at once; battery
   and visibility map to the right pause reason.
+- Browser (Playwright): the power level survives a reload; hiding the page pauses and
+  showing it resumes; with `?background` a hidden page keeps computing.
 - On a real phone (Nothing Phone (1), over adb): power levels change the measured duty
   cycle; switching apps pauses and returning resumes.

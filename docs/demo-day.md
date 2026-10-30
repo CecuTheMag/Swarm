@@ -27,7 +27,7 @@ the dashboard): jobs run in order, and a forgotten one would hold up the new one
 | "Please join." | Point at the QR code | Each phone becomes a cell of the honeycomb as it joins (amber: graphics card, blue: processor); the feed says "Включиха се N устройства" |
 | "Every tile you see came from one of your devices." | — | The image fills in and sharpens; cells flash as their devices finish work |
 | "Together you are N times faster than the fastest phone here." | — | ×speed-up, light paths per second, total paths computed |
-| "Now I pull the plug on my laptop." | Close the worker tab on the presenting laptop (open it before the defense) | Its cell disappears; the feed: its units go back to the queue and are computed elsewhere; the image keeps filling |
+| "Now I pull the plug on my laptop." | Close the worker tab on the presenting laptop (open `/worker?background` before the defense: a plain worker tab pauses while hidden behind the projector page) | Its cell disappears; the feed: its units go back to the queue and are computed elsewhere; the image keeps filling |
 | "Anyone can join, so anyone can cheat. Here is a cheater." | `just cheater` on a laptop with SSH to the server | A new cell appears and within seconds turns red with ✕; a red banner over the image: caught, blocked, its work checked again |
 
 Rehearsed on the server on 2026-10-29: the cheater was blocked 3.1 s after joining, and
