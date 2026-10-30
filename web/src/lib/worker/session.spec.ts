@@ -151,4 +151,104 @@ describe('WorkerSession', () => {
 		expect(FakeSocket.all.length).toBe(2);
 		session.destroy();
 	});
+
+	it('pausing finishes the unit in hand, then disconnects without reconnecting', async () => {
+		const session = new WorkerSession('ws://test/ws/worker');
+		session.power = 100;
+		await session.start();
+		const ws = FakeSocket.all[0];
+		welcome(ws);
+		ws.receive(assign('a'));
+		ws.receive(assign('b'));
+		await vi.waitFor(() => expect(runs.map((r) => r.lease)).toEqual(['a']));
+
+		session.setPause('hidden');
+		runs[0].resolve();
+		await vi.waitFor(() =>
+			expect(ws.sent.filter((m) => m.type === 'result').map((m) => m.lease_id)).toEqual(['a'])
+		);
+		// b, fetched in advance, is not started: it goes back to the queue on disconnect.
+		expect(runs.map((r) => r.lease)).toEqual(['a']);
+		expect(ws.readyState).toBe(FakeSocket.OPEN);
+		ws.receive({ type: 'ack', lease_id: 'a', accepted: true });
+		expect(ws.readyState).toBe(3);
+		expect(session.status).toBe('paused');
+		expect(session.unitsAccepted).toBe(1);
+		await vi.advanceTimersByTimeAsync(60_000);
+		expect(FakeSocket.all.length).toBe(1);
+
+		// Back to the page: a new connection.
+		session.setPause(null);
+		expect(FakeSocket.all.length).toBe(2);
+		welcome(FakeSocket.all[1]);
+		expect(FakeSocket.all[1].requests()).toBeGreaterThan(0);
+		session.destroy();
+	});
+
+	it('pausing while idle disconnects once owed answers arrive, or after a timeout', async () => {
+		const session = new WorkerSession('ws://test/ws/worker');
+		await session.start();
+		const ws = FakeSocket.all[0];
+		welcome(ws);
+		session.setPause('battery');
+		// Two work requests are still unanswered.
+		expect(ws.readyState).toBe(FakeSocket.OPEN);
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(ws.readyState).toBe(3);
+		expect(session.status).toBe('paused');
+		session.destroy();
+	});
+
+	it('a device that resumes before it disconnected keeps its connection', async () => {
+		const session = new WorkerSession('ws://test/ws/worker');
+		await session.start();
+		const ws = FakeSocket.all[0];
+		welcome(ws);
+		session.setPause('hidden');
+		session.setPause(null);
+		ws.receive(assign('a'));
+		await vi.waitFor(() => expect(runs.map((r) => r.lease)).toEqual(['a']));
+		await vi.advanceTimersByTimeAsync(5000);
+		expect(ws.readyState).toBe(FakeSocket.OPEN);
+		expect(FakeSocket.all.length).toBe(1);
+		session.destroy();
+	});
+
+	it('rests between units at reduced power', async () => {
+		const session = new WorkerSession('ws://test/ws/worker');
+		session.power = 50;
+		await session.start();
+		const ws = FakeSocket.all[0];
+		welcome(ws);
+		ws.receive(assign('a'));
+		ws.receive(assign('b'));
+		await vi.waitFor(() => expect(runs.map((r) => r.lease)).toEqual(['a']));
+		// a took 100 ms; at 50 % the device rests 100 ms before b.
+		runs[0].resolve();
+		await vi.advanceTimersByTimeAsync(99);
+		expect(runs.map((r) => r.lease)).toEqual(['a']);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(runs.map((r) => r.lease)).toEqual(['a', 'b']);
+		session.destroy();
+	});
+
+	it('a pause cuts a rest short', async () => {
+		const session = new WorkerSession('ws://test/ws/worker');
+		session.power = 25;
+		await session.start();
+		const ws = FakeSocket.all[0];
+		welcome(ws);
+		ws.receive(assign('a'));
+		await vi.waitFor(() => expect(runs.length).toBe(1));
+		runs[0].resolve();
+		await vi.advanceTimersByTimeAsync(10);
+		ws.receive({ type: 'ack', lease_id: 'a', accepted: true });
+		ws.receive({ type: 'no_work', retry_after_ms: 5000 });
+		ws.receive({ type: 'no_work', retry_after_ms: 5000 });
+		// Resting 300 ms after a; the pause does not wait for it.
+		session.setPause('hidden');
+		await vi.advanceTimersByTimeAsync(0);
+		expect(ws.readyState).toBe(3);
+		session.destroy();
+	});
 });

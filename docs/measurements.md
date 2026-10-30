@@ -195,6 +195,24 @@ Also found (outside the load tests):
 - WebSocket pings reset the coordinator's idle timer, so a connection kept open by a
   proxy, with the worker gone, held its units indefinitely.
 
+## Contributor safety on a real phone (spec 0007)
+
+Nothing Phone (1), Chrome 156, on USB power, worker page through `adb reverse` to the dev
+server; π units of 2²⁷ samples (~165 ms on the Adreno 642L). 20 s per level.
+
+| Date | Power | Units/s | Unit time | Share of time computing |
+|---|---|---|---|---|
+| 2026-10-30 | 100 % | 6.10 | 161 ms | 98 % |
+| 2026-10-30 | 75 % | 4.70 | 168 ms | 79 % |
+| 2026-10-30 | 50 % | 3.00 | 167 ms | 50 % |
+| 2026-10-30 | 25 % | 1.45 | 173 ms | 25 % |
+
+Pause: pressing Home hid the page; the coordinator logged the worker leaving and
+returned its one prefetched unit at once, and no unit was computed in the next 10 s.
+Back in Chrome, the page rejoined within 4 s and computed 5.8 units/s again. The battery
+pause is covered by unit tests only (the phone's battery state cannot be lowered without
+overriding system settings).
+
 ## Random number generator validation (π template)
 
 Method: 16 units × 2²² samples per run (67.1M samples), independent seeds per

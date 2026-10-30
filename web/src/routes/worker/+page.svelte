@@ -3,6 +3,15 @@
 	import { page } from '$app/state';
 	import { WorkerSession, type SessionStatus } from '#lib/worker/session.svelte.ts';
 	import { ScreenAwake } from '#lib/worker/wake-lock.svelte.ts';
+	import { DeviceConditions } from '#lib/worker/conditions.svelte.ts';
+	import {
+		LOW_BATTERY,
+		POWER_LEVELS,
+		loadPower,
+		savePower,
+		type PauseReason,
+		type Power
+	} from '#lib/worker/pacing.ts';
 	import { wsUrl } from '#lib/net.ts';
 	import type { Backend } from '#lib/protocol/Backend.ts';
 
@@ -12,9 +21,22 @@
 		page.url.searchParams.get('backend') === 'wasm' ? 'wasm' : undefined
 	);
 	const awake = new ScreenAwake();
+	const conditions = new DeviceConditions();
+	session.power = loadPower();
 	onDestroy(() => {
 		session.destroy();
 		awake.destroy();
+		conditions.destroy();
+	});
+
+	function choosePower(power: Power) {
+		session.power = power;
+		savePower(power);
+	}
+
+	// Hidden page or low battery: pause; back to normal: resume (spec 0007).
+	$effect(() => {
+		session.setPause(conditions.reason);
 	});
 
 	const backendText: Record<Backend, string> = {
@@ -30,13 +52,19 @@
 		computing: 'Изчислява',
 		waiting: 'Изчаква задачи',
 		reconnecting: 'Повторно свързване…',
+		paused: 'На пауза',
 		unsupported: 'Не се поддържа'
 	};
 
+	const pauseText: Record<PauseReason, string> = {
+		hidden: 'Страницата е скрита. Изчисленията продължават, щом се върнете.',
+		battery: `Батерията е под ${LOW_BATTERY * 100} %. Изчисленията продължават при зареждане.`
+	};
+
 	const active = $derived(!['stopped', 'unsupported'].includes(session.status));
-	// A phone's screen stays on while it takes part.
+	// A phone's screen stays on while it computes; a paused one may sleep.
 	$effect(() => {
-		void awake.set(active);
+		void awake.set(active && session.status !== 'paused');
 	});
 </script>
 
@@ -61,6 +89,29 @@
 			<span class="muted" data-testid="screen-awake">Екранът остава включен</span>
 		{/if}
 	</div>
+
+	<div class="power" role="group" aria-labelledby="power-label">
+		<span id="power-label">Мощност</span>
+		{#each POWER_LEVELS as level (level)}
+			<button
+				class:secondary={session.power !== level}
+				aria-pressed={session.power === level}
+				data-testid="power-{level}"
+				onclick={() => choosePower(level)}>{level} %</button
+			>
+		{/each}
+	</div>
+	<p class="muted hint">
+		{session.power === 100
+			? 'Устройството изчислява без почивка.'
+			: `Устройството изчислява ${session.power} % от времето и почива останалото.`}
+	</p>
+
+	{#if active && session.pausedFor}
+		<p class="paused" role="status" data-testid="paused" data-reason={session.pausedFor}>
+			{pauseText[session.pausedFor]}
+		</p>
+	{/if}
 
 	{#if session.status === 'unsupported'}
 		<p class="bad" role="alert">
@@ -104,6 +155,27 @@
 	}
 	.stats {
 		margin-top: 16px;
+	}
+	.power {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+	}
+	.power span {
+		margin-right: 8px;
+	}
+	.power button {
+		min-width: 64px;
+	}
+	.hint {
+		margin: 8px 0 0;
+	}
+	.paused {
+		margin: 16px 0 0;
+		padding: 12px 16px;
+		border-radius: 8px;
+		border: 1px solid currentColor;
 	}
 	.device {
 		font-size: 1rem;

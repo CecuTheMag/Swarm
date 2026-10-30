@@ -1,4 +1,5 @@
 import { ComputeClient } from './compute-client.ts';
+import { DEFAULT_POWER, restMs, type PauseReason } from './pacing.ts';
 import type { Backend } from '#lib/protocol/Backend.ts';
 import type { CoordinatorMessage } from '#lib/protocol/CoordinatorMessage.ts';
 import type { DeviceInfo } from '#lib/protocol/DeviceInfo.ts';
@@ -12,9 +13,18 @@ const MAX_RECONNECT_DELAY_MS = 15_000;
 // that slept with the page frozen is dropped by the coordinator, but the browser
 // may never see the close.
 const REPLY_TIMEOUT_MS = 20_000;
+// A pausing device waits this long for the answers it is owed before it disconnects.
+const SETTLE_TIMEOUT_MS = 3_000;
 
 export type SessionStatus =
-	'stopped' | 'starting' | 'connecting' | 'computing' | 'waiting' | 'reconnecting' | 'unsupported';
+	| 'stopped'
+	| 'starting'
+	| 'connecting'
+	| 'computing'
+	| 'waiting'
+	| 'reconnecting'
+	| 'paused'
+	| 'unsupported';
 
 const CLIENT_ID_KEY = 'swarm-client-id';
 
@@ -51,6 +61,10 @@ type Assignment = Extract<CoordinatorMessage, { type: 'assign' }>;
  * Units are fetched in advance so the round trip to the coordinator (over a second
  * through a relay) overlaps the work instead of idling the device. How many depends on
  * the device: a fast GPU behind a slow link keeps several in flight, a slow CPU two.
+ *
+ * The device computes `power` % of the time and pauses for `setPause` (spec 0007): it
+ * finishes the unit in hand, sends the result and disconnects, so units fetched in
+ * advance go back to the queue at once.
  */
 export class WorkerSession {
 	status = $state<SessionStatus>('stopped');
@@ -60,6 +74,10 @@ export class WorkerSession {
 	unitsRejected = $state(0);
 	lastUnitMs = $state<number | null>(null);
 	error = $state<string | null>(null);
+	/** Share of the time spent computing, in percent. */
+	power = $state<number>(DEFAULT_POWER);
+	/** Why the device is paused, or null. */
+	pausedFor = $state<PauseReason | null>(null);
 
 	private compute: ComputeClient | null = null;
 	private ws: WebSocket | null = null;
@@ -82,6 +100,11 @@ export class WorkerSession {
 	private retry: ReturnType<typeof setTimeout> | undefined;
 	private replyTimeout: ReturnType<typeof setTimeout> | undefined;
 	private reconnectDelay = 1000;
+	/** Disconnect once every answer owed has arrived (pausing). */
+	private disconnectWhenSettled = false;
+	private settleTimer: ReturnType<typeof setTimeout> | undefined;
+	private restTimer: ReturnType<typeof setTimeout> | undefined;
+	private wake: (() => void) | null = null;
 
 	/** `backend: 'wasm'` computes on the CPU even when there is a GPU. */
 	constructor(
@@ -108,6 +131,7 @@ export class WorkerSession {
 
 	stop() {
 		this.running = false;
+		this.interruptRest();
 		this.compute?.abort();
 		this.teardown();
 		this.ws?.close();
@@ -121,7 +145,32 @@ export class WorkerSession {
 		this.compute = null;
 	}
 
+	/** Pauses for `reason`, or resumes with null. */
+	setPause(reason: PauseReason | null) {
+		const was = this.pausedFor;
+		this.pausedFor = reason;
+		if (!this.running || (reason === null) === (was === null)) return;
+		if (reason) {
+			this.interruptRest();
+			clearTimeout(this.retry);
+			if (!this.computing) this.settleThenDisconnect();
+		} else if (this.ws) {
+			// Resumed before the pause disconnected.
+			this.disconnectWhenSettled = false;
+			clearTimeout(this.settleTimer);
+			this.requestWork();
+			void this.computeNext();
+		} else {
+			this.reconnectDelay = 1000;
+			this.connect();
+		}
+	}
+
 	private connect() {
+		if (this.pausedFor) {
+			this.status = 'paused';
+			return;
+		}
 		this.status = 'connecting';
 		const ws = new WebSocket(this.url);
 		this.ws = ws;
@@ -147,6 +196,10 @@ export class WorkerSession {
 		ws.onmessage = ws.onclose = null;
 		ws.close();
 		if (!this.running) return;
+		if (this.pausedFor) {
+			this.status = 'paused';
+			return;
+		}
 		this.status = 'reconnecting';
 		this.retry = setTimeout(() => this.running && this.connect(), this.reconnectDelay);
 		this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY_MS);
@@ -156,6 +209,8 @@ export class WorkerSession {
 		clearInterval(this.heartbeat);
 		clearTimeout(this.retry);
 		clearTimeout(this.replyTimeout);
+		clearTimeout(this.settleTimer);
+		this.disconnectWhenSettled = false;
 		// Units of a lost connection are the coordinator's again; a unit still computing
 		// finishes, but its result has nowhere to go.
 		this.held.clear();
@@ -163,6 +218,29 @@ export class WorkerSession {
 		this.requested = 0;
 		this.requestSentAt = [];
 		this.owed = 0;
+	}
+
+	/** Closes the connection on purpose (pausing): no reconnect follows. */
+	private disconnect() {
+		const ws = this.ws;
+		this.teardown();
+		this.ws = null;
+		if (ws) {
+			ws.onmessage = ws.onclose = null;
+			ws.close();
+		}
+		if (this.running) this.status = 'paused';
+	}
+
+	/** Disconnects once the coordinator has answered everything it owes. */
+	private settleThenDisconnect() {
+		if (!this.ws || this.owed === 0) {
+			this.disconnect();
+			return;
+		}
+		this.disconnectWhenSettled = true;
+		clearTimeout(this.settleTimer);
+		this.settleTimer = setTimeout(() => this.disconnect(), SETTLE_TIMEOUT_MS);
 	}
 
 	private send(msg: WorkerMessage) {
@@ -185,14 +263,21 @@ export class WorkerSession {
 
 	/** Units to hold so that the next ones arrive before the current one is done. */
 	private wanted(): number {
-		const inFlight = 1 + Math.ceil(this.roundTripMs / Math.max(this.unitMs, 1));
+		// Resting stretches each unit to `unitMs · 100 / power`.
+		const paced = (this.unitMs * 100) / this.power;
+		const inFlight = 1 + Math.ceil(this.roundTripMs / Math.max(paced, 1));
 		return Math.min(MAX_HELD, Math.max(MIN_HELD, inFlight));
 	}
 
 	/** Asks for units until `wanted()` are held or requested. */
 	private requestWork() {
 		clearTimeout(this.retry);
-		while (this.running && this.ws && this.held.size + this.requested < this.wanted()) {
+		while (
+			this.running &&
+			this.ws &&
+			!this.pausedFor &&
+			this.held.size + this.requested < this.wanted()
+		) {
 			this.requested++;
 			this.requestSentAt.push(performance.now());
 			this.sendExpectingReply({ type: 'request_work' });
@@ -259,20 +344,23 @@ export class WorkerSession {
 				if (msg.message.startsWith('this device is blocked')) this.stop();
 				break;
 		}
+		if (this.disconnectWhenSettled && this.owed === 0) this.disconnect();
 	}
 
-	/** Computes queued units one at a time. */
+	/** Computes queued units one at a time, resting between them at reduced power. */
 	private async computeNext() {
 		if (this.computing) return;
-		for (let unit = this.queue.shift(); unit; unit = this.queue.shift()) {
+		this.computing = true;
+		for (let unit = this.nextUnit(); unit; unit = this.nextUnit()) {
 			// The queue only holds units of the current connection, but the connection may
 			// be lost and replaced while this one computes.
 			const ws = this.ws;
-			this.computing = true;
 			this.status = 'computing';
 			let reply: WorkerMessage;
+			let elapsed = 0;
 			try {
 				const { output, elapsed_ms } = await this.compute!.run(unit.template, unit.params);
+				elapsed = elapsed_ms;
 				this.lastUnitMs = elapsed_ms;
 				this.unitMs = 0.7 * this.unitMs + 0.3 * elapsed_ms;
 				reply = { type: 'result', lease_id: unit.lease_id, output, elapsed_ms };
@@ -288,11 +376,35 @@ export class WorkerSession {
 			// leases than this worker means to hold.
 			this.sendExpectingReply(reply);
 			this.requestWork();
+			const rest = restMs(elapsed, this.power);
+			if (rest > 0 && this.running && !this.pausedFor) await this.rest(rest);
 		}
 		this.computing = false;
-		if (this.running && this.ws && this.queue.length === 0 && this.status === 'computing') {
+		if (!this.running) return;
+		if (this.pausedFor) {
+			this.settleThenDisconnect();
+		} else if (this.ws && this.queue.length === 0 && this.status === 'computing') {
 			this.status = 'waiting';
 		}
+	}
+
+	/** The next unit to compute; none while paused. */
+	private nextUnit(): Assignment | undefined {
+		return this.pausedFor ? undefined : this.queue.shift();
+	}
+
+	/** Waits `ms`, or until a pause or stop interrupts. */
+	private rest(ms: number): Promise<void> {
+		return new Promise((resolve) => {
+			this.wake = resolve;
+			this.restTimer = setTimeout(() => this.interruptRest(), ms);
+		});
+	}
+
+	private interruptRest() {
+		clearTimeout(this.restTimer);
+		this.wake?.();
+		this.wake = null;
 	}
 
 	private fail(message: string) {
