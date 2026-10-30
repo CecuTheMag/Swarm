@@ -73,7 +73,13 @@ async fn get_job(addr: &str, id: uuid::Uuid) -> JobSummary {
 
 #[sqlx::test(migrator = "coordinator::MIGRATOR")]
 async fn several_workers_complete_a_job_exactly(db: PgPool) {
-    let addr = serve(db, without_honeypots()).await;
+    // No client may earn trust and compute alone: one that happens to deliver more than
+    // `trust_min_correct` of the 48 results would leave a unit with a single result.
+    let config = Config {
+        trust_min_correct: u32::MAX,
+        ..without_honeypots()
+    };
+    let addr = serve(db, config).await;
     let (units, samples, seed) = (24, 50_000, 2026);
     let job = create_pi_job(&addr, units, samples, seed).await;
     assert_eq!(job.status, JobStatus::Queued);

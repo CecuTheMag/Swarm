@@ -27,7 +27,7 @@ pub struct Options {
     pub url: String,
     /// Disconnect after this many completed units.
     pub max_units: Option<u32>,
-    /// Disconnect the first time the queue is empty instead of polling.
+    /// Disconnect once the queue is empty instead of polling.
     pub exit_when_idle: bool,
     /// The client id to report; `None` makes a new one per run.
     pub client_id: Option<Uuid>,
@@ -181,6 +181,12 @@ pub fn compute(template_id: &str, version: u32, params: &Value) -> anyhow::Resul
 
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
+/// Empty answers in a row before an `exit_when_idle` worker leaves. One is not enough:
+/// a unit another worker is claiming at that moment is skipped (`SKIP LOCKED`), so the
+/// queue can look empty while a unit still needs a result from this worker.
+const IDLE_ANSWERS: u32 = 3;
+const IDLE_RETRY: Duration = Duration::from_millis(50);
+
 async fn connect(opts: &Options) -> anyhow::Result<Socket> {
     // Both rustls providers end up in the workspace; pick one. Errors when already set.
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -250,6 +256,7 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
     let mut retries = 0u32;
     let mut heartbeat = None::<tokio::time::Interval>;
     let mut held: HashMap<Uuid, Instant> = HashMap::new();
+    let mut idle_answers = 0u32;
 
     loop {
         let beat = async {
@@ -307,6 +314,7 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
                 ..
             } => {
                 owed -= 1;
+                idle_answers = 0;
                 let started = Instant::now();
                 let cheat = opts.cheat;
                 let computed = tokio::task::spawn_blocking(move || {
@@ -353,13 +361,15 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
             }
             CoordinatorMessage::NoWork { retry_after_ms } => {
                 owed -= 1;
+                idle_answers += 1;
+                let mut wait = Duration::from_millis(retry_after_ms.into());
                 if opts.exit_when_idle {
-                    draining = true;
-                } else if !draining {
+                    draining |= idle_answers >= IDLE_ANSWERS;
+                    wait = wait.min(IDLE_RETRY);
+                }
+                if !draining {
                     retries += 1;
-                    retry_at.get_or_insert_with(|| {
-                        tokio::time::Instant::now() + Duration::from_millis(retry_after_ms.into())
-                    });
+                    retry_at.get_or_insert_with(|| tokio::time::Instant::now() + wait);
                 }
             }
             CoordinatorMessage::Error { message } => bail!("coordinator error: {message}"),
