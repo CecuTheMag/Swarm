@@ -104,6 +104,17 @@ other clients' leases) and a concurrent completion dropped a worker's connection
 not the old, value from `RETURNING`, so honest clients kept marks earned against
 colluders' answers.
 
+Chaos panel on the server (2026-11-03, spec 0008): a 640×360 render (360 units) with 4
+honest simulated devices (300 ms per unit) and cheaters added through the panel's API.
+
+| Cheaters | Caught after | Units they got accepted | Redone | Result |
+|---|---|---|---|---|
+| 1 random | 3.4 s (3 disagreements) | 0 | — | Done |
+| 2 colluders | ~70 s (first: 2 failed honeypots; second: disagreements) | 49 of 360, the job had already finished | 49, in 11 s; the job reopened and finished again | Done, all 49 recomputed by honest devices |
+
+Before this run's fix a ban only redid units of jobs still running, so the 49 tiles
+would have stayed in the finished image.
+
 ## Coordinator capacity (load test, spec 0006)
 
 Setup: dev PC (20 threads), release coordinator and PostgreSQL 18 (Docker) on the same
@@ -144,6 +155,33 @@ phone finishes a tile in ~0.1 s (~650 KB/s of results each), and every tile is c
 twice until devices are trusted: through Funnel the room computes at the speed of two or
 three phones, however many join. The relay, not the coordinator or the home line,
 limits the demo.
+
+## Public address: relay sweep (spec 0006)
+
+Method (2026-11-03): `sim-worker` in a container on the server, `--in-flight 4`, 2 s
+ramp, 30 s per run, path-tracer units of 64² tiles × 2 spp (a 62 KB result, almost no
+computing), production verification. Through the new address it connects to the
+home line's public IP (`--connect-to`), so traffic leaves the server, turns at the
+router and comes back in through the front Caddy (TLS), Swarm's proxy and the
+coordinator. Through Funnel it crosses the internet to Tailscale's relay and back.
+
+| Workers | `swarmrelay.duckdns.org`: results/s | MB/s | round trip p50 / p95 | Funnel: results/s | MB/s | round trip p50 / p95 | Funnel connections failed |
+|---|---|---|---|---|---|---|---|
+| 1 | 50 | 3.1 | 25 / 52 ms | 11 | 0.7 | 171 / 338 ms | 0 |
+| 5 | 292 | 18.0 | 25 / 44 ms | 27 | 1.7 | 354 / 938 ms | 0 |
+| 10 | 311 | 19.2 | 52 / 121 ms | 28 | 1.8 | 695 / 1801 ms | 0 |
+| 30 | 319 | 19.8 | 134 / 326 ms | 30 | 2.0 | 1110 / 3215 ms | 10 of 30 |
+
+The direct address carries about ten times what Funnel does, with no failed
+connections; Funnel also refused a third of 30 simultaneous devices. The plateau at
+~20 MB/s matches the direct LAN path measured before (17.5–18.2 MB/s): the TLS front
+adds no limit of its own. For devices outside, the home line is the ceiling: 21.7–22.1
+MB/s down (results arriving), 4.8 MB/s up (units and images leaving), measured the
+same day. With 62 KB per result that is ~350 results/s, about 35 phones rendering
+default units at full speed.
+
+The sweep from the dev laptop, which was on a phone hotspot tunnelled home, measured
+that link instead (86 KB/s up) and is not counted.
 
 ## Scale (load tests)
 

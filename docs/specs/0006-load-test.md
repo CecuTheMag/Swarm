@@ -1,6 +1,6 @@
 # 0006 — Load test
 
-Status: implemented; WebSocket sweep through the relay waits for a job on the server
+Status: implemented
 
 ## Goal
 
@@ -42,7 +42,8 @@ throughput.
 ## Experiments
 
 1. Coordinator capacity, local: π, 10 → 100 → 1,000 workers.
-2. Public relay: 64-pixel path-tracer tiles, 1 → 30 workers through Funnel.
+2. Public relay: 64-pixel path-tracer tiles, 1 → 30 workers through Funnel, and
+   through the direct address that replaced it (`swarmrelay.duckdns.org`).
 
 Results go into `docs/measurements.md`.
 
@@ -52,3 +53,11 @@ Results go into `docs/measurements.md`.
    address; existing tests still pass.
 2. A unit test covers the percentile summary.
 3. Both experiments measured and recorded, with the limiting factor named.
+
+## Outcome
+
+The coordinator takes ~1 000 results/s; Tailscale Funnel took ~30 path-tracer results/s
+(2 MB/s) and refused a third of 30 devices. The demo therefore moved to a real domain
+on the home line (`swarmrelay.duckdns.org`, Let's Encrypt), which carried ~320
+results/s (20 MB/s) with no failures: no VPS needed. The home line's download, about
+35 phones at full speed, is now the limit ([measurements](../measurements.md)).

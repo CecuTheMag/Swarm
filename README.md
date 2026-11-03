@@ -198,9 +198,9 @@ Bulgarian schools have **thousands of computers idle most of the day and all nig
 | When | Milestone |
 |---|---|
 | **Oct 2026** | WebGPU Monte Carlo kernel in a browser; coordinator skeleton with leases |
-| **Nov 2026** | Path tracer template; live dashboard; redundancy verification |
-| **≤ mid-Dec 2026** | **Register idea**; school defense: the committee joins the grid from their phones |
-| **Dec 2026–Jan 2027** | Reputation + honeypots; adaptive sizing; school lab mode; first lab run (holidays!) |
+| **Nov 2026** | Path tracer template; live dashboard; redundancy verification, reputation + honeypots; contributor safety; chaos panel |
+| **≤ 25 Nov 2026** | **Register idea**; school defense: the committee joins the grid from their phones |
+| **Dec 2026–Jan 2027** | Adaptive sizing; school lab mode; first lab run (holidays!) |
 | **Feb 2027** | Job API + submitter portal; ML template; tests, load tests, docs |
 | **≤ ~1 Mar 2027** | Upload; grid online with test accounts |
 | **Early Mar 2027** | Regional defense |
@@ -240,7 +240,7 @@ Bulgarian schools have **thousands of computers idle most of the day and all nig
 |---|---|
 | 0–2 | "There are N idle computers in Bulgarian schools right now." (Your measured estimate.) |
 | 2–3 | The QR code: "Please join." |
-| 3–10 | **Live:** judges' devices appear on the grid map → a path-traced image fills in tile by tile → live counters (light paths per second, ×speed-up over the fastest single device) → you kill your own laptop mid-job: the job continues; a "cheater" node is injected and gets caught (run sheet: `docs/demo-day.md`) |
+| 3–10 | **Live:** judges' devices appear on the grid map → a path-traced image fills in tile by tile → live counters (light paths per second, ×speed-up over the fastest single device) → from the chaos panel you switch a phone off mid-job: the job continues; a "cheater" node is injected and gets caught (run sheet: `docs/demo-day.md`) |
 | 10–14 | Architecture: leases, verification, signed templates; speed-up curve from the school lab; scaling test to 1,000 simulated nodes |
 | 14–15 | Security and ethics: why it can never become a botnet or a miner |
 | 15–20 | Questions |
@@ -280,7 +280,7 @@ Bulgarian schools have **thousands of computers idle most of the day and all nig
 >
 > **Съществуващи решения:** системи като BOINC, изискващи инсталиране; облачни услуги срещу заплащане; национални суперкомпютри, недостъпни за ученически проекти. Предложеното решение не изисква инсталиране и използва графичните процесори чрез браузъра.
 >
-> **План за реализация:** октомври–ноември – изчислително ядро и координатор; декември–януари – проверка на резултатите, училищен режим, първо изпитване в компютърен кабинет; февруари – програмен интерфейс, шаблон за машинно обучение, тестове и документация; март–април – изпитване в няколко училища.
+> **План за реализация:** октомври–ноември 2026 – изчислително ядро с WebGPU и резервен път през процесора, координатор, шаблони за метода Монте Карло и проследяване на лъчи, проверка на резултатите с дублиране, контролни задачи и репутация, натоварващи тестове, защита на доброволците, публичен адрес (изпълнено към ноември); декември–януари – подписани шаблони, разпределяне според устройството, училищен режим, първо изпитване в компютърен кабинет; февруари – програмен интерфейс за заявители, роли, шаблон за машинно обучение, документация; март–април – изпитване в няколко училища.
 
 ## 22. Compliance checklist
 
@@ -292,7 +292,17 @@ Bulgarian schools have **thousands of computers idle most of the day and all nig
 
 ## 23. Verify before registering
 
-- Current WebGPU support in Chrome, Edge, Firefox and Safari (desktop and mobile).
-- The actual idle time of your school's computer lab (measure for a week).
-- Your school IT policy for running browser workloads.
-- BOINC research on adaptive replication to cite.
+- [x] **WebGPU support** (checked 2026-11-03, [web.dev](https://web.dev/blog/webgpu-supported-major-browsers),
+  [gpuweb implementation status](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status)):
+  Chrome and Edge 113+ on Windows, macOS and ChromeOS; Chrome 121+ on Android 12+ with
+  Qualcomm or ARM GPUs; Safari 26 on iOS, iPadOS and macOS 26; Firefox 141+ on Windows
+  and 145+ on Apple-silicon Macs. Not yet: Chrome on Linux (behind flags), Firefox on
+  Linux and Android. Every one of those gets the CPU fallback (spec 0005), so no device
+  is turned away. Our own devices: [measurements](docs/measurements.md#webgpu-support-by-device).
+- [ ] The actual idle time of your school's computer lab (measure for a week).
+- [ ] Your school IT policy for running browser workloads, and written permission (section 22).
+- [x] **Adaptive replication to cite:** D. P. Anderson, "BOINC: A Platform for Volunteer
+  Computing", *Journal of Grid Computing* 18 (2020) 99–122 (adaptive replication and
+  host reputation); L. F. G. Sarmenta, "Sabotage-tolerance mechanisms for volunteer
+  computing systems", *Future Generation Computer Systems* 18(4) (2002) 561–572
+  (majority voting and spot-checking with known answers, which spec 0004 follows).

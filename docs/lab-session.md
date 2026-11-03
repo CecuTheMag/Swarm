@@ -5,10 +5,11 @@ How to put real devices (lab PCs, phones) on the grid and record what they do in
 
 ## Always-on server
 
-The deployed stack (`just deploy`) is public at `https://swarm.tail629f50.ts.net` through
-Tailscale Funnel (`just public`; the first run prints a login link). Devices open
-`/selftest` and `/worker` there: nothing to install, no dev server needed. `just fleet N`
-adds N simulated workers on the server.
+The deployed stack (`just deploy`) is public at `https://swarmrelay.duckdns.org`
+(docs/demo-day.md, Plan A), and at `https://swarm.tail629f50.ts.net` through Tailscale
+Funnel as a slower second address (`just public`; the first run prints a login link).
+Devices open `/selftest` and `/worker` there: nothing to install, no dev server needed.
+`just fleet N` adds N simulated workers on the server.
 
 ## Why HTTPS
 
