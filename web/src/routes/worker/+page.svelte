@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import { WorkerSession, type SessionStatus } from '#lib/worker/session.svelte.ts';
 	import { ScreenAwake } from '#lib/worker/wake-lock.svelte.ts';
 	import { DeviceConditions } from '#lib/worker/conditions.svelte.ts';
@@ -14,6 +15,7 @@
 		type Power
 	} from '#lib/worker/pacing.ts';
 	import { wsUrl } from '#lib/net.ts';
+	import Icon from '#lib/ui/Icon.svelte';
 	import type { Backend } from '#lib/protocol/Backend.ts';
 
 	// `?backend=wasm` computes on the CPU even when there is a GPU (for comparisons).
@@ -45,20 +47,36 @@
 	});
 
 	const backendText: Record<Backend, string> = {
-		webgpu: 'видеокарта',
-		wasm: 'процесор',
-		native: 'native'
+		webgpu: 'Видеокарта',
+		wasm: 'Процесор',
+		native: 'Сървър'
 	};
 
-	const statusText: Record<SessionStatus, string> = {
-		stopped: 'Спрян',
-		starting: 'Подготовка…',
-		connecting: 'Свързване…',
-		computing: 'Изчислява',
-		waiting: 'Изчаква задачи',
-		reconnecting: 'Повторно свързване…',
-		paused: 'На пауза',
-		unsupported: 'Не се поддържа'
+	// What is happening, said plainly: a headline and one line of explanation.
+	const statusText: Record<SessionStatus, { title: string; detail: string }> = {
+		stopped: {
+			title: 'Готово за включване',
+			detail: 'Натиснете бутона и устройството ще започне да помага.'
+		},
+		starting: { title: 'Подготовка…', detail: 'Проверяваме какво може това устройство.' },
+		connecting: { title: 'Свързване…', detail: 'Само секунда.' },
+		computing: {
+			title: 'Помагате в момента',
+			detail: 'Устройството изчислява част от обща задача. Можете да спрете по всяко време.'
+		},
+		waiting: {
+			title: 'Включено',
+			detail: 'В момента няма работа. Ще започнем, щом се появи нова задача.'
+		},
+		reconnecting: {
+			title: 'Връзката прекъсна',
+			detail: 'Свързваме се отново автоматично. Не е нужно да правите нищо.'
+		},
+		paused: { title: 'На пауза', detail: 'Ще продължим сами, щом е възможно.' },
+		unsupported: {
+			title: 'Този браузър не може да помага',
+			detail: 'Нужен е по-нов браузър.'
+		}
 	};
 
 	const pauseText: Record<PauseReason, string> = {
@@ -66,125 +84,361 @@
 		battery: `Батерията е под ${LOW_BATTERY * 100} %. Изчисленията продължават при зареждане.`
 	};
 
+	const powerText: Record<Power, string> = {
+		25: 'Леко',
+		50: 'Умерено',
+		75: 'Препоръчано',
+		100: 'Максимум'
+	};
+
 	const active = $derived(!['stopped', 'unsupported'].includes(session.status));
+	const busy = $derived(session.status === 'computing');
+	const status = $derived(statusText[session.status]);
 	// A phone's screen stays on while it computes; a paused one may sleep.
 	$effect(() => {
 		void awake.set(active && session.status !== 'paused');
 	});
 </script>
 
-<main>
-	<h1>Дари изчислителна мощ</h1>
-	<p class="muted">
-		Тази страница изпълнява само проверени изчислителни шаблони на Рояк чрез видеокартата на
-		устройството, а ако няма подходяща видеокарта — чрез процесора. Не се събират лични данни.
-		Можете да спрете по всяко време.
-	</p>
+<svelte:head>
+	<title>Включи се · Рояк</title>
+</svelte:head>
 
-	<div class="card controls">
-		{#if active}
-			<button class="secondary" onclick={() => session.stop()}>Спри</button>
-		{:else}
-			<button onclick={() => session.start()} disabled={session.status === 'unsupported'}>
-				Включи се
-			</button>
+<main class="worker">
+	<section class="console glass" class:active class:busy aria-labelledby="status-title">
+		<div class="ring-wrap">
+			<svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+				<circle class="track" cx="60" cy="60" r="54" />
+				<circle class="arc" cx="60" cy="60" r="54" pathLength="100" />
+			</svg>
+			{#if active}
+				<button class="power-btn stop" onclick={() => session.stop()}>
+					<Icon name="pause" size={30} />
+					<span>Спри</span>
+				</button>
+			{:else}
+				<button
+					class="power-btn start"
+					onclick={() => session.start()}
+					disabled={session.status === 'unsupported'}
+				>
+					<Icon name="power" size={30} />
+					<span>Включи се</span>
+				</button>
+			{/if}
+		</div>
+
+		<div class="state" aria-live="polite">
+			<h1 id="status-title">
+				<span data-testid="status" data-status={session.status}>{status.title}</span>
+			</h1>
+			<p class="muted">{status.detail}</p>
+			{#if active && awake.held}
+				<span class="badge" data-testid="screen-awake">
+					<Icon name="phone" size={14} /> Екранът остава включен
+				</span>
+			{/if}
+		</div>
+
+		{#if active && session.pausedFor}
+			<p class="notice warn" role="status" data-testid="paused" data-reason={session.pausedFor}>
+				<Icon name={session.pausedFor === 'battery' ? 'battery' : 'eye'} size={18} />
+				{pauseText[session.pausedFor]}
+			</p>
 		{/if}
-		<span data-testid="status" data-status={session.status}>{statusText[session.status]}</span>
-		{#if active && awake.held}
-			<span class="muted" data-testid="screen-awake">Екранът остава включен</span>
+
+		{#if session.status === 'unsupported'}
+			<p class="notice bad" role="alert">
+				<Icon name="alert" size={18} />
+				<span>
+					Обновете браузъра или отворете страницата в Chrome, Edge или Safari.
+					{#if session.error}<span class="muted err">{session.error}</span>{/if}
+				</span>
+			</p>
+		{:else if session.error}
+			<p class="notice bad" role="alert"><Icon name="alert" size={18} /> {session.error}</p>
 		{/if}
-	</div>
+	</section>
 
-	<div class="power" role="group" aria-labelledby="power-label">
-		<span id="power-label">Мощност</span>
-		{#each POWER_LEVELS as level (level)}
-			<button
-				class:secondary={session.power !== level}
-				aria-pressed={session.power === level}
-				data-testid="power-{level}"
-				onclick={() => choosePower(level)}>{level} %</button
-			>
-		{/each}
-	</div>
-	<p class="muted hint">
-		{session.power === 100
-			? 'Устройството изчислява без почивка.'
-			: `Устройството изчислява ${session.power} % от времето и почива останалото.`}
-		{background ? 'Продължава и когато страницата е скрита.' : ''}
-	</p>
-
-	{#if active && session.pausedFor}
-		<p class="paused" role="status" data-testid="paused" data-reason={session.pausedFor}>
-			{pauseText[session.pausedFor]}
+	<section class="card power-card" aria-labelledby="power-label">
+		<div class="power-head">
+			<h2 id="power-label">Мощност</h2>
+			<span class="muted">{powerText[session.power as Power] ?? `${session.power} %`}</span>
+		</div>
+		<div class="segmented power" role="group" aria-labelledby="power-label">
+			{#each POWER_LEVELS as level (level)}
+				<button
+					aria-pressed={session.power === level}
+					data-testid="power-{level}"
+					onclick={() => choosePower(level)}>{level} %</button
+				>
+			{/each}
+		</div>
+		<p class="muted hint">
+			{session.power === 100
+				? 'Устройството изчислява без почивка. Подходящо за компютър на зарядно.'
+				: `Устройството изчислява ${session.power} % от времето и почива останалото, за да не се нагрява.`}
+			{background ? 'Продължава и когато страницата е скрита.' : ''}
 		</p>
-	{/if}
+	</section>
 
-	{#if session.status === 'unsupported'}
-		<p class="bad" role="alert">
-			Този браузър не може да изчислява за Рояк. Опитайте с актуален Chrome или Edge.
-		</p>
-		<p class="muted">{session.error}</p>
-	{:else if session.error}
-		<p class="bad" role="alert">{session.error}</p>
-	{/if}
-
-	<div class="grid stats">
+	<section class="stats" aria-label="Вашият принос">
 		<div class="card stat">
 			<div class="value" data-testid="accepted">{session.unitsAccepted}</div>
-			<div class="label">Приети единици</div>
-		</div>
-		<div class="card stat">
-			<div class="value">{session.unitsRejected}</div>
-			<div class="label">Отхвърлени</div>
+			<div class="label">
+				изчислени части{session.unitsRejected > 0 ? ` · ${session.unitsRejected} отхвърлени` : ''}
+			</div>
 		</div>
 		<div class="card stat">
 			<div class="value">{session.lastUnitMs === null ? '—' : `${session.lastUnitMs} ms`}</div>
-			<div class="label">Последна единица</div>
+			<div class="label">за последната част</div>
 		</div>
 		<div class="card stat">
 			<div class="value device" data-testid="device" data-backend={session.device?.backend}>
-				{session.device
-					? `${backendText[session.device.backend]}: ${session.device.vendor} · ${session.device.architecture}`
-					: '—'}
+				{session.device ? backendText[session.device.backend] : '—'}
 			</div>
-			<div class="label">Устройство</div>
+			<div class="label">
+				{session.device
+					? `${session.device.vendor} · ${session.device.architecture}`
+					: 'с какво смята'}
+			</div>
 		</div>
-	</div>
+	</section>
+
+	<ul class="promises">
+		<li><Icon name="lock" size={18} /> Без лични данни и без профил</li>
+		<li><Icon name="eye" size={18} /> Спира, когато превключите на друго</li>
+		<li><Icon name="shield" size={18} /> Само проверени изчисления</li>
+		<li>
+			<Icon name="info" size={18} />
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() builds the path; only a #section is added -->
+			<a href={resolve('/') + '#safety'}>Как пазим устройството ви</a>
+		</li>
+	</ul>
 </main>
 
 <style>
-	.controls {
-		display: flex;
-		align-items: center;
-		gap: 16px;
-		margin: 20px 0;
+	.worker {
+		max-width: 760px;
+		display: grid;
+		gap: var(--s-4);
+		padding-top: var(--s-6);
 	}
-	.stats {
-		margin-top: 16px;
+
+	/* ---------- The console: button, ring, status ---------- */
+	.console {
+		display: grid;
+		justify-items: center;
+		gap: var(--s-5);
+		text-align: center;
+		padding: clamp(var(--s-6), 6vw, var(--s-8)) var(--s-5);
+		border-radius: var(--radius-xl);
+	}
+	.ring-wrap {
+		position: relative;
+		width: clamp(200px, 52vw, 248px);
+		aspect-ratio: 1;
+		display: grid;
+		place-items: center;
+	}
+	.ring {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		transform: rotate(-90deg);
+	}
+	.track {
+		fill: none;
+		stroke: rgb(118 118 128 / 0.14);
+		stroke-width: 4;
+	}
+	.arc {
+		fill: none;
+		stroke: var(--brand);
+		stroke-width: 4;
+		stroke-linecap: round;
+		stroke-dasharray: 0 100;
+		transform-origin: center;
+		transition:
+			stroke-dasharray var(--slow) var(--ease),
+			opacity var(--base) var(--ease);
+		opacity: 0;
+	}
+	.active .arc {
+		opacity: 1;
+		stroke-dasharray: 22 78;
+		animation: spin 1.6s linear infinite;
+	}
+	.busy .arc {
+		stroke-dasharray: 36 64;
+		animation-duration: 1.1s;
+	}
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	.power-btn {
+		position: relative;
+		width: 76%;
+		height: 76%;
+		border-radius: 50%;
+		flex-direction: column;
+		gap: 6px;
+		font-size: var(--text-lg);
+		font-weight: 700;
+		letter-spacing: -0.02em;
+		white-space: normal;
+		transition:
+			transform var(--base) var(--ease),
+			box-shadow var(--base) var(--ease),
+			background-color var(--base) var(--ease);
+	}
+	.power-btn.start {
+		box-shadow:
+			inset 0 2px 0 rgb(255 255 255 / 0.45),
+			0 20px 50px -16px rgb(224 142 11 / 0.75);
+	}
+	/* The halo breathes, not the button: a control must hold still to be easy to hit. */
+	.power-btn.start::before {
+		content: '';
+		position: absolute;
+		inset: -10px;
+		border-radius: 50%;
+		background: radial-gradient(closest-side, rgb(245 165 36 / 0.35), transparent);
+		z-index: -1;
+		animation: breathe 3.2s var(--ease-in-out) infinite;
+		pointer-events: none;
+	}
+	.power-btn.start:hover {
+		transform: scale(1.03);
+	}
+	.power-btn.start:active {
+		transform: scale(0.96);
+	}
+	.power-btn.stop {
+		background: var(--glass-strong);
+		color: var(--text);
+		border: 1px solid var(--border-strong);
+		box-shadow: var(--shadow);
+	}
+	.power-btn.stop:hover {
+		background: var(--bg-elevated);
+		color: var(--bad);
+	}
+	.power-btn:disabled::before {
+		animation: none;
+		opacity: 0;
+	}
+	@keyframes breathe {
+		0%,
+		100% {
+			opacity: 0.55;
+			transform: scale(0.96);
+		}
+		50% {
+			opacity: 1;
+			transform: scale(1.06);
+		}
+	}
+
+	.state {
+		display: grid;
+		justify-items: center;
+		gap: var(--s-2);
+		max-width: 46ch;
+	}
+	.state h1 {
+		font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.25rem);
+		margin: 0;
+	}
+	.state p {
+		margin: 0;
+		font-size: var(--text-md);
+	}
+	.notice {
+		text-align: left;
+		width: 100%;
+		margin: 0;
+	}
+	.err {
+		display: block;
+		font-size: var(--text-xs);
+		margin-top: 4px;
+		overflow-wrap: anywhere;
+	}
+
+	/* ---------- Power ---------- */
+	.power-card {
+		display: grid;
+		gap: var(--s-3);
+	}
+	.power-head {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--s-3);
+	}
+	.power-head h2 {
+		font-size: var(--text-lg);
+		margin: 0;
 	}
 	.power {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 8px;
-	}
-	.power span {
-		margin-right: 8px;
-	}
-	.power button {
-		min-width: 64px;
+		width: 100%;
 	}
 	.hint {
-		margin: 8px 0 0;
+		margin: 0;
+		font-size: var(--text-sm);
 	}
-	.paused {
-		margin: 16px 0 0;
-		padding: 12px 16px;
-		border-radius: 8px;
-		border: 1px solid currentColor;
+
+	/* ---------- Stats ---------- */
+	.stats {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: var(--s-4);
+	}
+	.stats .card {
+		padding: var(--s-4) var(--s-5);
+		min-width: 0;
 	}
 	.device {
-		font-size: 1rem;
-		word-break: break-word;
+		overflow-wrap: anywhere;
+	}
+	.stats .label {
+		overflow-wrap: anywhere;
+	}
+
+	.promises {
+		list-style: none;
+		margin: var(--s-3) 0 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: var(--s-3) var(--s-5);
+		color: var(--muted);
+		font-size: var(--text-sm);
+	}
+	.promises li {
+		display: flex;
+		align-items: center;
+		gap: var(--s-2);
+	}
+	.promises :global(svg) {
+		flex: none;
+		color: var(--brand-ink);
+	}
+
+	@media (max-width: 600px) {
+		.stats {
+			grid-template-columns: 1fr 1fr;
+		}
+		.stats .card:last-child {
+			grid-column: 1 / -1;
+		}
+		.promises {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>

@@ -11,6 +11,7 @@
 	import type { PtUnitOutput } from '#lib/protocol/PtUnitOutput.ts';
 	import type { PtUnitParams } from '#lib/protocol/PtUnitParams.ts';
 	import type { TemplateRef } from '#lib/protocol/TemplateRef.ts';
+	import Icon from '#lib/ui/Icon.svelte';
 
 	interface PiRow {
 		seed: number;
@@ -110,38 +111,73 @@
 		values.reduce((a, b) => a + b, 0) / values.length / spp;
 </script>
 
-<main>
-	<h1>Самопроверка</h1>
-	<p class="muted">
-		Изпълнява изчислителните ядра върху еталонни входове и сравнява резултата с референтната
-		реализация: побитово на процесора, а на видеокартата — с допуск за закръгляне.
-	</p>
+<svelte:head>
+	<title>Самопроверка · Рояк</title>
+</svelte:head>
 
-	<div class="card">
-		<p
-			data-testid="selftest-status"
-			data-result={result}
-			data-backend={device?.backend}
-			class:ok={result === 'pass'}
-			class:bad={result === 'fail' || result === 'unsupported'}
-		>
-			<strong>{resultText[result]}</strong>
+<main class="selftest">
+	<header class="page-head">
+		<span class="eyebrow">Самопроверка</span>
+		<h1>Смята ли това устройство точно?</h1>
+		<p>
+			Устройството изчислява задачи с предварително известен отговор и ги сравнява с еталона:
+			побитово на процесора, а на видеокартата — с малък допуск за закръгляне.
 		</p>
-		{#if error}<p class="bad">{error}</p>{/if}
-		<p class="muted">
-			Устройство: {device
-				? `${device.backend === 'webgpu' ? 'видеокарта' : 'процесор'}: ${device.vendor} · ${device.architecture}`
-				: '—'}<br />
-			π: {samplesPerSecond === null
-				? '—'
-				: `${(samplesPerSecond / 1e6).toFixed(0)} млн. проби/с`}<br />
-			Трасиране на лъчи:
-			{pathsPerSecond === null ? '—' : `${(pathsPerSecond / 1e6).toFixed(2)} млн. пътя/с`}<br />
-			Браузър: <code>{navigator.userAgent}</code>
-		</p>
+	</header>
+
+	<section
+		class="card verdict"
+		class:pass={result === 'pass'}
+		class:fail={result === 'fail' || result === 'unsupported'}
+	>
+		<span class="verdict-icon" aria-hidden="true">
+			{#if result === 'running'}
+				<span class="spinner"></span>
+			{:else if result === 'pass'}
+				<Icon name="check" size={28} />
+			{:else}
+				<Icon name="alert" size={28} />
+			{/if}
+		</span>
+		<div class="verdict-text">
+			<p
+				data-testid="selftest-status"
+				data-result={result}
+				data-backend={device?.backend}
+				class:ok={result === 'pass'}
+				class:bad={result === 'fail' || result === 'unsupported'}
+			>
+				<strong>{resultText[result]}</strong>
+			</p>
+			{#if error}<p class="bad small">{error}</p>{/if}
+		</div>
+	</section>
+
+	<div class="facts">
+		<div class="card stat">
+			<div class="value small-value">
+				{device ? (device.backend === 'webgpu' ? 'Видеокарта' : 'Процесор') : '—'}
+			</div>
+			<div class="label">{device ? `${device.vendor} · ${device.architecture}` : 'устройство'}</div>
+		</div>
+		<div class="card stat">
+			<div class="value">
+				{samplesPerSecond === null ? '—' : `${(samplesPerSecond / 1e6).toFixed(0)} млн.`}
+			</div>
+			<div class="label">проби за π в секунда</div>
+		</div>
+		<div class="card stat">
+			<div class="value">
+				{pathsPerSecond === null ? '—' : `${(pathsPerSecond / 1e6).toFixed(2)} млн.`}
+			</div>
+			<div class="label">пътя на светлината в секунда</div>
+		</div>
 	</div>
 
-	<section class="card">
+	<details class="card more">
+		<summary>Подробности за проверката</summary>
+		<p class="muted small ua">Браузър: <code>{navigator.userAgent}</code></p>
+
 		<h2>π (Монте Карло)</h2>
 		<div class="table-wrap">
 			<table>
@@ -169,10 +205,8 @@
 				</tbody>
 			</table>
 		</div>
-	</section>
 
-	<section class="card">
-		<h2>Трасиране на лъчи</h2>
+		<h2>Проследяване на лъчи</h2>
 		<div class="table-wrap">
 			<table>
 				<thead>
@@ -203,11 +237,97 @@
 				</tbody>
 			</table>
 		</div>
-	</section>
+	</details>
 </main>
 
 <style>
-	section {
-		margin-top: 16px;
+	.selftest {
+		max-width: 900px;
+		display: grid;
+		gap: var(--s-4);
+	}
+	.verdict {
+		display: flex;
+		align-items: center;
+		gap: var(--s-4);
+		padding: var(--s-5);
+		transition: background-color var(--slow) var(--ease);
+	}
+	.verdict p {
+		margin: 0;
+		font-size: var(--text-lg);
+	}
+	.verdict-icon {
+		flex: none;
+		display: grid;
+		place-items: center;
+		width: 56px;
+		height: 56px;
+		border-radius: 50%;
+		background: rgb(118 118 128 / 0.12);
+		color: var(--muted);
+		transition:
+			background-color var(--slow) var(--ease),
+			color var(--slow) var(--ease),
+			transform var(--slow) var(--ease);
+	}
+	.pass .verdict-icon {
+		background: var(--ok-soft);
+		color: var(--ok);
+		transform: scale(1.04);
+	}
+	.fail .verdict-icon {
+		background: var(--bad-soft);
+		color: var(--bad);
+	}
+	.spinner {
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		border: 3px solid rgb(118 118 128 / 0.25);
+		border-top-color: var(--brand);
+		animation: turn 0.9s linear infinite;
+	}
+	@keyframes turn {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+	.small {
+		font-size: var(--text-sm);
+	}
+	.verdict .small {
+		font-size: var(--text-sm);
+		margin-top: 4px;
+		overflow-wrap: anywhere;
+	}
+	.facts {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: var(--s-4);
+	}
+	.facts .label {
+		overflow-wrap: anywhere;
+	}
+	.small-value {
+		font-size: var(--text-lg);
+	}
+	.more summary {
+		cursor: pointer;
+		font-weight: 600;
+		list-style-position: inside;
+		min-height: 28px;
+	}
+	.more h2 {
+		font-size: var(--text-md);
+		margin: var(--s-5) 0 var(--s-2);
+	}
+	.ua {
+		margin-top: var(--s-3);
+	}
+	@media (max-width: 640px) {
+		.facts {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>

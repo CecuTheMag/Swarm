@@ -4,12 +4,20 @@
 	import { resolve } from '$app/paths';
 	import { LiveDashboard } from '#lib/dashboard/live.svelte.ts';
 	import SwarmMap from '#lib/dashboard/SwarmMap.svelte';
-	import { caughtDevices, deviceGroups, sortedJobs, unitsPerSecond } from '#lib/dashboard/state.ts';
+	import {
+		caughtDevices,
+		deviceGroups,
+		deviceLabel,
+		sortedJobs,
+		unitsPerSecond
+	} from '#lib/dashboard/state.ts';
+	import type { Backend } from '#lib/protocol/Backend.ts';
 	import type { JobStatus } from '#lib/protocol/JobStatus.ts';
 	import type { PiResult } from '#lib/protocol/PiResult.ts';
 	import type { PtResult } from '#lib/protocol/PtResult.ts';
 	import type { ApiError } from '#lib/protocol/ApiError.ts';
 	import { authHeaders, loadPassword, savePassword } from '#lib/password.ts';
+	import Icon from '#lib/ui/Icon.svelte';
 
 	const live = new LiveDashboard();
 	onMount(() => live.start());
@@ -105,186 +113,356 @@
 	const ptResult = (result: unknown) => result as PtResult;
 </script>
 
-<main>
-	<h1>Табло</h1>
-	<p class="muted" data-testid="connection">
-		{connected ? 'Свързано с координатора' : 'Няма връзка с координатора…'}
-	</p>
+<svelte:head>
+	<title>Табло · Рояк</title>
+</svelte:head>
 
-	<div class="grid">
+<main class="dash">
+	<header class="page-head head">
+		<div>
+			<span class="eyebrow">Табло</span>
+			<h1>Мрежата на живо</h1>
+		</div>
+		<span class="badge" class:live={connected} class:bad={!connected}>
+			<span class="dot" class:pulse={connected}></span>
+			<span data-testid="connection">
+				{connected ? 'Свързано с координатора' : 'Няма връзка с координатора…'}
+			</span>
+		</span>
+	</header>
+
+	<div class="stats">
 		<div class="card stat">
 			<div class="value" data-testid="worker-count">{workers.length}</div>
-			<div class="label">Устройства в мрежата</div>
+			<div class="label">устройства в мрежата</div>
 		</div>
 		<div class="card stat">
 			<div class="value">{rate.toFixed(1)}</div>
-			<div class="label">Единици в секунда</div>
+			<div class="label">изчислени части в секунда</div>
 		</div>
 		<div class="card stat">
 			<div class="value">{jobs.filter((j) => j.status === 'running').length}</div>
-			<div class="label">Задачи в изпълнение</div>
+			<div class="label">задачи в изпълнение</div>
 		</div>
 	</div>
 
-	<section class="card">
-		<h2>Задачи</h2>
-		{#if jobs.length === 0}
-			<p class="muted">Все още няма задачи.</p>
-		{:else}
-			<div class="table-wrap">
-				<table>
-					<thead>
-						<tr><th>Шаблон</th><th>Състояние</th><th>Напредък</th><th>Резултат</th></tr>
-					</thead>
-					<tbody>
-						{#each jobs as job (job.id)}
-							<tr data-testid="job" data-job-id={job.id} data-status={job.status}>
-								<td>{job.template}</td>
-								<td class:ok={job.status === 'done'} class:bad={job.status === 'failed'}>
-									{job.error === CANCELLED ? 'спряна' : statusText[job.status]}
-									{#if job.error && job.error !== CANCELLED}
-										<div class="muted job-error">{job.error}</div>
-									{/if}
-									{#if job.status === 'queued' || job.status === 'running'}
-										<button
-											class="secondary stop"
-											onclick={() => stopJob(job.id)}
-											data-testid="stop-job">Спри</button
-										>
-									{/if}
-								</td>
-								<td>
-									<div class="progress-cell">
-										<div class="progress">
-											<div style:width="{(100 * job.units_done) / job.units_total}%"></div>
-										</div>
-										<span class="muted">{job.units_done}/{job.units_total}</span>
-									</div>
-								</td>
-								<td>
-									{#if job.template === 'pt'}
-										<a href={resolve('/render/[id]', { id: job.id })}>Изображение</a>
-										{#if job.result}
-											<span class="muted">
-												{ptResult(job.result).width}×{ptResult(job.result).height}, {ptResult(
-													job.result
-												).samples_per_pixel} проби/пиксел
-											</span>
-										{/if}
-									{:else if job.result && job.template === 'pi'}
-										π ≈ <strong>{piResult(job.result).pi.toFixed(6)}</strong>
-										<span class="muted">
-											(грешка {Math.abs(piResult(job.result).pi - Math.PI).toExponential(1)})
-										</span>
-									{:else}
-										—
-									{/if}
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{/if}
-		{#if stopError}<p class="bad" role="alert">{stopError}</p>{/if}
-	</section>
-
-	<section class="card">
-		<h2>Устройства</h2>
-		{#if workers.length === 0}
-			<p class="muted">
-				Няма включени устройства. Отворете <a href={resolve('/worker')}>„Включи се“</a> на друго устройство.
-			</p>
-		{:else}
-			<div class="map"><SwarmMap {workers} {caught} /></div>
-			<div class="table-wrap">
-				<table>
-					<thead>
-						<tr><th>Устройство</th><th>Среда</th><th>Брой</th><th>Единици</th></tr>
-					</thead>
-					<tbody>
-						{#each groups as g (g.key)}
-							<tr data-testid="device-group">
-								<td>{g.vendor} · {g.architecture}</td>
-								<td>{g.backend}</td>
-								<td>{g.count}</td>
-								<td>{g.units_done}</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{/if}
-	</section>
-
-	<section class="card">
-		<h2>Нова задача</h2>
-		<form onsubmit={submit} class="form">
-			<label>
-				Шаблон
-				<select bind:value={template} data-testid="template">
-					<option value="pt">Трасиране на лъчи (изображение)</option>
-					<option value="pi">π по метода Монте Карло</option>
-				</select>
-			</label>
-			{#if template === 'pi'}
-				<label>Единици <input type="number" min="1" max="10000" bind:value={units} /></label>
-				<label>
-					Проби на единица
-					<input type="number" min="1" max="1073741824" bind:value={samples} />
+	<div class="cols">
+		<section class="card new" aria-labelledby="new-title">
+			<h2 id="new-title">Нова задача</h2>
+			<form onsubmit={submit} class="form">
+				<label class="wide">
+					Шаблон
+					<select bind:value={template} data-testid="template">
+						<option value="pt">Изображение (проследяване на лъчи)</option>
+						<option value="pi">Числото π (метод Монте Карло)</option>
+					</select>
 				</label>
-			{:else}
-				<label>Ширина <input type="number" min="16" max="2048" bind:value={width} /></label>
-				<label>Височина <input type="number" min="16" max="2048" bind:value={height} /></label>
-				<label>Плочка <input type="number" min="8" max="128" bind:value={tile} /></label>
-				<label>Проби на проход <input type="number" min="1" max="1024" bind:value={spp} /></label>
-				<label>Проходи <input type="number" min="1" max="256" bind:value={passes} /></label>
+				{#if template === 'pi'}
+					<label>Единици <input type="number" min="1" max="10000" bind:value={units} /></label>
+					<label>
+						Проби на единица
+						<input type="number" min="1" max="1073741824" bind:value={samples} />
+					</label>
+				{:else}
+					<label>Ширина <input type="number" min="16" max="2048" bind:value={width} /></label>
+					<label>Височина <input type="number" min="16" max="2048" bind:value={height} /></label>
+					<label>Плочка <input type="number" min="8" max="128" bind:value={tile} /></label>
+					<label>Проби на проход <input type="number" min="1" max="1024" bind:value={spp} /></label>
+					<label>Проходи <input type="number" min="1" max="256" bind:value={passes} /></label>
+				{/if}
+				<label>Начално число <input type="number" min="0" bind:value={seed} /></label>
+				<label class="wide">
+					Парола
+					<input
+						type="password"
+						autocomplete="current-password"
+						placeholder="ако е зададена"
+						bind:value={password}
+						data-testid="password"
+					/>
+				</label>
+				<button type="submit" class="wide lg" disabled={submitting}>
+					{#if template === 'pt'}<Icon name="image" size={18} />{:else}<Icon
+							name="atom"
+							size={18}
+						/>{/if}
+					Пусни
+				</button>
+			</form>
+			{#if submitError}
+				<p class="notice bad" role="alert">{submitError}</p>
 			{/if}
-			<label>Начално число <input type="number" min="0" bind:value={seed} /></label>
-			<label>
-				Парола
-				<input
-					type="password"
-					autocomplete="current-password"
-					placeholder="ако е зададена"
-					bind:value={password}
-					data-testid="password"
-				/>
-			</label>
-			<button type="submit" disabled={submitting}>Пусни</button>
-		</form>
-		{#if submitError}<p class="bad" role="alert">{submitError}</p>{/if}
+		</section>
+
+		<section class="card devices" aria-labelledby="devices-title">
+			<h2 id="devices-title">Устройства</h2>
+			{#if workers.length === 0}
+				<div class="empty">
+					<Icon name="phone" size={28} />
+					<p class="muted">
+						Няма включени устройства. Отворете <a href={resolve('/worker')}>„Включи се“</a> на друго устройство.
+					</p>
+				</div>
+			{:else}
+				<div class="map"><SwarmMap {workers} {caught} /></div>
+				<ul class="groups">
+					{#each groups as g (g.key)}
+						<li data-testid="device-group">
+							<span class="group-name">
+								<strong>{g.count} ×</strong>
+								{deviceLabel({
+									backend: g.backend as Backend,
+									vendor: g.vendor,
+									architecture: g.architecture
+								})}
+								<span class="muted">· {g.vendor} · {g.architecture}</span>
+							</span>
+							<span class="muted">{g.units_done} части</span>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
+	</div>
+
+	<section class="card jobs-card" aria-labelledby="jobs-title">
+		<h2 id="jobs-title">Задачи</h2>
+		{#if jobs.length === 0}
+			<p class="muted">Все още няма задачи. Пуснете първата отгоре.</p>
+		{:else}
+			<ul class="jobs">
+				{#each jobs as job (job.id)}
+					<li class="job" data-testid="job" data-job-id={job.id} data-status={job.status}>
+						<div class="job-main">
+							<span class="job-kind">
+								<Icon name={job.template === 'pt' ? 'image' : 'atom'} size={18} />
+								{job.template === 'pt' ? 'Изображение' : 'Числото π'}
+							</span>
+							<span
+								class="badge"
+								class:ok={job.status === 'done'}
+								class:bad={job.status === 'failed'}
+								class:live={job.status === 'running'}
+							>
+								{job.error === CANCELLED ? 'спряна' : statusText[job.status]}
+							</span>
+						</div>
+						<div class="job-progress">
+							<div class="progress">
+								<div style:width="{(100 * job.units_done) / job.units_total}%"></div>
+							</div>
+							<span class="muted count">{job.units_done}/{job.units_total}</span>
+						</div>
+						<div class="job-result">
+							{#if job.template === 'pt'}
+								<a href={resolve('/render/[id]', { id: job.id })}>Виж изображението</a>
+								{#if job.result}
+									<span class="muted">
+										{ptResult(job.result).width}×{ptResult(job.result).height}, {ptResult(
+											job.result
+										).samples_per_pixel} проби/пиксел
+									</span>
+								{/if}
+							{:else if job.result && job.template === 'pi'}
+								<span>π ≈ <strong>{piResult(job.result).pi.toFixed(6)}</strong></span>
+								<span class="muted">
+									грешка {Math.abs(piResult(job.result).pi - Math.PI).toExponential(1)}
+								</span>
+							{:else}
+								<span class="muted">—</span>
+							{/if}
+							{#if job.error && job.error !== CANCELLED}
+								<span class="muted job-error">{job.error}</span>
+							{/if}
+						</div>
+						{#if job.status === 'queued' || job.status === 'running'}
+							<button class="secondary sm" onclick={() => stopJob(job.id)} data-testid="stop-job">
+								Спри
+							</button>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{/if}
+		{#if stopError}<p class="notice bad" role="alert">{stopError}</p>{/if}
 	</section>
 </main>
 
 <style>
-	section {
-		margin-top: 16px;
+	.dash {
+		display: grid;
+		gap: var(--s-4);
 	}
-	.map {
-		max-width: 560px;
-		margin-bottom: 12px;
-	}
-	.stop {
-		margin-left: 8px;
-		padding: 2px 10px;
-		font-size: 0.8125rem;
-	}
-	.job-error {
-		font-size: 0.8125rem;
-	}
-	.progress-cell {
+	.head {
 		display: flex;
-		align-items: center;
-		gap: 8px;
+		align-items: flex-end;
+		justify-content: space-between;
+		gap: var(--s-4);
+		flex-wrap: wrap;
+		margin-bottom: var(--s-3);
 	}
-	.progress-cell .progress {
-		flex: 1;
+	.head h1 {
+		margin: 0;
+	}
+	.stats {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: var(--s-4);
+	}
+	.cols {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		gap: var(--s-4);
+		align-items: start;
+	}
+	h2 {
+		font-size: var(--text-lg);
+		margin-bottom: var(--s-4);
 	}
 	.form {
 		display: grid;
-		gap: 12px;
-		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+		gap: var(--s-3);
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		align-items: end;
+	}
+	.form .wide {
+		grid-column: 1 / -1;
+	}
+	.new .notice {
+		margin: var(--s-3) 0 0;
+	}
+
+	.map {
+		max-width: 520px;
+		margin-bottom: var(--s-4);
+	}
+	.empty {
+		display: grid;
+		justify-items: center;
+		gap: var(--s-2);
+		padding: var(--s-6) var(--s-4);
+		text-align: center;
+		color: var(--faint);
+		border: 1px dashed var(--border-strong);
+		border-radius: var(--radius);
+	}
+	.empty p {
+		margin: 0;
+	}
+	.groups {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 2px;
+		font-size: var(--text-sm);
+	}
+	.groups li {
+		display: flex;
+		justify-content: space-between;
+		gap: var(--s-3);
+		padding: 10px 0;
+		border-bottom: 1px solid var(--border);
+	}
+	.groups li:last-child {
+		border-bottom: 0;
+	}
+	.group-name {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+
+	.jobs {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+	}
+	.job {
+		display: grid;
+		grid-template-columns: minmax(150px, 1.1fr) minmax(140px, 1fr) minmax(0, 1.4fr) auto;
+		align-items: center;
+		gap: var(--s-4);
+		padding: 14px 0;
+		border-bottom: 1px solid var(--border);
+		font-size: var(--text-sm);
+		animation: row-in var(--slow) var(--ease) both;
+	}
+	.job:last-child {
+		border-bottom: 0;
+	}
+	@keyframes row-in {
+		from {
+			opacity: 0;
+			transform: translateY(6px);
+		}
+	}
+	.job-main {
+		display: flex;
+		align-items: center;
+		gap: var(--s-3);
+		flex-wrap: wrap;
+	}
+	.job-kind {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		font-weight: 600;
+	}
+	.job-kind :global(svg) {
+		color: var(--brand-ink);
+	}
+	.job-progress {
+		display: flex;
+		align-items: center;
+		gap: var(--s-3);
+	}
+	.job-progress .progress {
+		flex: 1;
+	}
+	.count {
+		font-variant-numeric: tabular-nums;
+		font-size: var(--text-xs);
+	}
+	.job-result {
+		display: grid;
+		gap: 2px;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.job-error {
+		font-size: var(--text-xs);
+	}
+	.jobs-card .notice {
+		margin: var(--s-3) 0 0;
+	}
+
+	@media (max-width: 900px) {
+		.cols {
+			grid-template-columns: 1fr;
+		}
+		.job {
+			grid-template-columns: minmax(0, 1fr) auto;
+			gap: var(--s-2) var(--s-3);
+		}
+		.job-progress,
+		.job-result {
+			grid-column: 1 / -1;
+		}
+		.job > button {
+			grid-row: 1;
+			grid-column: 2;
+		}
+	}
+	@media (max-width: 600px) {
+		.stats {
+			grid-template-columns: 1fr 1fr;
+		}
+		.stats .card:last-child {
+			grid-column: 1 / -1;
+		}
+		.form {
+			grid-template-columns: 1fr 1fr;
+		}
 	}
 </style>

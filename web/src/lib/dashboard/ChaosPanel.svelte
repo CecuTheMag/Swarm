@@ -77,7 +77,7 @@
 				bad: false,
 				text:
 					action === 'kill'
-						? `Изключено: ${who}. Единиците му се връщат в опашката.`
+						? `Изключено: ${who}. Частите му се връщат в опашката.`
 						: `Без връзка: ${who}. Координаторът ще го забележи, когато замлъкне.`
 			};
 		}
@@ -117,7 +117,7 @@
 			</p>
 		{/if}
 		<p class="muted totals" data-testid="chaos-totals">
-			Изключили се: {totals.left} · върнати единици: {totals.unitsReturned} · блокирани: {totals.banned}
+			Изключили се: {totals.left} · върнати части: {totals.unitsReturned} · блокирани: {totals.banned}
 		</p>
 	</section>
 {/if}

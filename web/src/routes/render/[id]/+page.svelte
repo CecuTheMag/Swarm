@@ -111,7 +111,7 @@
 	const formatTime = (s: number) =>
 		s < 60 ? `${s.toFixed(0)} с` : `${Math.floor(s / 60)} мин ${Math.round(s % 60)} с`;
 
-	/** "1 единица", "5 единици". */
+	/** "1 част", "5 части". */
 	const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 	/** 3 200 000 000 → "3,2 млрд." */
@@ -140,11 +140,11 @@
 						? `Изключи се ${deviceLabel(item.device)}`
 						: `Изключиха се ${item.count} устройства`;
 				return item.units_returned > 0
-					? `${who}: ${count(item.units_returned, 'единица се връща', 'единици се връщат')} в опашката и ${item.units_returned === 1 ? 'се изчислява' : 'се изчисляват'} другаде`
+					? `${who}: ${count(item.units_returned, 'част се връща', 'части се връщат')} в опашката и ${item.units_returned === 1 ? 'се изчислява' : 'се изчисляват'} другаде`
 					: who;
 			}
 			case 'banned':
-				return `Хванат измамник (${deviceLabel(item.device)}): ${count(item.wrong_results, 'грешен резултат', 'грешни резултата')} отхвърлени${item.units_redone > 0 ? `, ${count(item.units_redone, 'единица', 'единици')} се изчисляват наново` : ''}. Устройството е блокирано.`;
+				return `Хванат измамник (${deviceLabel(item.device)}): ${count(item.wrong_results, 'грешен резултат', 'грешни резултата')} отхвърлени${item.units_redone > 0 ? `, ${count(item.units_redone, 'част', 'части')} се изчисляват наново` : ''}. Устройството е блокирано.`;
 		}
 	}
 </script>
@@ -251,7 +251,7 @@
 							totals.wrongResults,
 							'грешен резултат отхвърлен',
 							'грешни резултата отхвърлени'
-						)}, {count(totals.unitsRedone, 'единица изчислена', 'единици изчислени')} наново
+						)}, {count(totals.unitsRedone, 'част изчислена', 'части изчислени')} наново
 					</div>
 				</div>
 			{/if}
@@ -270,6 +270,8 @@
 <style>
 	.render {
 		max-width: min(1800px, 100%);
+		padding-top: var(--s-4);
+		padding-bottom: var(--s-5);
 	}
 	.stage {
 		display: grid;
@@ -322,7 +324,8 @@
 		width: min(92%, 640px);
 		padding: 14px 20px;
 		border-radius: var(--radius);
-		background: var(--bad);
+		/* A deeper red than the theme's, so the white text stays readable. */
+		background: #c4161c;
 		color: #fff;
 		box-shadow: 0 8px 30px rgb(0 0 0 / 0.45);
 		font-size: clamp(0.95rem, 1.5vw, 1.25rem);
@@ -373,9 +376,9 @@
 	}
 	.feed li {
 		padding: 8px 10px;
-		border-radius: 8px;
-		background: var(--surface);
-		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--glass);
+		border: 1px solid var(--glass-border);
 		border-left: 4px solid var(--c, var(--border));
 	}
 	.feed .joined {
@@ -400,6 +403,15 @@
 		grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 		gap: 12px;
 		margin-top: 18px;
+	}
+	.stats .stat {
+		padding: 12px 18px;
+		border-radius: var(--radius);
+		background: var(--glass);
+		border: 1px solid var(--glass-border);
+		box-shadow: inset 0 1px 0 var(--glass-highlight);
+		backdrop-filter: blur(var(--glass-blur));
+		-webkit-backdrop-filter: blur(var(--glass-blur));
 	}
 	.stat .value {
 		font-size: clamp(1.6rem, 2.8vw, 2.6rem);
