@@ -26,16 +26,19 @@ and dropped a third of 30 connections, so use it only if the DuckDNS name fails.
 The day before:
 
 - `curl https://swarmrelay.duckdns.org/healthz` answers 200.
-- On the presenting laptop, open `/dashboard`, enter the submit password once (it is in
-  `~/swarm.env` on the server: `ssh <server> cat swarm.env`); the browser remembers it,
-  and the render page then shows the chaos panel (spec 0008).
-- Start a small render job and open its render page on the projector. Scan the QR code
-  with a phone on **mobile data** (Wi-Fi off), tap „Включи се“, and watch the device
-  count go up. Try „Изключи устройство“ and „Добави измамник“ once.
+- On the presenting laptop, sign in at `/login` (the platform admin, created with
+  `just admin-create EMAIL <server>`). The public network „Общата мрежа“ is yours; its
+  **Задачи** tab starts jobs and its live view has the chaos panel (spec 0008, 0010).
+  A network of your own („Защита“) works the same and keeps the room's phones apart from
+  the public grid: its QR code leads to its join link.
+- Start a small render job (**Задачи** → „Изображение“ → „Пусни“) and open „На живо“ on
+  the projector. Scan the QR code with a phone on **mobile data** (Wi-Fi off), tap
+  „Включи се“, and watch the device count go up; the phone's page shows the network's
+  card with the devices online. Try „Изключи устройство“ and „Добави измамник“ once.
 
-At the defense (README section 18, minutes 3–10), with the render page of a fresh job
-on the projector (`/dashboard` → „Пусни“). Stop any job still running first („Спри“ on
-the dashboard): jobs run in order, and a forgotten one would hold up the new one.
+At the defense (README section 18, minutes 3–10), with the live view of a fresh job on
+the projector (**Задачи** → „Пусни“ → „На живо“). Stop any job still running first
+(„Спри“ in **Задачи**): jobs run in order, and a forgotten one would hold up the new one.
 
 | Say | Do | The room sees |
 |---|---|---|
@@ -83,8 +86,10 @@ just stack                 # build and start everything on port 7780 (first buil
 just share-public 7780     # public HTTPS through this laptop's Tailscale Funnel
 ```
 
-The render page's QR code points to whatever address it is opened on, so open it through
-the Funnel address the second command prints. Funnel must be allowed for the laptop in
+The live view's QR code points to whatever address it is opened on, so open it through
+the Funnel address the second command prints (the stack has its own database: create
+the admin on it with `docker compose -p swarm-stack --env-file ~/swarm.env -f deploy/compose.server.yaml exec
+coordinator coordinator admin-create EMAIL`). Funnel must be allowed for the laptop in
 the tailnet's settings once beforehand. Build the stack on the laptop the day before:
 the build needs internet access too. `just stack-down` stops it; `just unshare` ends
 sharing. Funnel carries about 2 MB/s, a handful of phones at full speed: plenty for
@@ -96,5 +101,5 @@ Phones cannot join: plain `http://<laptop-ip>` is not secure, so their browsers 
 WebGPU and the kernel checks. What still works is the laptop itself: `just stack`, then
 `http://localhost:7780/worker` in several browser windows and simulated workers
 (`just sim 4 ws://localhost:7780/ws/worker`), with
-the render page on the projector. Keep a screen recording of a Plan A run as the last
+the live view on the projector. Keep a screen recording of a Plan A run as the last
 resort.

@@ -235,6 +235,13 @@
 	</section>
 
 	<NetworkCard code={joinCode ?? 'public'} mine={session.unitsAccepted} />
+	{#if !joinCode}
+		<p class="muted hint other">
+			Имате код от училище или организация? <a href={resolve('/join')}
+				>Включете се в нейната мрежа</a
+			>.
+		</p>
+	{/if}
 
 	<section class="stats" aria-label="Вашият принос">
 		<div class="card stat">
@@ -445,6 +452,9 @@
 	.hint {
 		margin: 0;
 		font-size: var(--text-sm);
+	}
+	.other {
+		text-align: center;
 	}
 
 	/* ---------- Stats ---------- */

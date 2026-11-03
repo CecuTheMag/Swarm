@@ -130,7 +130,8 @@
 		<CopyField value={joinUrl} label="Връзка за включване" testid="join-link" />
 		{#if !view.public}
 			<p class="muted small">
-				Код: <code data-testid="join-code">{view.join_code}</code>. Можете да смените връзката в
+				Без камера (компютри в кабинет): отворете <code>{page.url.host}/join</code> и въведете кода
+				<code data-testid="join-code">{view.join_code}</code>. Можете да смените връзката в
 				„Правила“.
 			</p>
 		{/if}

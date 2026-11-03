@@ -30,6 +30,8 @@ test('a client creates a network, adds a device by its link and operates it', as
 	// The QR code a phone scans leads to this network's join page.
 	const link = await page.getByTestId('join-link').inputValue();
 	expect(link).toMatch(/\/join\/[a-z2-9]{10}$/);
+	const code = await page.getByTestId('join-code').textContent();
+	expect(link.endsWith(`/join/${code}`)).toBe(true);
 	const qr = page.getByTestId('join-qr');
 	await expect(qr).toHaveAttribute('data-url', link);
 	const shot = testInfo.outputPath('qr.png');
@@ -75,7 +77,19 @@ test('a client creates a network, adds a device by its link and operates it', as
 	await page.getByTestId('join-approval').click();
 	await page.getByTestId('save-rules').click();
 	await expect(page.getByText('Запазено')).toBeVisible();
-	const newcomer = await joinAsDevice(browser, link);
+	// A lab PC without a camera types the code, as people write it down.
+	const newcomerContext = await browser.newContext();
+	const newcomer = await newcomerContext.newPage();
+	await newcomer.goto('/join');
+	await newcomer.getByTestId('join-code-input').fill('nosuchcode');
+	await newcomer.getByRole('button', { name: 'Продължи' }).click();
+	await expect(newcomer.getByRole('alert')).toContainText('Няма мрежа');
+	await newcomer
+		.getByTestId('join-code-input')
+		.fill(` ${code!.toUpperCase().replace(/(.{5})/, '$1-')} `);
+	await newcomer.getByRole('button', { name: 'Продължи' }).click();
+	await newcomer.waitForURL(`**/join/${code}`);
+	await newcomer.getByRole('button', { name: 'Включи се' }).click();
 	await expect(newcomer.getByTestId('owner-notice')).toHaveAttribute(
 		'data-control',
 		'pending_approval'

@@ -8,7 +8,8 @@ How to put real devices (lab PCs, phones) on the grid and record what they do in
 The deployed stack (`just deploy`) is public at `https://swarmrelay.duckdns.org`
 (docs/demo-day.md, Plan A), and at `https://swarm.tail629f50.ts.net` through Tailscale
 Funnel as a slower second address (`just public`; the first run prints a login link).
-Devices open `/selftest` and `/worker` there: nothing to install, no dev server needed.
+Devices open a network's join link (or `/worker` for the public network) there:
+nothing to install, no dev server needed.
 `just fleet N` adds N simulated workers on the server.
 
 ## Why HTTPS
@@ -27,22 +28,39 @@ as a worker or submit jobs. Keep it on only for the session, then `just unshare`
 Installing Tailscale on a school PC needs the school's permission; the public URL
 needs nothing installed on the device.
 
-## Before
+## Before (at home, the day before)
 
-1. `just services`, `just coordinator`, `just web` (each in its own terminal).
-2. `just share` or `just share-public`; note the URL it prints.
-3. `just job 64 16777216 1`: queue a job so workers start immediately.
+1. Deploy (`just deploy <server>`) and check `https://swarmrelay.duckdns.org/healthz`.
+2. Sign in at `/login` (the platform admin: `just admin-create EMAIL <server>` prints
+   the password once, on the server's terminal).
+3. **Нова мрежа** → name it after the lab („Кабинет 12“). In **Правила**: leave „Всеки с
+   връзката“ for a supervised session (or „След одобрение“ to let in only the lab's PCs),
+   max power 100 % (lab PCs on mains), no working hours for the session itself.
+4. Note the network's code from **Обзор** (10 letters and digits) and write it on paper:
+   lab PCs have no camera, so they type `swarmrelay.duckdns.org/join` and the code.
+5. In **Задачи**, start a small π job once and check that it finishes on your own
+   browser (open the join link in another window).
 
-## On each device
+## In the lab
 
-1. Chrome or Edge, up to date. Note OS, browser version, and the GPU
-   (`chrome://gpu` on desktop).
-2. Open `<url>/selftest`. Note whether it passes and the speed it reports.
-3. Open `<url>/worker` and leave it running until the job finishes.
-4. Watch `<url>/dashboard` on another screen.
+1. On the teacher's PC (or your laptop on the projector): the console, **Обзор** of the
+   network. Every PC that joins appears there within a second.
+2. On each lab PC, in Chrome or Edge: `swarmrelay.duckdns.org/join` → type the code →
+   „Продължи“ → „Включи се“. The page shows the network's card: its name, devices online,
+   speed and this PC's parts. Leave the tab in front: a hidden tab pauses, unless the
+   address ends in `?background` (`…/join/<code>?background`).
+3. Note per PC: OS, browser version, the GPU (`chrome://gpu`: "WebGPU: Hardware
+   accelerated" or not) and whether the worker page says „видеокарта“ or „процесор“.
+   Unsupported devices are a result too; they compute on the processor.
+4. **Задачи** → „Изображение“, quality „Нормално“ → „Пусни“ → „На живо“: the image fills in
+   from the lab. Note the time it takes and the speed-up the live view shows.
+5. Try the controls once, and watch the PCs' pages react within a second: **Устройства** →
+   „Пауза“ on one PC (its page says the owner paused it), „Пусни“ again; pause the whole
+   network from **Обзор**; in **Правила** set max power to 50 % and save.
+6. If time allows, a π job with many units (**Подробни настройки**: 256 units) for the
+   benchmark table, and **Устойчивост** → „Изключи устройство“ / „Добави измамник“.
 
-If `/selftest` says WebGPU is unavailable, check `chrome://gpu` for "WebGPU: Hardware
-accelerated" and record the device anyway: unsupported devices are a result too.
+Optional: `/selftest` on one PC of each kind, for the speed it reports.
 
 ## School network (for spec 0009)
 
@@ -63,7 +81,10 @@ network").
 
 ## After
 
-1. `just bench-report`: per-device unit count, average unit time and Msamples/s.
+1. On the server: `ssh <server> 'cd ~/swarm && docker compose -f deploy/compose.server.yaml exec -T postgres psql -U swarm swarm' < deploy/sql/benchmarks.sql`
+   gives per-device unit count, average unit time and Msamples/s (`just bench-report`
+   does the same for the local dev database).
 2. Copy the rows into [measurements.md](measurements.md) (WebGPU support and
    Benchmarks tables) with the date and browser version.
-3. `just unshare`.
+3. Leave the network: its PCs rejoin by themselves the next time someone opens the link.
+   For a scheduled lab, set working hours (**Правила** → „След училище“).

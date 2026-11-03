@@ -198,9 +198,9 @@ Bulgarian schools have **thousands of computers idle most of the day and all nig
 | When | Milestone |
 |---|---|
 | **Oct 2026** | WebGPU Monte Carlo kernel in a browser; coordinator skeleton with leases |
-| **Nov 2026** | Path tracer template; live dashboard; redundancy verification, reputation + honeypots; contributor safety; chaos panel |
+| **Nov 2026** | Path tracer template; live dashboard; redundancy verification, reputation + honeypots; contributor safety; chaos panel; client networks with accounts, roles, approval and working hours (spec 0010) |
 | **≤ 25 Nov 2026** | **Register idea**; school defense: the committee joins the grid from their phones |
-| **Dec 2026–Jan 2027** | Adaptive sizing; school lab mode; first lab run (holidays!) |
+| **Dec 2026–Jan 2027** | Adaptive sizing; lab node (spec 0009); first lab run (holidays!) |
 | **Feb 2027** | Job API + submitter portal; ML template; tests, load tests, docs |
 | **≤ ~1 Mar 2027** | Upload; grid online with test accounts |
 | **Early Mar 2027** | Regional defense |
@@ -245,7 +245,7 @@ Bulgarian schools have **thousands of computers idle most of the day and all nig
 | 14–15 | Security and ethics: why it can never become a botnet or a miner |
 | 15–20 | Questions |
 
-**Plan B:** if the hall Wi-Fi is bad, a pre-joined lab at your school (remote) keeps computing and the dashboard shows it.
+**Plan B:** if the hall Wi-Fi is bad, a pre-joined lab at your school (remote) keeps computing and its network's live view in the console shows it.
 
 ## 19. Expected jury questions
 
@@ -280,13 +280,13 @@ Bulgarian schools have **thousands of computers idle most of the day and all nig
 >
 > **Съществуващи решения:** системи като BOINC, изискващи инсталиране; облачни услуги срещу заплащане; национални суперкомпютри, недостъпни за ученически проекти. Предложеното решение не изисква инсталиране и използва графичните процесори чрез браузъра.
 >
-> **План за реализация:** октомври–ноември 2026 – изчислително ядро с WebGPU и резервен път през процесора, координатор, шаблони за метода Монте Карло и проследяване на лъчи, проверка на резултатите с дублиране, контролни задачи и репутация, натоварващи тестове, защита на доброволците, публичен адрес (изпълнено към ноември); декември–януари – подписани шаблони, разпределяне според устройството, училищен режим, първо изпитване в компютърен кабинет; февруари – програмен интерфейс за заявители, роли, шаблон за машинно обучение, документация; март–април – изпитване в няколко училища.
+> **План за реализация:** октомври–ноември 2026 – изчислително ядро с WebGPU и резервен път през процесора, координатор, шаблони за метода Монте Карло и проследяване на лъчи, проверка на резултатите с дублиране, контролни задачи и репутация, натоварващи тестове, защита на доброволците, публичен адрес, собствени мрежи от устройства за училища и клиенти с профили, роли, одобрение на устройствата и работно време (изпълнено към ноември); декември–януари – подписани шаблони, разпределяне според устройството, локален възел за кабинета, първо изпитване в компютърен кабинет; февруари – портал за заявители и рецензенти, шаблон за машинно обучение, документация; март–април – изпитване в няколко училища.
 
 ## 22. Compliance checklist
 
 - [ ] GPL-3.0; coordinator, worker runtime, templates, dashboards
 - [ ] Asset licence table for 3D scenes and datasets
-- [ ] Grid online; test accounts: contributor, school admin, submitter, reviewer, admin
+- [ ] Grid online; test accounts: contributor, school admin, submitter, reviewer, admin (accounts, network owners, admins and viewers exist: spec 0010)
 - [ ] Written permission from the school for lab use
 - [ ] Git access; Appendix 1 docs; Appendix 4 declaration
 

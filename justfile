@@ -57,6 +57,12 @@ deploy server=env_var_or_default("SWARM_SERVER", ""):
     ssh {{server}} 'test -f ~/swarm.env || (umask 077 && echo "SWARM_SUBMIT_TOKEN=$(openssl rand -hex 12)" > ~/swarm.env)'
     ssh {{server}} 'cd ~/swarm && docker compose --env-file ~/swarm.env -f deploy/compose.server.yaml up -d --build --remove-orphans'
 
+# The platform admin on the deployed server (spec 0010): prints a new random password
+# once, on the server's terminal only. Run it again to reset a forgotten password.
+admin-create email server=env_var_or_default("SWARM_SERVER", ""):
+    @test -n "{{server}}" || { echo "usage: just admin-create EMAIL user@host (or set SWARM_SERVER)"; exit 1; }
+    ssh -t {{server}} 'cd ~/swarm && docker compose --env-file ~/swarm.env -f deploy/compose.server.yaml exec coordinator coordinator admin-create {{email}}'
+
 # Public HTTPS for the deployed server through Tailscale Funnel. The first run prints a
 # login link that adds the server to your tailnet; run it again to get the address.
 public server=env_var_or_default("SWARM_SERVER", ""):
@@ -91,7 +97,7 @@ bench-report:
 check:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets -- -D warnings
-    cargo nextest run --workspace
+    cargo test --workspace
     cd web && pnpm check && pnpm lint && pnpm test:unit --run
 
 # Browser tests against the real coordinator: Chromium with WebGPU (SwiftShader) and

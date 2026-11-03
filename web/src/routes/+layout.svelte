@@ -120,6 +120,7 @@
 				</div>
 				<ul class="foot-links">
 					<li><a href={resolve('/worker')}>Включи се</a></li>
+					<li><a href={resolve('/join')}>Включи се с код</a></li>
 					<li><a href={resolve('/app')}>Конзола</a></li>
 					<li><a href={resolve('/selftest')}>Самопроверка</a></li>
 					<li>
