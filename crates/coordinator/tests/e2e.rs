@@ -457,6 +457,14 @@ async fn hello(ws: &mut Ws) {
     .await
     .unwrap();
     assert!(matches!(next(ws).await, CoordinatorMessage::Welcome { .. }));
+    // What the network allows this device (spec 0010): the public network, running.
+    assert!(matches!(
+        next(ws).await,
+        CoordinatorMessage::Control {
+            control: protocol::DeviceControl::Running,
+            max_power: 100
+        }
+    ));
 }
 
 async fn next_text(ws: &mut Ws) -> String {
@@ -903,10 +911,15 @@ async fn joined_worker(addr: &str) -> (Ws, uuid::Uuid) {
     ))
     .await
     .unwrap();
-    match next(&mut ws).await {
-        CoordinatorMessage::Welcome { worker_id, .. } => (ws, worker_id),
+    let worker_id = match next(&mut ws).await {
+        CoordinatorMessage::Welcome { worker_id, .. } => worker_id,
         other => panic!("expected welcome, got {other:?}"),
-    }
+    };
+    assert!(matches!(
+        next(&mut ws).await,
+        CoordinatorMessage::Control { .. }
+    ));
+    (ws, worker_id)
 }
 
 async fn chaos(addr: &str, path: &str, auth: Option<&str>) -> reqwest::Response {

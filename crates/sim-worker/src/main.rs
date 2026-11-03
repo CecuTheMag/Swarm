@@ -49,6 +49,9 @@ struct Args {
     /// Print a JSON summary when done.
     #[arg(long)]
     report: bool,
+    /// Join this network (the code from its join link) instead of the public one.
+    #[arg(long)]
+    join: Option<String>,
 }
 
 #[tokio::main]
@@ -88,6 +91,7 @@ async fn main() -> anyhow::Result<()> {
         max_units: args.max_units,
         exit_when_idle: args.exit_when_idle,
         client_id: None,
+        join_code: args.join,
         cheat,
         in_flight: args.in_flight,
         connect_to,

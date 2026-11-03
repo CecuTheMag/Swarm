@@ -1,8 +1,13 @@
-//! Рояк coordinator: job API, work-unit scheduling and result aggregation.
+//! Рояк coordinator: accounts and networks, job API, work-unit scheduling and result
+//! aggregation.
 
+pub mod accounts;
 pub mod api;
+pub mod auth;
 pub mod chaos;
 pub mod db;
+pub mod hours;
+pub mod networks;
 pub mod render;
 pub mod state;
 pub mod templates;
@@ -10,7 +15,7 @@ pub mod ws;
 
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{get, patch, post},
 };
 use sqlx::{
     PgPool, Postgres,
@@ -32,9 +37,90 @@ pub fn router(state: AppState) -> Router {
         .route("/api/chaos/workers/{id}/kill", post(chaos::kill_worker))
         .route("/api/chaos/workers/{id}/cut", post(chaos::cut_off_worker))
         .route("/api/chaos/cheaters", post(chaos::add_cheaters))
+        // Accounts (spec 0010).
+        .route("/api/auth/login", post(accounts::login))
+        .route("/api/auth/logout", post(accounts::logout))
+        .route("/api/me", get(accounts::current))
+        .route(
+            "/api/invites/{token}",
+            get(accounts::invite_info).post(accounts::accept_invite),
+        )
+        .route("/api/admin/invites", post(accounts::admin_invite))
+        .route("/api/admin/accounts", get(accounts::admin_accounts))
+        // Networks.
+        .route("/api/join/{code}", get(networks::join_info))
+        .route("/api/networks", get(networks::list).post(networks::create))
+        .route(
+            "/api/networks/{id}",
+            get(networks::get)
+                .patch(networks::update)
+                .delete(networks::delete),
+        )
+        .route("/api/networks/{id}/devices", get(networks::devices))
+        .route(
+            "/api/networks/{id}/devices/{device}",
+            patch(networks::update_device).delete(networks::remove_device),
+        )
+        .route("/api/networks/{id}/members", get(networks::members))
+        .route(
+            "/api/networks/{id}/members/{account}",
+            patch(networks::update_member).delete(networks::remove_member),
+        )
+        .route("/api/networks/{id}/invites", post(networks::invite))
+        .route(
+            "/api/networks/{id}/keys",
+            get(networks::api_keys).post(networks::create_api_key),
+        )
+        .route(
+            "/api/networks/{id}/keys/{key}",
+            axum::routing::delete(networks::revoke_api_key),
+        )
+        .route(
+            "/api/networks/{id}/jobs",
+            get(networks::jobs).post(networks::create_job),
+        )
+        .route("/api/networks/{id}/jobs/{job}", get(networks::get_job))
+        .route(
+            "/api/networks/{id}/jobs/{job}/cancel",
+            post(networks::cancel_job),
+        )
+        .route(
+            "/api/networks/{id}/jobs/{job}/image.png",
+            get(networks::job_image),
+        )
+        .route(
+            "/api/networks/{id}/chaos/workers/{worker}/kill",
+            post(chaos::network_kill),
+        )
+        .route(
+            "/api/networks/{id}/chaos/workers/{worker}/cut",
+            post(chaos::network_cut_off),
+        )
+        .route(
+            "/api/networks/{id}/chaos/cheaters",
+            post(chaos::network_cheaters),
+        )
         .route("/ws/worker", get(ws::worker))
         .route("/ws/dashboard", get(ws::dashboard))
+        .route("/ws/networks/{id}/live", get(ws::network_live))
+        .route("/ws/join/{code}/summary", get(ws::join_summary))
         .with_state(state)
+}
+
+/// Writes the units each device decided to the database every few seconds, rather than
+/// one update per unit (spec 0010).
+pub fn spawn_device_counts(state: AppState) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(5));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tick.tick().await;
+            let counts = state.take_device_units();
+            if let Err(e) = db::add_device_units(&state.db, &counts).await {
+                tracing::error!(error = %e, "failed to record device units");
+            }
+        }
+    })
 }
 
 /// Returns expired leases to the queue every `reap_interval` (spec 0002). Several

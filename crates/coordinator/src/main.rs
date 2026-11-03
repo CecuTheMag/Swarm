@@ -15,11 +15,32 @@ async fn main() -> anyhow::Result<()> {
     let db = coordinator::connect(&database_url)
         .await
         .context("connecting to the database")?;
+
+    // `coordinator admin-create EMAIL`: a platform admin with a new random password,
+    // printed once (spec 0010). Run on the server, so the password never leaves it.
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("admin-create") {
+        let email = args
+            .get(2)
+            .context("usage: coordinator admin-create EMAIL")?;
+        let password = &coordinator::auth::random_token()[..20];
+        coordinator::accounts::ensure_admin(&db, email, password).await?;
+        println!("Admin {email} can sign in with the password: {password}");
+        return Ok(());
+    }
+    // Development and tests: SWARM_BOOTSTRAP_ADMIN=email:password.
+    if let Ok(spec) = std::env::var("SWARM_BOOTSTRAP_ADMIN")
+        && let Some((email, password)) = spec.split_once(':')
+    {
+        coordinator::accounts::ensure_admin(&db, email, password).await?;
+        tracing::info!(%email, "bootstrap admin ready");
+    }
     let mut config = Config::from_env();
     config.self_url = self_url(&addr);
     let state = State::new(db, config);
     coordinator::spawn_reaper(state.clone());
     coordinator::spawn_progress(state.clone());
+    coordinator::spawn_device_counts(state.clone());
     let app = coordinator::router(state);
 
     let listener = tokio::net::TcpListener::bind(&addr)

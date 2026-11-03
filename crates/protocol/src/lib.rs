@@ -5,6 +5,7 @@
 //! Timestamps are Unix milliseconds. 64-bit integers are exported as `number`
 //! because JSON carries them as plain numbers (all values stay below 2^53).
 
+pub mod api;
 pub mod templates;
 
 use serde::{Deserialize, Serialize};
@@ -57,6 +58,10 @@ pub enum WorkerMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         client_id: Option<Uuid>,
+        /// The network joined, from its join link (spec 0010); none joins the public one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        join_code: Option<String>,
     },
     RequestWork,
     Heartbeat {
@@ -97,10 +102,38 @@ pub enum CoordinatorMessage {
         lease_id: Uuid,
         accepted: bool,
     },
+    /// What the network's owner allows this device right now (spec 0010). Sent after
+    /// `welcome` and whenever it changes; while not `running`, work requests get
+    /// `no_work`. The device never computes above `max_power` percent.
+    Control {
+        control: DeviceControl,
+        max_power: u32,
+    },
     /// Protocol violation; the coordinator closes the connection after sending it.
     Error {
         message: String,
     },
+}
+
+/// Whether a device may compute, as its network's owner decided (spec 0010).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "state", rename_all = "snake_case")]
+#[ts(export)]
+pub enum DeviceControl {
+    Running,
+    /// The owner paused this device.
+    PausedByOwner,
+    /// The owner paused the whole network.
+    NetworkPaused,
+    /// Outside the network's working hours; `resumes_at` is when the next window opens.
+    OutsideHours {
+        #[ts(type = "number | null")]
+        resumes_at: Option<i64>,
+    },
+    /// The network admits devices only after approval, which has not happened yet.
+    PendingApproval,
+    /// The owner removed this device from the network; the connection closes next.
+    Removed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -138,6 +171,7 @@ impl JobStatus {
 #[ts(export)]
 pub struct JobSummary {
     pub id: Uuid,
+    pub network_id: Uuid,
     pub template: String,
     pub status: JobStatus,
     pub params: Value,
@@ -216,6 +250,29 @@ pub enum DashboardEvent {
     JobUpdated {
         job: JobSummary,
     },
+}
+
+/// What a device that joined a network sees of it (spec 0010): enough to show the
+/// network at work, nothing about other devices or the jobs' data.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct NetworkSummary {
+    pub name: String,
+    pub devices_gpu: u32,
+    pub devices_cpu: u32,
+    pub devices_server: u32,
+    /// Parts (units) decided per second over the last ten seconds.
+    pub units_per_second: f64,
+    pub job: Option<JobProgressSummary>,
+}
+
+/// The job a network is working on, as a device sees it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct JobProgressSummary {
+    pub template: String,
+    pub units_done: u32,
+    pub units_total: u32,
 }
 
 /// `POST /api/jobs` body.

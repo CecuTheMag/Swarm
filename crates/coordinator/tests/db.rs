@@ -3,6 +3,7 @@
 
 use coordinator::{
     Config,
+    auth::PUBLIC_NETWORK,
     db::{self, Completion},
     templates,
 };
@@ -36,19 +37,29 @@ async fn worker_of(db: &PgPool, client_id: Uuid) -> Uuid {
         vendor: "test".into(),
         architecture: "test".into(),
     };
-    db::insert_worker(db, id, &device, "test", client_id)
+    let registration = db::insert_worker(db, id, &device, "test", client_id, PUBLIC_NETWORK, false)
         .await
-        .unwrap()
-        .expect("client is not banned");
+        .unwrap();
+    assert!(
+        matches!(registration, db::Registration::Registered { .. }),
+        "client is not banned"
+    );
     id
 }
 
 async fn pi_job(db: &PgPool, units: u32, samples: u32, seed: u32) -> (Uuid, Value) {
     let params = json!({ "units": units, "samples_per_unit": samples, "seed": seed });
     let t = templates::get(pi::ID).unwrap();
-    let job = db::create_job(db, t, &params, t.template.split(&params).unwrap(), 1)
-        .await
-        .unwrap();
+    let job = db::create_job(
+        db,
+        PUBLIC_NETWORK,
+        t,
+        &params,
+        t.template.split(&params).unwrap(),
+        1,
+    )
+    .await
+    .unwrap();
     assert_eq!(job.status, JobStatus::Queued);
     assert_eq!(job.units_total, units);
     (job.id, params)
@@ -82,7 +93,9 @@ async fn claims_are_exclusive_under_concurrency(db: PgPool) {
         let db = db.clone();
         let w = worker(&db).await;
         tasks.push(tokio::spawn(async move {
-            db::claim_unit(&db, w, &cfg()).await.unwrap()
+            db::claim_unit(&db, w, PUBLIC_NETWORK, false, &cfg())
+                .await
+                .unwrap()
         }));
     }
     let mut units = HashSet::new();
@@ -103,7 +116,10 @@ async fn claims_follow_job_then_unit_order(db: PgPool) {
     let (second, _) = pi_job(&db, 2, 10, 2).await;
     let w = worker(&db).await;
     let mut order = Vec::new();
-    while let Some(c) = db::claim_unit(&db, w, &cfg()).await.unwrap() {
+    while let Some(c) = db::claim_unit(&db, w, PUBLIC_NETWORK, false, &cfg())
+        .await
+        .unwrap()
+    {
         let p: pi::UnitParams = serde_json::from_value(c.params).unwrap();
         order.push((c.job_id, p.unit_index));
     }
@@ -119,7 +135,10 @@ async fn job_result_equals_single_machine_reference(db: PgPool) {
     let (job_id, _) = pi_job(&db, units, samples, seed).await;
     let w = worker(&db).await;
 
-    let first = db::claim_unit(&db, w, &cfg()).await.unwrap().unwrap();
+    let first = db::claim_unit(&db, w, PUBLIC_NETWORK, false, &cfg())
+        .await
+        .unwrap()
+        .unwrap();
     let started = first
         .job_started
         .as_ref()
@@ -137,7 +156,9 @@ async fn job_result_equals_single_machine_reference(db: PgPool) {
             Completion::Decided { job_finished, .. } => finished = finished.or(job_finished),
             other => panic!("unexpected {other:?}"),
         }
-        claim = db::claim_unit(&db, w, &cfg()).await.unwrap();
+        claim = db::claim_unit(&db, w, PUBLIC_NETWORK, false, &cfg())
+            .await
+            .unwrap();
     }
 
     let job = finished.expect("last completion finishes the job");
@@ -159,7 +180,13 @@ async fn concurrent_completions_finish_job_exactly_once(db: PgPool) {
     let mut claims = Vec::new();
     for _ in 0..units {
         let w = worker(&db).await;
-        claims.push((w, db::claim_unit(&db, w, &cfg()).await.unwrap().unwrap()));
+        claims.push((
+            w,
+            db::claim_unit(&db, w, PUBLIC_NETWORK, false, &cfg())
+                .await
+                .unwrap()
+                .unwrap(),
+        ));
     }
     let tasks: Vec<_> = claims
         .into_iter()
@@ -200,7 +227,10 @@ async fn concurrent_completions_finish_job_exactly_once(db: PgPool) {
 async fn foreign_and_repeated_results_are_rejected(db: PgPool) {
     pi_job(&db, 2, 100, 1).await;
     let (owner, other) = (worker(&db).await, worker(&db).await);
-    let c = db::claim_unit(&db, owner, &cfg()).await.unwrap().unwrap();
+    let c = db::claim_unit(&db, owner, PUBLIC_NETWORK, false, &cfg())
+        .await
+        .unwrap()
+        .unwrap();
     let out = sim_worker::compute(&c.template.id, c.template.version, &c.params).unwrap();
 
     let foreign = db::complete_lease(&db, other, c.lease_id, &out, 1, &cfg())
@@ -227,7 +257,7 @@ async fn invalid_output_returns_unit_to_queue(db: PgPool) {
     pi_job(&db, 1, 100, 1).await;
     let w = worker(&db).await;
     for bad in [json!({ "inside": 101 }), json!({ "nope": 1 }), json!("x")] {
-        let c = db::claim_unit(&db, w, &cfg())
+        let c = db::claim_unit(&db, w, PUBLIC_NETWORK, false, &cfg())
             .await
             .unwrap()
             .expect("unit is back in the queue");
@@ -243,7 +273,10 @@ async fn invalid_output_returns_unit_to_queue(db: PgPool) {
 async fn departed_worker_leases_are_requeued(db: PgPool) {
     pi_job(&db, 2, 100, 1).await;
     let (gone, next) = (worker(&db).await, worker(&db).await);
-    let c = db::claim_unit(&db, gone, &cfg()).await.unwrap().unwrap();
+    let c = db::claim_unit(&db, gone, PUBLIC_NETWORK, false, &cfg())
+        .await
+        .unwrap()
+        .unwrap();
 
     assert_eq!(
         db::release_worker_leases(&db, gone, &cfg())
@@ -263,7 +296,10 @@ async fn departed_worker_leases_are_requeued(db: PgPool) {
 
     // The released unit is handed out again, and a late result from the
     // departed worker no longer counts.
-    let again = db::claim_unit(&db, next, &cfg()).await.unwrap().unwrap();
+    let again = db::claim_unit(&db, next, PUBLIC_NETWORK, false, &cfg())
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(again.unit_id, c.unit_id);
     let out = sim_worker::compute(&c.template.id, c.template.version, &c.params).unwrap();
     let late = db::complete_lease(&db, gone, c.lease_id, &out, 1, &cfg())
@@ -276,7 +312,10 @@ async fn departed_worker_leases_are_requeued(db: PgPool) {
 async fn failed_unit_is_released_only_by_its_owner(db: PgPool) {
     pi_job(&db, 1, 100, 1).await;
     let (owner, other) = (worker(&db).await, worker(&db).await);
-    let c = db::claim_unit(&db, owner, &cfg()).await.unwrap().unwrap();
+    let c = db::claim_unit(&db, owner, PUBLIC_NETWORK, false, &cfg())
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(
         db::release_lease(&db, other, c.lease_id, &cfg())
             .await
@@ -326,7 +365,10 @@ async fn heartbeat_extends_only_own_active_leases(db: PgPool) {
         lease_ttl: Duration::from_secs(5),
         ..cfg()
     };
-    let c = db::claim_unit(&db, owner, &short).await.unwrap().unwrap();
+    let c = db::claim_unit(&db, owner, PUBLIC_NETWORK, false, &short)
+        .await
+        .unwrap()
+        .unwrap();
     let before = expires_at(&db, c.lease_id).await;
     let long = Config {
         lease_ttl: Duration::from_secs(300),
@@ -346,7 +388,10 @@ async fn heartbeat_extends_only_own_active_leases(db: PgPool) {
 async fn heartbeats_cannot_extend_a_lease_past_its_maximum_lifetime(db: PgPool) {
     pi_job(&db, 1, 100, 1).await;
     let w = worker(&db).await;
-    let c = db::claim_unit(&db, w, &cfg()).await.unwrap().unwrap();
+    let c = db::claim_unit(&db, w, PUBLIC_NETWORK, false, &cfg())
+        .await
+        .unwrap()
+        .unwrap();
     // A worker that stays connected and keeps sending heartbeats, but has held the
     // unit for longer than allowed: its heartbeat no longer renews the lease.
     age_lease(
@@ -368,8 +413,14 @@ async fn heartbeats_cannot_extend_a_lease_past_its_maximum_lifetime(db: PgPool) 
 async fn expired_leases_are_reaped_and_late_results_ignored(db: PgPool) {
     pi_job(&db, 2, 100, 1).await;
     let (slow, next) = (worker(&db).await, worker(&db).await);
-    let c = db::claim_unit(&db, slow, &cfg()).await.unwrap().unwrap();
-    let live = db::claim_unit(&db, slow, &cfg()).await.unwrap().unwrap();
+    let c = db::claim_unit(&db, slow, PUBLIC_NETWORK, false, &cfg())
+        .await
+        .unwrap()
+        .unwrap();
+    let live = db::claim_unit(&db, slow, PUBLIC_NETWORK, false, &cfg())
+        .await
+        .unwrap()
+        .unwrap();
 
     // Nothing has expired yet.
     assert_eq!(db::reap_expired(&db, &cfg()).await.unwrap().leases, 0);
@@ -392,7 +443,10 @@ async fn expired_leases_are_reaped_and_late_results_ignored(db: PgPool) {
     assert_eq!(reason, "expired");
 
     // Another worker gets the unit; the slow worker's late result does not count.
-    let again = db::claim_unit(&db, next, &cfg()).await.unwrap().unwrap();
+    let again = db::claim_unit(&db, next, PUBLIC_NETWORK, false, &cfg())
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(again.unit_id, c.unit_id);
     let out = sim_worker::compute(&c.template.id, c.template.version, &c.params).unwrap();
     let late = db::complete_lease(&db, slow, c.lease_id, &out, 1, &cfg())
@@ -411,15 +465,24 @@ async fn a_unit_released_too_often_fails_its_job(db: PgPool) {
     let w = worker(&db).await;
 
     // The first unit keeps failing on every worker that tries it.
-    let first = db::claim_unit(&db, w, &limited).await.unwrap().unwrap();
+    let first = db::claim_unit(&db, w, PUBLIC_NETWORK, false, &limited)
+        .await
+        .unwrap()
+        .unwrap();
     let r = db::release_lease(&db, w, first.lease_id, &limited)
         .await
         .unwrap();
     assert!(r.failed_jobs.is_empty());
-    let second = db::claim_unit(&db, w, &limited).await.unwrap().unwrap();
+    let second = db::claim_unit(&db, w, PUBLIC_NETWORK, false, &limited)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(second.unit_id, first.unit_id);
     // Meanwhile another unit of the job is being computed.
-    let other = db::claim_unit(&db, w, &limited).await.unwrap().unwrap();
+    let other = db::claim_unit(&db, w, PUBLIC_NETWORK, false, &limited)
+        .await
+        .unwrap()
+        .unwrap();
     assert_ne!(other.unit_id, first.unit_id);
 
     let r = db::release_lease(&db, w, second.lease_id, &limited)
@@ -436,7 +499,12 @@ async fn a_unit_released_too_often_fails_its_job(db: PgPool) {
     assert!(job.finished_at.is_some());
 
     // Nothing more of the job is handed out, and results still in flight are stale.
-    assert!(db::claim_unit(&db, w, &limited).await.unwrap().is_none());
+    assert!(
+        db::claim_unit(&db, w, PUBLIC_NETWORK, false, &limited)
+            .await
+            .unwrap()
+            .is_none()
+    );
     let out =
         sim_worker::compute(&other.template.id, other.template.version, &other.params).unwrap();
     let late = db::complete_lease(&db, w, other.lease_id, &out, 1, &limited)
@@ -468,6 +536,7 @@ async fn pi_job_with(db: &PgPool, cfg: &Config, units: u32, samples: u32, seed: 
     let t = templates::get(pi::ID).unwrap();
     db::create_job(
         db,
+        PUBLIC_NETWORK,
         t,
         &params,
         t.template.split(&params).unwrap(),
@@ -523,10 +592,21 @@ async fn two_clients_must_agree(db: PgPool) {
     let (a, b) = (worker(&db).await, worker(&db).await);
 
     // Both copies are handed out at once, to different clients.
-    let ca = db::claim_unit(&db, a, &cfg).await.unwrap().unwrap();
+    let ca = db::claim_unit(&db, a, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(unit_status(&db, ca.unit_id).await, "pending");
-    assert!(db::claim_unit(&db, a, &cfg).await.unwrap().is_none());
-    let cb = db::claim_unit(&db, b, &cfg).await.unwrap().unwrap();
+    assert!(
+        db::claim_unit(&db, a, PUBLIC_NETWORK, false, &cfg)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let cb = db::claim_unit(&db, b, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(cb.unit_id, ca.unit_id);
     assert_eq!(unit_status(&db, ca.unit_id).await, "leased");
 
@@ -558,8 +638,16 @@ async fn a_client_cannot_verify_itself_from_another_connection(db: PgPool) {
     pi_job_with(&db, &cfg, 1, 1000, 3).await;
     let client = Uuid::now_v7();
     let (tab1, tab2) = (worker_of(&db, client).await, worker_of(&db, client).await);
-    db::claim_unit(&db, tab1, &cfg).await.unwrap().unwrap();
-    assert!(db::claim_unit(&db, tab2, &cfg).await.unwrap().is_none());
+    db::claim_unit(&db, tab1, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        db::claim_unit(&db, tab2, PUBLIC_NETWORK, false, &cfg)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[sqlx::test(migrator = "coordinator::MIGRATOR")]
@@ -567,10 +655,21 @@ async fn a_dispute_asks_for_a_tiebreaker_and_the_majority_wins(db: PgPool) {
     let cfg = verifying();
     let job_id = pi_job_with(&db, &cfg, 1, 1000, 8).await;
     let (a, cheat, c) = (worker(&db).await, worker(&db).await, worker(&db).await);
-    let ca = db::claim_unit(&db, a, &cfg).await.unwrap().unwrap();
-    let cx = db::claim_unit(&db, cheat, &cfg).await.unwrap().unwrap();
+    let ca = db::claim_unit(&db, a, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
+    let cx = db::claim_unit(&db, cheat, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     // No third copy while two are out.
-    assert!(db::claim_unit(&db, c, &cfg).await.unwrap().is_none());
+    assert!(
+        db::claim_unit(&db, c, PUBLIC_NETWORK, false, &cfg)
+            .await
+            .unwrap()
+            .is_none()
+    );
 
     assert!(matches!(
         complete(&db, a, &ca, &honest(&ca), &cfg).await,
@@ -582,7 +681,10 @@ async fn a_dispute_asks_for_a_tiebreaker_and_the_majority_wins(db: PgPool) {
     ));
 
     // A third client breaks the tie.
-    let cc = db::claim_unit(&db, c, &cfg).await.unwrap().unwrap();
+    let cc = db::claim_unit(&db, c, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(cc.unit_id, ca.unit_id);
     let decided = complete(&db, c, &cc, &honest(&cc), &cfg).await;
     let Completion::Decided {
@@ -614,7 +716,10 @@ async fn results_that_never_agree_fail_the_job(db: PgPool) {
     let mut last = None;
     for k in 0..3u64 {
         let w = worker(&db).await;
-        let c = db::claim_unit(&db, w, &cfg).await.unwrap().unwrap();
+        let c = db::claim_unit(&db, w, PUBLIC_NETWORK, false, &cfg)
+            .await
+            .unwrap()
+            .unwrap();
         let out = json!({ "inside": 100 + k });
         last = Some(complete(&db, w, &c, &out, &cfg).await);
     }
@@ -642,16 +747,28 @@ async fn late_results_count_for_reputation(db: PgPool) {
         worker(&db).await,
         worker(&db).await,
     );
-    let ca = db::claim_unit(&db, a, &cfg).await.unwrap().unwrap();
-    let cb = db::claim_unit(&db, b, &cfg).await.unwrap().unwrap();
+    let ca = db::claim_unit(&db, a, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
+    let cb = db::claim_unit(&db, b, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     // Two extra copies of the same unit are out (as after a dispute)...
     sqlx::query("UPDATE units SET target = 4, status = 'pending' WHERE id = $1")
         .bind(ca.unit_id)
         .execute(&db)
         .await
         .unwrap();
-    let cg = db::claim_unit(&db, late_good, &cfg).await.unwrap().unwrap();
-    let cx = db::claim_unit(&db, late_bad, &cfg).await.unwrap().unwrap();
+    let cg = db::claim_unit(&db, late_good, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
+    let cx = db::claim_unit(&db, late_bad, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     assert!(cg.unit_id == ca.unit_id && cx.unit_id == ca.unit_id);
     sqlx::query("UPDATE units SET target = 2 WHERE id = $1")
         .bind(ca.unit_id)
@@ -687,8 +804,14 @@ async fn honeypots_are_checked_against_the_known_answer(db: PgPool) {
     pi_job_with(&db, &cfg, 2, 1000, 5).await;
     let (a, b) = (worker(&db).await, worker(&db).await);
     for _ in 0..2 {
-        let ca = db::claim_unit(&db, a, &cfg).await.unwrap().unwrap();
-        let cb = db::claim_unit(&db, b, &cfg).await.unwrap().unwrap();
+        let ca = db::claim_unit(&db, a, PUBLIC_NETWORK, false, &cfg)
+            .await
+            .unwrap()
+            .unwrap();
+        let cb = db::claim_unit(&db, b, PUBLIC_NETWORK, false, &cfg)
+            .await
+            .unwrap()
+            .unwrap();
         complete(&db, a, &ca, &honest(&ca), &cfg).await;
         complete(&db, b, &cb, &honest(&cb), &cfg).await;
     }
@@ -698,8 +821,14 @@ async fn honeypots_are_checked_against_the_known_answer(db: PgPool) {
         ..cfg.clone()
     };
     let (good, bad) = (worker(&db).await, worker(&db).await);
-    let cg = db::claim_unit(&db, good, &traps).await.unwrap().unwrap();
-    let cb = db::claim_unit(&db, bad, &traps).await.unwrap().unwrap();
+    let cg = db::claim_unit(&db, good, PUBLIC_NETWORK, false, &traps)
+        .await
+        .unwrap()
+        .unwrap();
+    let cb = db::claim_unit(&db, bad, PUBLIC_NETWORK, false, &traps)
+        .await
+        .unwrap()
+        .unwrap();
     for c in [&cg, &cb] {
         assert_eq!(unit_status(&db, c.unit_id).await, "done", "a verified unit");
     }
@@ -713,7 +842,7 @@ async fn honeypots_are_checked_against_the_known_answer(db: PgPool) {
     assert_eq!(standing(&db, bad).await, (0, 1, false));
 
     // A honeypot copy that is never answered costs its unit nothing.
-    let ct = db::claim_unit(&db, worker(&db).await, &traps)
+    let ct = db::claim_unit(&db, worker(&db).await, PUBLIC_NETWORK, false, &traps)
         .await
         .unwrap()
         .unwrap();
@@ -739,8 +868,14 @@ async fn honeypots_come_only_from_jobs_computed_with_todays_kernel(db: PgPool) {
     let job = pi_job_with(&db, &cfg, 2, 1000, 5).await;
     let (a, b) = (worker(&db).await, worker(&db).await);
     for _ in 0..2 {
-        let ca = db::claim_unit(&db, a, &cfg).await.unwrap().unwrap();
-        let cb = db::claim_unit(&db, b, &cfg).await.unwrap().unwrap();
+        let ca = db::claim_unit(&db, a, PUBLIC_NETWORK, false, &cfg)
+            .await
+            .unwrap()
+            .unwrap();
+        let cb = db::claim_unit(&db, b, PUBLIC_NETWORK, false, &cfg)
+            .await
+            .unwrap()
+            .unwrap();
         complete(&db, a, &ca, &honest(&ca), &cfg).await;
         complete(&db, b, &cb, &honest(&cb), &cfg).await;
     }
@@ -749,7 +884,7 @@ async fn honeypots_come_only_from_jobs_computed_with_todays_kernel(db: PgPool) {
         ..cfg.clone()
     };
     assert!(
-        db::claim_unit(&db, worker(&db).await, &traps)
+        db::claim_unit(&db, worker(&db).await, PUBLIC_NETWORK, false, &traps)
             .await
             .unwrap()
             .is_some(),
@@ -763,7 +898,7 @@ async fn honeypots_come_only_from_jobs_computed_with_todays_kernel(db: PgPool) {
         .await
         .unwrap();
     for _ in 0..20 {
-        let claim = db::claim_unit(&db, worker(&db).await, &traps)
+        let claim = db::claim_unit(&db, worker(&db).await, PUBLIC_NETWORK, false, &traps)
             .await
             .unwrap();
         assert!(
@@ -782,7 +917,10 @@ async fn honeypots_are_drawn_from_the_whole_job(db: PgPool) {
     };
     pi_job_with(&db, &once, 64, 1000, 8).await;
     let w = worker(&db).await;
-    while let Some(c) = db::claim_unit(&db, w, &once).await.unwrap() {
+    while let Some(c) = db::claim_unit(&db, w, PUBLIC_NETWORK, false, &once)
+        .await
+        .unwrap()
+    {
         complete(&db, w, &c, &honest(&c), &once).await;
     }
 
@@ -794,7 +932,7 @@ async fn honeypots_are_drawn_from_the_whole_job(db: PgPool) {
     };
     let mut seqs = std::collections::BTreeSet::new();
     for _ in 0..100 {
-        let c = db::claim_unit(&db, worker(&db).await, &traps)
+        let c = db::claim_unit(&db, worker(&db).await, PUBLIC_NETWORK, false, &traps)
             .await
             .unwrap()
             .expect("a honeypot for a client that has answered nothing");
@@ -817,7 +955,10 @@ async fn trusted_clients_work_alone_except_for_spot_checks(db: PgPool) {
     set_standing(&db, veteran, 40, 0).await;
 
     // Trusted and not spot-checked: one copy, decided by its result alone.
-    let c = db::claim_unit(&db, veteran, &cfg).await.unwrap().unwrap();
+    let c = db::claim_unit(&db, veteran, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(unit_status(&db, c.unit_id).await, "leased");
     let done = complete(&db, veteran, &c, &honest(&c), &cfg).await;
     assert!(matches!(done, Completion::Decided { .. }));
@@ -835,7 +976,7 @@ async fn trusted_clients_work_alone_except_for_spot_checks(db: PgPool) {
         spot_check_rate: 1.0,
         ..cfg.clone()
     };
-    let c = db::claim_unit(&db, veteran, &always)
+    let c = db::claim_unit(&db, veteran, PUBLIC_NETWORK, false, &always)
         .await
         .unwrap()
         .unwrap();
@@ -849,7 +990,10 @@ async fn trusted_clients_work_alone_except_for_spot_checks(db: PgPool) {
     let newcomer = worker(&db).await;
     set_standing(&db, newcomer, 5, 0).await;
     pi_job_with(&db, &cfg, 1, 1000, 7).await;
-    let c = db::claim_unit(&db, newcomer, &cfg).await.unwrap().unwrap();
+    let c = db::claim_unit(&db, newcomer, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     let solo: bool = sqlx::query_scalar("SELECT solo FROM leases WHERE id = $1")
         .bind(c.lease_id)
         .fetch_one(&db)
@@ -866,7 +1010,10 @@ async fn a_banned_client_is_blocked_and_what_it_decided_is_redone(db: PgPool) {
     let mole = worker(&db).await;
     set_standing(&db, mole, 20, 0).await;
     for _ in 0..2 {
-        let c = db::claim_unit(&db, mole, &cfg).await.unwrap().unwrap();
+        let c = db::claim_unit(&db, mole, PUBLIC_NETWORK, false, &cfg)
+            .await
+            .unwrap()
+            .unwrap();
         complete(&db, mole, &c, &wrong(&c), &cfg).await;
     }
     assert_eq!(
@@ -878,18 +1025,24 @@ async fn a_banned_client_is_blocked_and_what_it_decided_is_redone(db: PgPool) {
     // gets it banned.
     set_standing(&db, mole, 1, 2).await;
     let honest_client = worker(&db).await;
-    let ch = db::claim_unit(&db, honest_client, &cfg)
+    let ch = db::claim_unit(&db, honest_client, PUBLIC_NETWORK, false, &cfg)
         .await
         .unwrap()
         .unwrap();
-    let cm = db::claim_unit(&db, mole, &cfg).await.unwrap().unwrap();
+    let cm = db::claim_unit(&db, mole, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(ch.unit_id, cm.unit_id);
     complete(&db, honest_client, &ch, &honest(&ch), &cfg).await;
     let caught = complete(&db, mole, &cm, &wrong(&cm), &cfg).await;
     assert!(matches!(caught, Completion::Disputed { .. }), "{caught:?}");
     // Disputes do not blame anyone yet; a third client decides.
     let third = worker(&db).await;
-    let ct = db::claim_unit(&db, third, &cfg).await.unwrap().unwrap();
+    let ct = db::claim_unit(&db, third, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     let decided = complete(&db, third, &ct, &honest(&ct), &cfg).await;
     assert_eq!(decided.reopened(), &[job_id]);
     assert!(standing(&db, mole).await.2, "the client is banned");
@@ -898,7 +1051,12 @@ async fn a_banned_client_is_blocked_and_what_it_decided_is_redone(db: PgPool) {
     let job = db::get_job(&db, job_id).await.unwrap().unwrap();
     assert_eq!((job.status, job.units_done), (JobStatus::Running, 1));
     // It gets no more work, and cannot reconnect.
-    assert!(db::claim_unit(&db, mole, &cfg).await.unwrap().is_none());
+    assert!(
+        db::claim_unit(&db, mole, PUBLIC_NETWORK, false, &cfg)
+            .await
+            .unwrap()
+            .is_none()
+    );
     let client: Uuid = sqlx::query_scalar("SELECT client_id FROM workers WHERE id = $1")
         .bind(mole)
         .fetch_one(&db)
@@ -909,19 +1067,31 @@ async fn a_banned_client_is_blocked_and_what_it_decided_is_redone(db: PgPool) {
         vendor: "test".into(),
         architecture: "test".into(),
     };
-    assert!(
-        db::insert_worker(&db, Uuid::now_v7(), &device, "test", client)
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(matches!(
+        db::insert_worker(
+            &db,
+            Uuid::now_v7(),
+            &device,
+            "test",
+            client,
+            PUBLIC_NETWORK,
+            false
+        )
+        .await
+        .unwrap(),
+        db::Registration::Banned
+    ));
 
     // Honest clients finish the job, and the result is exact.
     for _ in 0..4 {
         let (x, y) = (worker(&db).await, worker(&db).await);
         let (Some(cx), Some(cy)) = (
-            db::claim_unit(&db, x, &cfg).await.unwrap(),
-            db::claim_unit(&db, y, &cfg).await.unwrap(),
+            db::claim_unit(&db, x, PUBLIC_NETWORK, false, &cfg)
+                .await
+                .unwrap(),
+            db::claim_unit(&db, y, PUBLIC_NETWORK, false, &cfg)
+                .await
+                .unwrap(),
         ) else {
             break;
         };
@@ -940,8 +1110,14 @@ async fn colluders_who_agree_on_a_wrong_answer_are_undone_when_caught(db: PgPool
     let job_id = pi_job_with(&db, &cfg, 2, 1000, 4).await;
     let (m1, m2) = (worker(&db).await, worker(&db).await);
     // Two colluders agree on the same wrong answer for the first unit.
-    let c1 = db::claim_unit(&db, m1, &cfg).await.unwrap().unwrap();
-    let c2 = db::claim_unit(&db, m2, &cfg).await.unwrap().unwrap();
+    let c1 = db::claim_unit(&db, m1, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
+    let c2 = db::claim_unit(&db, m2, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     // An honest client got a third copy (as after a dispute) and answers after the
     // colluders decided the unit: it is marked as disagreeing, unfairly.
     sqlx::query("UPDATE units SET target = 3, status = 'pending' WHERE id = $1")
@@ -950,7 +1126,10 @@ async fn colluders_who_agree_on_a_wrong_answer_are_undone_when_caught(db: PgPool
         .await
         .unwrap();
     let h = worker(&db).await;
-    let ch = db::claim_unit(&db, h, &cfg).await.unwrap().unwrap();
+    let ch = db::claim_unit(&db, h, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(ch.unit_id, c1.unit_id);
     sqlx::query("UPDATE units SET target = 2 WHERE id = $1")
         .bind(c1.unit_id)
@@ -988,7 +1167,10 @@ async fn colluders_who_agree_on_a_wrong_answer_are_undone_when_caught(db: PgPool
         new_client_honeypot_rate: 1.0,
         ..cfg.clone()
     };
-    let trap = db::claim_unit(&db, m1, &traps).await.unwrap().unwrap();
+    let trap = db::claim_unit(&db, m1, PUBLIC_NETWORK, false, &traps)
+        .await
+        .unwrap()
+        .unwrap();
     let caught = complete(&db, m1, &trap, &wrong(&trap), &traps).await;
     assert!(matches!(
         caught,
@@ -1012,7 +1194,10 @@ async fn colluders_who_agree_on_a_wrong_answer_are_undone_when_caught(db: PgPool
     assert_eq!(verdict, None);
     // One more honest result decides it, in agreement with the earlier honest one.
     let h2 = worker(&db).await;
-    let c = db::claim_unit(&db, h2, &cfg).await.unwrap().unwrap();
+    let c = db::claim_unit(&db, h2, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(c.unit_id, c1.unit_id);
     let redone = complete(&db, h2, &c, &honest(&c), &cfg).await;
     assert!(
@@ -1024,8 +1209,12 @@ async fn colluders_who_agree_on_a_wrong_answer_are_undone_when_caught(db: PgPool
     for _ in 0..4 {
         let (x, y) = (worker(&db).await, worker(&db).await);
         let (Some(cx), Some(cy)) = (
-            db::claim_unit(&db, x, &cfg).await.unwrap(),
-            db::claim_unit(&db, y, &cfg).await.unwrap(),
+            db::claim_unit(&db, x, PUBLIC_NETWORK, false, &cfg)
+                .await
+                .unwrap(),
+            db::claim_unit(&db, y, PUBLIC_NETWORK, false, &cfg)
+                .await
+                .unwrap(),
         ) else {
             break;
         };
@@ -1049,11 +1238,21 @@ async fn images_are_shared_until_a_unit_changes_them(db: PgPool) {
     // 2 × 1 tiles of 16 pixels, one pass.
     let params = json!({ "width": 32, "height": 16, "tile": 16, "spp": 1, "passes": 1, "seed": 3 });
     let t = templates::get(protocol::templates::pt::ID).unwrap();
-    let job = db::create_job(&db, t, &params, t.template.split(&params).unwrap(), 1)
-        .await
-        .unwrap();
+    let job = db::create_job(
+        &db,
+        PUBLIC_NETWORK,
+        t,
+        &params,
+        t.template.split(&params).unwrap(),
+        1,
+    )
+    .await
+    .unwrap();
     let w = worker(&db).await;
-    let first = db::claim_unit(&db, w, &cfg).await.unwrap().unwrap();
+    let first = db::claim_unit(&db, w, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     complete(&db, w, &first, &honest(&first), &cfg).await;
 
     // Loaded from the database, then the same encoded image for every viewer.
@@ -1063,7 +1262,10 @@ async fn images_are_shared_until_a_unit_changes_them(db: PgPool) {
     assert_eq!(a.as_ptr(), b.as_ptr(), "encoded once");
 
     // A newly accepted unit changes the image.
-    let second = db::claim_unit(&db, w, &cfg).await.unwrap().unwrap();
+    let second = db::claim_unit(&db, w, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     let out = honest(&second);
     complete(&db, w, &second, &out, &cfg).await;
     renders
@@ -1086,8 +1288,14 @@ async fn a_ban_reopens_a_finished_job_and_withdraws_its_poisoned_known_answers(d
     // Two colluders agree on the only unit of a job, which finishes with their answer.
     let job_id = pi_job_with(&db, &cfg, 1, 1000, 21).await;
     let (m1, m2) = (worker(&db).await, worker(&db).await);
-    let c1 = db::claim_unit(&db, m1, &cfg).await.unwrap().unwrap();
-    let c2 = db::claim_unit(&db, m2, &cfg).await.unwrap().unwrap();
+    let c1 = db::claim_unit(&db, m1, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
+    let c2 = db::claim_unit(&db, m2, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
     complete(&db, m1, &c1, &wrong(&c1), &cfg).await;
     complete(&db, m2, &c2, &wrong(&c2), &cfg).await;
     assert_eq!(
@@ -1101,7 +1309,10 @@ async fn a_ban_reopens_a_finished_job_and_withdraws_its_poisoned_known_answers(d
         ..cfg.clone()
     };
     let h = worker(&db).await;
-    let trap = db::claim_unit(&db, h, &traps).await.unwrap().unwrap();
+    let trap = db::claim_unit(&db, h, PUBLIC_NETWORK, false, &traps)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(trap.unit_id, c1.unit_id);
     let unfair = complete(&db, h, &trap, &honest(&trap), &traps).await;
     assert!(matches!(
@@ -1140,7 +1351,10 @@ async fn a_ban_reopens_a_finished_job_and_withdraws_its_poisoned_known_answers(d
         .await
         .unwrap();
     set_standing(&db, m1, 0, 2).await;
-    let exposed = db::claim_unit(&db, m1, &traps).await.unwrap().unwrap();
+    let exposed = db::claim_unit(&db, m1, PUBLIC_NETWORK, false, &traps)
+        .await
+        .unwrap()
+        .unwrap();
     let caught = complete(&db, m1, &exposed, &wrong(&exposed), &traps).await;
     assert!(standing(&db, m1).await.2, "the colluder is banned");
     assert_eq!(caught.reopened(), &[job_id]);
@@ -1161,7 +1375,10 @@ async fn a_ban_reopens_a_finished_job_and_withdraws_its_poisoned_known_answers(d
     // its say and is outvoted), and the result is exact.
     for _ in 0..3 {
         let x = worker(&db).await;
-        let Some(cx) = db::claim_unit(&db, x, &cfg).await.unwrap() else {
+        let Some(cx) = db::claim_unit(&db, x, PUBLIC_NETWORK, false, &cfg)
+            .await
+            .unwrap()
+        else {
             break;
         };
         assert_eq!(cx.unit_id, c1.unit_id);

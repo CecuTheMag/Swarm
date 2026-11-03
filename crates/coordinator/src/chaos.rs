@@ -1,16 +1,19 @@
-//! The chaos panel (spec 0008): the organiser switches devices off, cuts them off, or
-//! adds cheaters, live in front of the room. Every action needs the submit password.
+//! Resilience tests (spec 0008): a network's admins switch devices off, cut them off,
+//! or add cheaters, live, and watch the network cope. `/api/chaos/*` acts on the public
+//! network; `/api/networks/{id}/chaos/*` on any network (spec 0010).
 
 use crate::{
-    api::{AppError, authorize},
+    api::AppError,
+    auth::{self, PUBLIC_NETWORK},
+    networks,
     state::{AppState, Disruption},
 };
 use axum::{
     Json,
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, Method, StatusCode},
 };
-use protocol::AddCheaters;
+use protocol::{AddCheaters, api::Role};
 use sim_worker::{Cheat, Options};
 use std::{
     sync::atomic::Ordering,
@@ -25,32 +28,97 @@ const CHEATER_UNIT_TIME: Duration = Duration::from_secs(1);
 /// A cheater that is never caught (no job running) leaves after this long.
 const CHEATER_LIFETIME: Duration = Duration::from_secs(300);
 
-/// Switches a device off: its connection closes and its units go back to the queue.
+/// Switches a device of the public network off.
 pub async fn kill_worker(
     State(state): State<AppState>,
+    method: Method,
     headers: HeaderMap,
-    Path(id): Path<Uuid>,
+    Path(worker): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    disrupt(&state, &headers, id, Disruption::Kill)
+    disrupt(
+        &state,
+        &method,
+        &headers,
+        PUBLIC_NETWORK,
+        worker,
+        Disruption::Kill,
+    )
+    .await
 }
 
-/// Cuts a device off, as if it lost its signal.
+/// Cuts a device of the public network off, as if it lost its signal.
 pub async fn cut_off_worker(
     State(state): State<AppState>,
+    method: Method,
     headers: HeaderMap,
-    Path(id): Path<Uuid>,
+    Path(worker): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    disrupt(&state, &headers, id, Disruption::CutOff)
+    disrupt(
+        &state,
+        &method,
+        &headers,
+        PUBLIC_NETWORK,
+        worker,
+        Disruption::CutOff,
+    )
+    .await
 }
 
-fn disrupt(
+pub async fn add_cheaters(
+    State(state): State<AppState>,
+    method: Method,
+    headers: HeaderMap,
+    Json(body): Json<AddCheaters>,
+) -> Result<StatusCode, AppError> {
+    cheaters(&state, &method, &headers, PUBLIC_NETWORK, body).await
+}
+
+pub async fn network_kill(
+    State(state): State<AppState>,
+    method: Method,
+    headers: HeaderMap,
+    Path((network, worker)): Path<(Uuid, Uuid)>,
+) -> Result<StatusCode, AppError> {
+    disrupt(&state, &method, &headers, network, worker, Disruption::Kill).await
+}
+
+pub async fn network_cut_off(
+    State(state): State<AppState>,
+    method: Method,
+    headers: HeaderMap,
+    Path((network, worker)): Path<(Uuid, Uuid)>,
+) -> Result<StatusCode, AppError> {
+    disrupt(
+        &state,
+        &method,
+        &headers,
+        network,
+        worker,
+        Disruption::CutOff,
+    )
+    .await
+}
+
+pub async fn network_cheaters(
+    State(state): State<AppState>,
+    method: Method,
+    headers: HeaderMap,
+    Path(network): Path<Uuid>,
+    Json(body): Json<AddCheaters>,
+) -> Result<StatusCode, AppError> {
+    cheaters(&state, &method, &headers, network, body).await
+}
+
+async fn disrupt(
     state: &AppState,
+    method: &Method,
     headers: &HeaderMap,
-    id: Uuid,
+    network: Uuid,
+    worker: Uuid,
     disruption: Disruption,
 ) -> Result<StatusCode, AppError> {
-    authorize(state, headers)?;
-    if state.disrupt(id, disruption) {
+    auth::network_access(state, method, headers, network, Role::Admin).await?;
+    if state.disrupt(network, worker, disruption) {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(AppError::NotFound)
@@ -59,12 +127,14 @@ fn disrupt(
 
 /// Adds simulated devices that make up every result. They connect to this coordinator
 /// like any device and go through the same verification, so catching them is real.
-pub async fn add_cheaters(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(body): Json<AddCheaters>,
+async fn cheaters(
+    state: &AppState,
+    method: &Method,
+    headers: &HeaderMap,
+    network: Uuid,
+    body: AddCheaters,
 ) -> Result<StatusCode, AppError> {
-    authorize(&state, &headers)?;
+    auth::network_access(state, method, headers, network, Role::Admin).await?;
     if !(1..=3).contains(&body.count) {
         return Err(AppError::BadRequest("count must be between 1 and 3".into()));
     }
@@ -72,6 +142,14 @@ pub async fn add_cheaters(
         return Err(AppError::BadRequest(
             "this coordinator cannot add cheaters".into(),
         ));
+    };
+    let join_code = if network == PUBLIC_NETWORK {
+        None
+    } else {
+        let rules = networks::by_id(&state.db, network)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        Some(rules.join_code)
     };
     let count = body.count as usize;
     state
@@ -86,12 +164,13 @@ pub async fn add_cheaters(
     } else {
         Cheat::Random { rate: 1.0 }
     };
-    tracing::info!(count, collude = body.collude, "chaos panel adds cheaters");
+    tracing::info!(%network, count, collude = body.collude, "chaos panel adds cheaters");
     for _ in 0..count {
         let state = state.clone();
         let opts = Options {
             url: url.clone(),
             cheat,
+            join_code: join_code.clone(),
             delay: CHEATER_UNIT_TIME,
             deadline: Some(Instant::now() + CHEATER_LIFETIME),
             ..Options::default()

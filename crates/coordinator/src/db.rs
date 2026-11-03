@@ -2,7 +2,7 @@
 //! single transaction here, so correctness does not depend on how many
 //! coordinator instances run.
 
-use crate::{state::Config, templates};
+use crate::{auth::PUBLIC_NETWORK, state::Config, templates};
 use protocol::{DeviceInfo, JobStatus, JobSummary, TemplateRef};
 use serde_json::Value;
 use sqlx::{FromRow, PgPool, Postgres, Transaction, types::Json};
@@ -43,6 +43,7 @@ pub fn unix_ms(t: OffsetDateTime) -> i64 {
 #[derive(FromRow)]
 struct JobRow {
     id: Uuid,
+    network_id: Uuid,
     template: String,
     status: String,
     params: Json<Value>,
@@ -58,6 +59,7 @@ impl From<JobRow> for JobSummary {
     fn from(r: JobRow) -> Self {
         JobSummary {
             id: r.id,
+            network_id: r.network_id,
             template: r.template,
             // The CHECK constraint guarantees one of the known values.
             status: JobStatus::parse(&r.status).unwrap_or(JobStatus::Failed),
@@ -75,7 +77,7 @@ impl From<JobRow> for JobSummary {
 /// Columns of `JobRow`; a macro so queries stay `&'static str` (checked by sqlx).
 macro_rules! job_columns {
     () => {
-        "id, template, status, params, units_total, units_done, result, error, created_at, finished_at"
+        "id, network_id, template, status, params, units_total, units_done, result, error, created_at, finished_at"
     };
 }
 
@@ -83,6 +85,7 @@ macro_rules! job_columns {
 /// agreeing results (spec 0004).
 pub async fn create_job(
     db: &PgPool,
+    network_id: Uuid,
     template: &templates::Registered,
     params: &Value,
     unit_params: Vec<Value>,
@@ -97,8 +100,8 @@ pub async fn create_job(
         .await?;
     let job: JobRow = sqlx::query_as(concat!(
         "INSERT INTO jobs (id, template, template_version, template_sha256, params, status,
-                           units_total)
-         VALUES ($1, $2, $3, $4, $5, 'queued', $6)
+                           units_total, network_id)
+         VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7)
          RETURNING ",
         job_columns!(),
         ""
@@ -109,14 +112,15 @@ pub async fn create_job(
     .bind(&template.sha256)
     .bind(Json(params))
     .bind(unit_params.len() as i32)
+    .bind(network_id)
     .fetch_one(&mut *tx)
     .await?;
 
     let ids: Vec<Uuid> = (0..unit_params.len()).map(|_| Uuid::now_v7()).collect();
     let seqs: Vec<i32> = (0..unit_params.len() as i32).collect();
     sqlx::query(
-        "INSERT INTO units (id, job_id, seq, params, status, created_at, target)
-         SELECT id, $2, seq, params, 'pending', $5, $6
+        "INSERT INTO units (id, job_id, seq, params, status, created_at, target, network_id)
+         SELECT id, $2, seq, params, 'pending', $5, $6, $7
          FROM unnest($1::uuid[], $3::int[], $4::jsonb[]) AS u(id, seq, params)",
     )
     .bind(&ids)
@@ -125,6 +129,7 @@ pub async fn create_job(
     .bind(&unit_params)
     .bind(job.created_at)
     .bind(redundancy.max(1) as i32)
+    .bind(network_id)
     .execute(&mut *tx)
     .await?;
 
@@ -144,27 +149,56 @@ pub async fn get_job(db: &PgPool, id: Uuid) -> sqlx::Result<Option<JobSummary>> 
     Ok(row.map(Into::into))
 }
 
-pub async fn recent_jobs(db: &PgPool, limit: i64) -> sqlx::Result<Vec<JobSummary>> {
+/// A network's latest jobs, newest first.
+pub async fn recent_jobs(
+    db: &PgPool,
+    network_id: Uuid,
+    limit: i64,
+) -> sqlx::Result<Vec<JobSummary>> {
     let rows: Vec<JobRow> = sqlx::query_as(concat!(
         "SELECT ",
         job_columns!(),
-        " FROM jobs ORDER BY created_at DESC LIMIT $1"
+        " FROM jobs WHERE network_id = $1 ORDER BY created_at DESC LIMIT $2"
     ))
+    .bind(network_id)
     .bind(limit)
     .fetch_all(db)
     .await?;
     Ok(rows.into_iter().map(Into::into).collect())
 }
 
-/// Registers a worker connection under its client, creating the client on first
-/// sight. Returns when the connection started, or `None` if the client is banned.
+/// How a worker connection was registered.
+pub enum Registration {
+    /// The client returned wrong results and is blocked everywhere (spec 0004).
+    Banned,
+    /// The network's owner removed this device (spec 0010).
+    Removed,
+    Registered {
+        connected_at: OffsetDateTime,
+        device: DeviceRecord,
+    },
+}
+
+/// A device's state in its network, as its session needs it.
+#[derive(Debug, Clone, FromRow)]
+pub struct DeviceRecord {
+    pub id: Uuid,
+    pub name: Option<String>,
+    pub status: String,
+    pub paused: bool,
+}
+
+/// Registers a worker connection under its client and its device in `network_id`,
+/// creating either on first sight; a new device waits for approval when `approval`.
 pub async fn insert_worker(
     db: &PgPool,
     id: Uuid,
     device: &DeviceInfo,
     client_version: &str,
     client_id: Uuid,
-) -> sqlx::Result<Option<OffsetDateTime>> {
+    network_id: Uuid,
+    approval: bool,
+) -> sqlx::Result<Registration> {
     let mut tx = db.begin().await?;
     sqlx::query("INSERT INTO clients (id) VALUES ($1) ON CONFLICT (id) DO NOTHING")
         .bind(client_id)
@@ -177,23 +211,76 @@ pub async fn insert_worker(
             .await?;
     if banned.is_some() {
         tx.commit().await?;
-        return Ok(None);
+        return Ok(Registration::Banned);
     }
     let backend = serde_json::to_value(device.backend).expect("enum serializes");
+    let backend = backend.as_str().unwrap_or_default();
+    let record: DeviceRecord = sqlx::query_as(
+        "INSERT INTO devices (id, network_id, client_id, status, backend, vendor, architecture)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (network_id, client_id) DO UPDATE
+             SET backend = EXCLUDED.backend, vendor = EXCLUDED.vendor,
+                 architecture = EXCLUDED.architecture, last_seen_at = now()
+         RETURNING id, name, status, paused",
+    )
+    .bind(Uuid::now_v7())
+    .bind(network_id)
+    .bind(client_id)
+    .bind(if approval { "pending" } else { "active" })
+    .bind(backend)
+    .bind(&device.vendor)
+    .bind(&device.architecture)
+    .fetch_one(&mut *tx)
+    .await?;
+    if record.status == "removed" {
+        tx.commit().await?;
+        return Ok(Registration::Removed);
+    }
     let connected_at = sqlx::query_scalar(
-        "INSERT INTO workers (id, backend, vendor, architecture, client_version, client_id)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING connected_at",
+        "INSERT INTO workers (id, backend, vendor, architecture, client_version, client_id,
+                              network_id, device_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING connected_at",
     )
     .bind(id)
-    .bind(backend.as_str().unwrap_or_default())
+    .bind(backend)
     .bind(&device.vendor)
     .bind(&device.architecture)
     .bind(client_version)
     .bind(client_id)
+    .bind(network_id)
+    .bind(record.id)
     .fetch_one(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(Some(connected_at))
+    Ok(Registration::Registered {
+        connected_at,
+        device: record,
+    })
+}
+
+/// A device's current state in its network.
+pub async fn device_record(db: &PgPool, device_id: Uuid) -> sqlx::Result<Option<DeviceRecord>> {
+    sqlx::query_as("SELECT id, name, status, paused FROM devices WHERE id = $1")
+        .bind(device_id)
+        .fetch_optional(db)
+        .await
+}
+
+/// Adds decided units to their devices' totals and marks them seen.
+pub async fn add_device_units(db: &PgPool, counts: &[(Uuid, i32)]) -> sqlx::Result<()> {
+    if counts.is_empty() {
+        return Ok(());
+    }
+    let (ids, units): (Vec<Uuid>, Vec<i32>) = counts.iter().copied().unzip();
+    sqlx::query(
+        "UPDATE devices d SET units_done = d.units_done + c.units, last_seen_at = now()
+         FROM unnest($1::uuid[], $2::int[]) AS c(id, units) WHERE d.id = c.id",
+    )
+    .bind(&ids)
+    .bind(&units)
+    .execute(db)
+    .await?;
+    Ok(())
 }
 
 /// Whether the worker's client is banned.
@@ -265,7 +352,17 @@ async fn client_of(
 /// `SKIP LOCKED` lets concurrent claimers pass over rows another transaction is taking.
 /// Sometimes the answer is a copy of an already verified unit instead (a honeypot), and
 /// a trusted client may get a unit to compute alone (spec 0004).
-pub async fn claim_unit(db: &PgPool, worker_id: Uuid, cfg: &Config) -> sqlx::Result<Option<Claim>> {
+///
+/// A device works for its own network; when that has nothing pending and `lend` is set,
+/// for the public network (spec 0010). Honeypots come from either, never from another
+/// client's network.
+pub async fn claim_unit(
+    db: &PgPool,
+    worker_id: Uuid,
+    network_id: Uuid,
+    lend: bool,
+    cfg: &Config,
+) -> sqlx::Result<Option<Claim>> {
     let mut tx = db.begin().await?;
     let client = client_of(&mut tx, worker_id).await?;
     if client.banned {
@@ -279,28 +376,16 @@ pub async fn claim_unit(db: &PgPool, worker_id: Uuid, cfg: &Config) -> sqlx::Res
         cfg.new_client_honeypot_rate
     };
     if fastrand::f64() < honeypot_rate
-        && let Some(claim) = claim_honeypot(&mut tx, worker_id, client.id, cfg).await?
+        && let Some(claim) = claim_honeypot(&mut tx, worker_id, client.id, network_id, cfg).await?
     {
         tx.commit().await?;
         return Ok(Some(claim));
     }
 
-    let unit: Option<(Uuid, Uuid, Json<Value>, i32)> = sqlx::query_as(
-        "SELECT u.id, u.job_id, u.params, u.target FROM units u
-         WHERE u.status = 'pending'
-           AND NOT EXISTS (
-               SELECT 1 FROM leases l JOIN workers w ON w.id = l.worker_id
-               WHERE l.unit_id = u.id AND l.released_at IS NULL
-                 AND (w.client_id = $1 OR l.worker_id = $2)
-           )
-         ORDER BY u.created_at, u.job_id, u.seq
-         LIMIT 1
-         FOR UPDATE OF u SKIP LOCKED",
-    )
-    .bind(client.id)
-    .bind(worker_id)
-    .fetch_optional(&mut *tx)
-    .await?;
+    let mut unit = pending_unit(&mut tx, client.id, worker_id, network_id).await?;
+    if unit.is_none() && lend && network_id != PUBLIC_NETWORK {
+        unit = pending_unit(&mut tx, client.id, worker_id, PUBLIC_NETWORK).await?;
+    }
     let Some((unit_id, job_id, Json(params), target)) = unit else {
         return Ok(None);
     };
@@ -345,19 +430,46 @@ pub async fn claim_unit(db: &PgPool, worker_id: Uuid, cfg: &Config) -> sqlx::Res
     }))
 }
 
-/// A copy of a unit verified in a finished job, as long as this client has not
-/// answered it.
+/// The next pending unit of `network_id` this client may take, locked.
+async fn pending_unit(
+    tx: &mut Transaction<'_, Postgres>,
+    client_id: Uuid,
+    worker_id: Uuid,
+    network_id: Uuid,
+) -> sqlx::Result<Option<(Uuid, Uuid, Json<Value>, i32)>> {
+    sqlx::query_as(
+        "SELECT u.id, u.job_id, u.params, u.target FROM units u
+         WHERE u.network_id = $3 AND u.status = 'pending'
+           AND NOT EXISTS (
+               SELECT 1 FROM leases l JOIN workers w ON w.id = l.worker_id
+               WHERE l.unit_id = u.id AND l.released_at IS NULL
+                 AND (w.client_id = $1 OR l.worker_id = $2)
+           )
+         ORDER BY u.created_at, u.job_id, u.seq
+         LIMIT 1
+         FOR UPDATE OF u SKIP LOCKED",
+    )
+    .bind(client_id)
+    .bind(worker_id)
+    .bind(network_id)
+    .fetch_optional(&mut **tx)
+    .await
+}
+
+/// A copy of a unit verified in a finished job of this network or the public one, as
+/// long as this client has not answered it.
 async fn claim_honeypot(
     tx: &mut Transaction<'_, Postgres>,
     worker_id: Uuid,
     client_id: Uuid,
+    network_id: Uuid,
     cfg: &Config,
 ) -> sqlx::Result<Option<Claim>> {
     // A few random picks: a client that has answered many of the known units would
     // otherwise rarely be given one.
     let mut unit = None;
     for _ in 0..HONEYPOT_PICKS {
-        unit = pick_honeypot(tx, worker_id, client_id).await?;
+        unit = pick_honeypot(tx, worker_id, client_id, network_id).await?;
         if unit.is_some() {
             break;
         }
@@ -391,6 +503,7 @@ async fn pick_honeypot(
     tx: &mut Transaction<'_, Postgres>,
     worker_id: Uuid,
     client_id: Uuid,
+    network_id: Uuid,
 ) -> sqlx::Result<Option<(Uuid, Uuid, Json<Value>)>> {
     sqlx::query_as(
         // The unit's number is drawn once, with the job: a random() in the join
@@ -399,6 +512,7 @@ async fn pick_honeypot(
         "SELECT u.id, u.job_id, u.params
          FROM (SELECT id, floor(random() * units_total)::int AS seq
                FROM jobs WHERE status = 'done' AND template_sha256 = ANY($3)
+                 AND network_id = ANY($4)
                ORDER BY random() LIMIT 1) j
          JOIN units u ON u.job_id = j.id AND u.seq = j.seq AND u.status = 'done'
          WHERE NOT EXISTS (
@@ -410,6 +524,7 @@ async fn pick_honeypot(
     .bind(client_id)
     .bind(worker_id)
     .bind(templates::current_hashes())
+    .bind([network_id, PUBLIC_NETWORK])
     .fetch_optional(&mut **tx)
     .await
 }
@@ -487,6 +602,8 @@ pub enum Completion {
     /// whether this worker's result was among those that agreed.
     Decided {
         job_id: Uuid,
+        /// The job's network, whose dashboards hear about the unit.
+        network_id: Uuid,
         unit_id: Uuid,
         unit_params: Value,
         output: Value,
@@ -821,13 +938,14 @@ async fn decide(
         .execute(&mut **tx)
         .await?;
 
-    let (units_done, units_total, Json(job_params)): (i32, i32, Json<Value>) = sqlx::query_as(
-        "UPDATE jobs SET units_done = units_done + 1 WHERE id = $1
-         RETURNING units_done, units_total, params",
-    )
-    .bind(job_id)
-    .fetch_one(&mut **tx)
-    .await?;
+    let (units_done, units_total, Json(job_params), network_id): (i32, i32, Json<Value>, Uuid) =
+        sqlx::query_as(
+            "UPDATE jobs SET units_done = units_done + 1 WHERE id = $1
+             RETURNING units_done, units_total, params, network_id",
+        )
+        .bind(job_id)
+        .fetch_one(&mut **tx)
+        .await?;
 
     let job_finished = if units_done == units_total {
         let outputs: Vec<Json<Value>> =
@@ -862,6 +980,7 @@ async fn decide(
 
     Ok(Completion::Decided {
         job_id,
+        network_id,
         unit_id,
         unit_params,
         output,

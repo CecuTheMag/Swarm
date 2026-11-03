@@ -5,7 +5,7 @@
 use anyhow::{Context, bail};
 use futures_util::{SinkExt, StreamExt};
 use protocol::{
-    Backend, CoordinatorMessage, DeviceInfo, PROTOCOL_VERSION, WorkerMessage,
+    Backend, CoordinatorMessage, DeviceControl, DeviceInfo, PROTOCOL_VERSION, WorkerMessage,
     templates::{pi, pt},
 };
 use serde_json::{Value, json};
@@ -31,6 +31,8 @@ pub struct Options {
     pub exit_when_idle: bool,
     /// The client id to report; `None` makes a new one per run.
     pub client_id: Option<Uuid>,
+    /// Join this network (its join code) instead of the public one (spec 0010).
+    pub join_code: Option<String>,
     /// Fault injection: return wrong results.
     pub cheat: Cheat,
     /// Units kept requested at once; the browser keeps 2–8 in flight.
@@ -53,6 +55,7 @@ impl Default for Options {
             exit_when_idle: false,
             client_id: None,
             cheat: Cheat::Honest,
+            join_code: None,
             in_flight: 1,
             connect_to: None,
             deadline: None,
@@ -238,6 +241,7 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
                 architecture: std::env::consts::ARCH.into(),
             },
             client_id: Some(opts.client_id.unwrap_or_else(Uuid::new_v4)),
+            join_code: opts.join_code.clone(),
         },
     )
     .await?;
@@ -370,6 +374,13 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
                 if !draining {
                     retries += 1;
                     retry_at.get_or_insert_with(|| tokio::time::Instant::now() + wait);
+                }
+            }
+            // Paused, outside working hours or awaiting approval: work requests get
+            // `no_work` meanwhile, which already paces the worker.
+            CoordinatorMessage::Control { control, .. } => {
+                if control == DeviceControl::Removed {
+                    break;
                 }
             }
             CoordinatorMessage::Error { message } => bail!("coordinator error: {message}"),

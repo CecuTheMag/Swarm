@@ -1,21 +1,28 @@
-//! WebSocket endpoints for workers and dashboards.
+//! WebSocket endpoints: workers, network dashboards, and the summary a joined device
+//! sees of its network.
 
 use crate::{
-    db::{self, Completion},
-    state::{AppState, Disruption},
+    api::AppError,
+    auth::{self, PUBLIC_NETWORK},
+    db::{self, Completion, DeviceRecord, Registration},
+    networks::{self, NetworkRules},
+    state::{AppState, Disruption, SessionCommand},
 };
 use axum::{
     extract::{
-        State,
+        Path, State,
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
-    response::Response,
+    http::{HeaderMap, Method},
+    response::{IntoResponse, Response},
 };
+use jiff::Timestamp;
 use protocol::{
-    CoordinatorMessage, DashboardEvent, PROTOCOL_VERSION, WorkerMessage, WorkerSummary,
+    CoordinatorMessage, DashboardEvent, DeviceControl, PROTOCOL_VERSION, WorkerMessage,
+    WorkerSummary, api::Role,
 };
 use std::{collections::HashSet, time::Duration};
-use tokio::sync::{broadcast::error::RecvError, oneshot};
+use tokio::sync::{broadcast::error::RecvError, mpsc};
 use uuid::Uuid;
 
 /// Sent to clients banned for wrong results (spec 0004).
@@ -30,8 +37,59 @@ pub async fn worker(ws: WebSocketUpgrade, State(state): State<AppState>) -> Resp
         .on_upgrade(move |socket| worker_session(socket, state))
 }
 
+/// The public network's live events, open to anyone (the home page shows them).
 pub async fn dashboard(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
-    ws.on_upgrade(move |socket| dashboard_session(socket, state))
+    ws.on_upgrade(move |socket| dashboard_session(socket, state, PUBLIC_NETWORK))
+}
+
+/// A network's live events, for its members (spec 0010).
+pub async fn network_live(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+    method: Method,
+    headers: HeaderMap,
+    Path(network_id): Path<Uuid>,
+) -> Result<Response, AppError> {
+    auth::network_access(&state, &method, &headers, network_id, Role::Viewer).await?;
+    Ok(ws.on_upgrade(move |socket| dashboard_session(socket, state, network_id)))
+}
+
+/// What a device that joined a network sees of it, once a second (spec 0010).
+pub async fn join_summary(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+    Path(code): Path<String>,
+) -> Result<Response, AppError> {
+    let rules = networks::by_join_code(&state.db, &code)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    Ok(ws
+        .on_upgrade(move |socket| summary_session(socket, state, rules.id, rules.name))
+        .into_response())
+}
+
+async fn summary_session(mut socket: WebSocket, state: AppState, network_id: Uuid, name: String) {
+    let mut tick = tokio::time::interval(Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            incoming = socket.recv() => match incoming {
+                None | Some(Err(_)) | Some(Ok(Message::Close(_))) => return,
+                Some(Ok(_)) => {}
+            },
+            _ = tick.tick() => {
+                let summary = match state.network_summary(network_id, &name).await {
+                    Ok(summary) => summary,
+                    Err(e) => {
+                        tracing::error!(error = %e, "failed to build a network summary");
+                        return;
+                    }
+                };
+                if !send(&mut socket, &summary).await {
+                    return;
+                }
+            }
+        }
+    }
 }
 
 enum Incoming {
@@ -77,25 +135,29 @@ async fn reject(socket: &mut WebSocket, message: impl Into<String>) {
 
 async fn worker_session(mut socket: WebSocket, state: AppState) {
     let cfg = &state.config;
-    let (client_version, device, client_id) = match recv(&mut socket, cfg.idle_timeout).await {
+    let (client_version, device, client_id, join_code) = match recv(&mut socket, cfg.idle_timeout)
+        .await
+    {
         Incoming::Message(WorkerMessage::Hello {
             protocol_version,
             client_version,
             device,
             client_id,
+            join_code,
         }) => {
             if protocol_version != PROTOCOL_VERSION {
                 return reject(
-                    &mut socket,
-                    format!("protocol version {protocol_version} unsupported, expected {PROTOCOL_VERSION}"),
-                )
-                .await;
+                        &mut socket,
+                        format!("protocol version {protocol_version} unsupported, expected {PROTOCOL_VERSION}"),
+                    )
+                    .await;
             }
             // Without an id of its own, the connection is a new client.
             (
                 client_version,
                 device,
                 client_id.unwrap_or_else(Uuid::now_v7),
+                join_code,
             )
         }
         Incoming::Message(_) => return reject(&mut socket, "expected hello").await,
@@ -103,32 +165,67 @@ async fn worker_session(mut socket: WebSocket, state: AppState) {
         Incoming::Closed => return,
     };
 
+    // The network of the join link, or the public one.
+    let rules = match &join_code {
+        Some(code) => networks::by_join_code(&state.db, code).await,
+        None => networks::by_id(&state.db, PUBLIC_NETWORK).await,
+    };
+    let rules = match rules {
+        Ok(Some(rules)) => rules,
+        Ok(None) => return reject(&mut socket, UNKNOWN_NETWORK).await,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to look up the network");
+            return reject(&mut socket, "internal error").await;
+        }
+    };
+
     let worker_id = Uuid::now_v7();
-    let connected_at =
-        match db::insert_worker(&state.db, worker_id, &device, &client_version, client_id).await {
-            Ok(Some(t)) => t,
-            Ok(None) => return reject(&mut socket, BLOCKED).await,
-            Err(e) => {
-                tracing::error!(error = %e, "failed to register worker");
-                return reject(&mut socket, "internal error").await;
-            }
-        };
+    let approval = rules.join_mode == protocol::api::JoinMode::Approval;
+    let registration = db::insert_worker(
+        &state.db,
+        worker_id,
+        &device,
+        &client_version,
+        client_id,
+        rules.id,
+        approval,
+    )
+    .await;
+    let (connected_at, device_record) = match registration {
+        Ok(Registration::Registered {
+            connected_at,
+            device,
+        }) => (connected_at, device),
+        Ok(Registration::Banned) => return reject(&mut socket, BLOCKED).await,
+        Ok(Registration::Removed) => return reject(&mut socket, REMOVED).await,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to register worker");
+            return reject(&mut socket, "internal error").await;
+        }
+    };
     let summary = WorkerSummary {
         id: worker_id,
         device,
         connected_at: db::unix_ms(connected_at),
         units_done: 0,
     };
-    let mut disruptions = Some(state.disruptions_of(worker_id));
-    state.worker_joined(summary, client_id);
-    tracing::info!(%worker_id, %client_id, %client_version, "worker joined");
+    let mut commands = state.commands_of(worker_id);
+    let network_id = rules.id;
+    state.worker_joined(summary, client_id, network_id, device_record.id);
+    tracing::info!(%worker_id, %client_id, %network_id, %client_version, "worker joined");
 
     let welcome = CoordinatorMessage::Welcome {
         worker_id,
         heartbeat_interval_ms: cfg.heartbeat_interval.as_millis() as u32,
     };
+    let mut session = Session {
+        worker_id,
+        rules,
+        device: device_record,
+        control: DeviceControl::Running,
+    };
     if send(&mut socket, &welcome).await
-        && let Err(e) = worker_loop(&mut socket, &state, worker_id, &mut disruptions).await
+        && let Err(e) = worker_loop(&mut socket, &state, &mut session, &mut commands).await
     {
         tracing::error!(%worker_id, error = %e, "worker session failed");
     }
@@ -152,13 +249,70 @@ async fn worker_session(mut socket: WebSocket, state: AppState) {
     tracing::info!(%worker_id, "worker left");
 }
 
-/// The next disruption from the chaos panel; never, if none can come any more.
-async fn disrupted(disruptions: &mut Option<oneshot::Receiver<Disruption>>) -> Disruption {
-    if let Some(rx) = disruptions {
-        if let Ok(disruption) = rx.await {
-            return disruption;
+/// Sent to devices whose join link names no network (any more).
+const UNKNOWN_NETWORK: &str = "this network does not exist: the link may be out of date";
+/// Sent to devices removed from their network by its owner.
+const REMOVED: &str = "this device was removed from the network";
+
+/// A worker's network and device, and what they allow it.
+struct Session {
+    worker_id: Uuid,
+    rules: NetworkRules,
+    device: DeviceRecord,
+    control: DeviceControl,
+}
+
+impl Session {
+    /// What the device may do now; hours open and close as time passes.
+    fn current(&self) -> DeviceControl {
+        networks::control(&self.rules, &self.device, Timestamp::now())
+    }
+
+    /// Reloads the network and the device after the console changed them. A network
+    /// or device that no longer exists means the device was removed.
+    async fn reload(&mut self, state: &AppState) -> Result<(), sqlx::Error> {
+        match networks::by_id(&state.db, self.rules.id).await? {
+            Some(rules) => self.rules = rules,
+            None => self.device.status = "removed".into(),
         }
-        *disruptions = None;
+        match db::device_record(&state.db, self.device.id).await? {
+            Some(device) => self.device = device,
+            None => self.device.status = "removed".into(),
+        }
+        Ok(())
+    }
+
+    fn message(&self) -> CoordinatorMessage {
+        CoordinatorMessage::Control {
+            control: self.control.clone(),
+            max_power: self.rules.max_power,
+        }
+    }
+}
+
+/// Tells the device if what it may do changed (or `force`). Returns false when the
+/// connection is gone.
+async fn sync_control(socket: &mut WebSocket, session: &mut Session, force: bool) -> bool {
+    let now = session.current();
+    if !force && now == session.control {
+        return true;
+    }
+    if now != session.control {
+        tracing::debug!(worker_id = %session.worker_id, control = ?now, "device control changed");
+    }
+    session.control = now;
+    send(socket, &session.message()).await
+}
+
+/// The next command from the chaos panel or the console; never, once none can come.
+async fn next_command(
+    commands: &mut Option<&mut mpsc::UnboundedReceiver<SessionCommand>>,
+) -> SessionCommand {
+    if let Some(rx) = commands {
+        if let Some(command) = rx.recv().await {
+            return command;
+        }
+        *commands = None;
     }
     std::future::pending().await
 }
@@ -166,25 +320,48 @@ async fn disrupted(disruptions: &mut Option<oneshot::Receiver<Disruption>>) -> D
 async fn worker_loop(
     socket: &mut WebSocket,
     state: &AppState,
-    worker_id: Uuid,
-    disruptions: &mut Option<oneshot::Receiver<Disruption>>,
+    session: &mut Session,
+    commands: &mut mpsc::UnboundedReceiver<SessionCommand>,
 ) -> Result<(), sqlx::Error> {
     let cfg = &state.config;
+    let worker_id = session.worker_id;
     let mut active: HashSet<Uuid> = HashSet::new();
+    let mut commands = Some(commands);
+    let mut max_power = session.rules.max_power;
+    if !sync_control(socket, session, true).await {
+        return Ok(());
+    }
 
     loop {
         let incoming = tokio::select! {
             incoming = recv(socket, cfg.idle_timeout) => incoming,
-            disruption = disrupted(disruptions) => {
-                tracing::info!(%worker_id, ?disruption, "worker disrupted by the chaos panel");
-                match disruption {
-                    Disruption::Kill => {
-                        let _ = socket.send(Message::Close(None)).await;
+            command = next_command(&mut commands) => {
+                match command {
+                    SessionCommand::Disrupt(disruption) => {
+                        tracing::info!(%worker_id, ?disruption, "worker disrupted by the chaos panel");
+                        match disruption {
+                            Disruption::Kill => {
+                                let _ = socket.send(Message::Close(None)).await;
+                            }
+                            // Nothing more is read or sent; the session ends as a silent one does.
+                            Disruption::CutOff => tokio::time::sleep(cfg.idle_timeout).await,
+                        }
+                        return Ok(());
                     }
-                    // Nothing more is read or sent; the session ends as a silent one does.
-                    Disruption::CutOff => tokio::time::sleep(cfg.idle_timeout).await,
+                    SessionCommand::Refresh => {
+                        session.reload(state).await?;
+                        let force = session.rules.max_power != max_power;
+                        max_power = session.rules.max_power;
+                        if !sync_control(socket, session, force).await {
+                            return Ok(());
+                        }
+                        if session.control == DeviceControl::Removed {
+                            let _ = socket.send(Message::Close(None)).await;
+                            return Ok(());
+                        }
+                        continue;
+                    }
                 }
-                return Ok(());
             }
         };
         let msg = match incoming {
@@ -201,6 +378,10 @@ async fn worker_loop(
             reject(socket, BLOCKED).await;
             return Ok(());
         }
+        // Working hours open and close as time passes.
+        if !sync_control(socket, session, false).await {
+            return Ok(());
+        }
 
         let reply = match msg {
             WorkerMessage::Hello { .. } => {
@@ -213,11 +394,18 @@ async fn worker_loop(
                     reject(socket, "lease limit reached").await;
                     return Ok(());
                 }
-                match db::retrying(|| db::claim_unit(&state.db, worker_id, cfg)).await? {
+                let claim = if session.control == DeviceControl::Running {
+                    let (network, lend) = (session.rules.id, session.rules.lend_idle);
+                    db::retrying(|| db::claim_unit(&state.db, worker_id, network, lend, cfg))
+                        .await?
+                } else {
+                    None
+                };
+                match claim {
                     Some(claim) => {
                         active.insert(claim.lease_id);
                         if let Some(job) = claim.job_started {
-                            state.publish(DashboardEvent::JobUpdated { job });
+                            state.publish(job.network_id, DashboardEvent::JobUpdated { job });
                         }
                         tracing::debug!(%worker_id, lease_id = %claim.lease_id, job_id = %claim.job_id, "unit assigned");
                         CoordinatorMessage::Assign {
@@ -311,13 +499,14 @@ async fn handle_completion(
         state.renders.forget(*job_id).await;
         if let Some(job) = db::get_job(&state.db, *job_id).await? {
             tracing::warn!(%job_id, units_done = job.units_done, "reopened units of a banned client");
-            state.publish(DashboardEvent::JobUpdated { job });
+            state.publish(job.network_id, DashboardEvent::JobUpdated { job });
         }
     }
 
     let suspicious = match completion {
         Completion::Decided {
             job_id,
+            network_id,
             unit_id,
             unit_params,
             output,
@@ -334,17 +523,17 @@ async fn handle_completion(
             if let Some(w) = state.workers.lock().unwrap().get_mut(&worker_id) {
                 w.units_done += 1;
             }
-            state.unit_decided(job_id, worker_id, units_done, units_total);
+            state.unit_decided(network_id, job_id, worker_id, units_done, units_total);
             if let Some(job) = job_finished {
                 tracing::info!(%job_id, status = ?job.status, "job finished");
-                state.publish(DashboardEvent::JobUpdated { job });
+                state.publish(network_id, DashboardEvent::JobUpdated { job });
             }
             !agreed
         }
         Completion::Unresolved { job } => {
             if let Some(job) = job {
                 tracing::warn!(job_id = %job.id, error = job.error.as_deref().unwrap_or(""), "job failed");
-                state.publish(DashboardEvent::JobUpdated { job });
+                state.publish(job.network_id, DashboardEvent::JobUpdated { job });
             }
             false
         }
@@ -368,10 +557,10 @@ async fn handle_completion(
     Ok((accepted, banned))
 }
 
-async fn dashboard_session(mut socket: WebSocket, state: AppState) {
+async fn dashboard_session(mut socket: WebSocket, state: AppState, network_id: Uuid) {
     // Subscribe before taking the snapshot so no event falls in between.
     let mut events = state.events.subscribe();
-    if !send_snapshot(&mut socket, &state).await {
+    if !send_snapshot(&mut socket, &state, network_id).await {
         return;
     }
     loop {
@@ -382,9 +571,10 @@ async fn dashboard_session(mut socket: WebSocket, state: AppState) {
             },
             event = events.recv() => {
                 let sent = match event {
-                    Ok(event) => send(&mut socket, &event).await,
+                    Ok((network, _)) if network != network_id => true,
+                    Ok((_, event)) => send(&mut socket, &event).await,
                     // Too slow to keep up: resynchronise with a fresh snapshot.
-                    Err(RecvError::Lagged(_)) => send_snapshot(&mut socket, &state).await,
+                    Err(RecvError::Lagged(_)) => send_snapshot(&mut socket, &state, network_id).await,
                     Err(RecvError::Closed) => return,
                 };
                 if !sent {
@@ -395,8 +585,8 @@ async fn dashboard_session(mut socket: WebSocket, state: AppState) {
     }
 }
 
-async fn send_snapshot(socket: &mut WebSocket, state: &AppState) -> bool {
-    let jobs = match db::recent_jobs(&state.db, 50).await {
+async fn send_snapshot(socket: &mut WebSocket, state: &AppState, network_id: Uuid) -> bool {
+    let jobs = match db::recent_jobs(&state.db, network_id, 50).await {
         Ok(jobs) => jobs,
         Err(e) => {
             tracing::error!(error = %e, "failed to load jobs for snapshot");
@@ -406,7 +596,7 @@ async fn send_snapshot(socket: &mut WebSocket, state: &AppState) -> bool {
     send(
         socket,
         &DashboardEvent::Snapshot {
-            workers: state.worker_snapshot(),
+            workers: state.worker_snapshot(network_id),
             jobs,
         },
     )

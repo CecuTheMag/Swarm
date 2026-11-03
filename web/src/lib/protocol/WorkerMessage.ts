@@ -10,4 +10,8 @@ export type WorkerMessage = { "type": "hello", protocol_version: number, client_
  * The device's id across connections, kept by the client; its reputation is
  * tracked under it (spec 0004). Without one, every connection starts afresh.
  */
-client_id?: string, } | { "type": "request_work" } | { "type": "heartbeat", lease_ids: Array<string>, } | { "type": "result", lease_id: string, output: JsonValue, elapsed_ms: number, } | { "type": "failed", lease_id: string, reason: string, };
+client_id?: string, 
+/**
+ * The network joined, from its join link (spec 0010); none joins the public one.
+ */
+join_code?: string, } | { "type": "request_work" } | { "type": "heartbeat", lease_ids: Array<string>, } | { "type": "result", lease_id: string, output: JsonValue, elapsed_ms: number, } | { "type": "failed", lease_id: string, reason: string, };

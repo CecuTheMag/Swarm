@@ -18,6 +18,7 @@ import type { WorkerSummary } from '#lib/protocol/WorkerSummary.ts';
 
 const job = (id: string, created_at: number, units_done = 0): JobSummary => ({
 	id,
+	network_id: 'n',
 	template: 'pi',
 	status: 'running',
 	params: {},

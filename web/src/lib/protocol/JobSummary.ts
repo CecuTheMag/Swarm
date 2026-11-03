@@ -2,7 +2,7 @@
 import type { JobStatus } from "./JobStatus";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type JobSummary = { id: string, template: string, status: JobStatus, params: JsonValue, units_total: number, units_done: number, result: JsonValue | null, 
+export type JobSummary = { id: string, network_id: string, template: string, status: JobStatus, params: JsonValue, units_total: number, units_done: number, result: JsonValue | null, 
 /**
  * Why the job failed, when it did.
  */
