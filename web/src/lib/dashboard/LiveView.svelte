@@ -435,8 +435,8 @@
 		background: var(--glass);
 		border: 1px solid var(--glass-border);
 		box-shadow: inset 0 1px 0 var(--glass-highlight);
-		backdrop-filter: blur(var(--glass-blur));
 		-webkit-backdrop-filter: blur(var(--glass-blur));
+		backdrop-filter: blur(var(--glass-blur));
 	}
 	.stat .value {
 		font-size: clamp(1.6rem, 2.8vw, 2.6rem);
