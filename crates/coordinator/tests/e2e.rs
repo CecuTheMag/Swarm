@@ -871,3 +871,215 @@ async fn the_largest_tiles_can_be_delivered(db: PgPool) {
     let job = get_job(&addr, job.id).await;
     assert_eq!(job.status, JobStatus::Done, "{:?}", job.error);
 }
+
+/// Like [`serve`], with the coordinator's own address known, so the chaos panel can add
+/// cheaters that connect to it (spec 0008).
+async fn serve_with_self_url(db: PgPool, config: Config) -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    let state = State::new(
+        db,
+        Config {
+            self_url: Some(format!("ws://{addr}/ws/worker")),
+            ..config
+        },
+    );
+    coordinator::spawn_reaper(state.clone());
+    coordinator::spawn_progress(state.clone());
+    let app = coordinator::router(state);
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    addr
+}
+
+/// A raw worker connection after its hello, and its worker id.
+async fn joined_worker(addr: &str) -> (Ws, uuid::Uuid) {
+    let (mut ws, _) = connect_async(format!("ws://{addr}/ws/worker"))
+        .await
+        .unwrap();
+    ws.send(Message::text(
+        json!({"type":"hello","protocol_version":PROTOCOL_VERSION,"client_version":"test",
+               "device":{"backend":"native","vendor":"x","architecture":"x"}})
+        .to_string(),
+    ))
+    .await
+    .unwrap();
+    match next(&mut ws).await {
+        CoordinatorMessage::Welcome { worker_id, .. } => (ws, worker_id),
+        other => panic!("expected welcome, got {other:?}"),
+    }
+}
+
+async fn chaos(addr: &str, path: &str, auth: Option<&str>) -> reqwest::Response {
+    let mut req = reqwest::Client::new().post(format!("http://{addr}/api/chaos/{path}"));
+    if let Some(auth) = auth {
+        req = req.header("authorization", format!("Bearer {auth}"));
+    }
+    req.send().await.unwrap()
+}
+
+/// Whether the connection ends within `within`, by close frame or by dropping.
+async fn ends_within(ws: &mut Ws, within: Duration) -> bool {
+    tokio::time::timeout(within, async {
+        loop {
+            match ws.next().await {
+                None | Some(Err(_)) | Some(Ok(Message::Close(_))) => return,
+                Some(Ok(_)) => {}
+            }
+        }
+    })
+    .await
+    .is_ok()
+}
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn the_chaos_panel_switches_a_device_off(db: PgPool) {
+    let config = Config {
+        submit_token: Some("pw".into()),
+        ..unverified()
+    };
+    let addr = serve(db, config).await;
+    let (mut dash, _) = connect_async(format!("ws://{addr}/ws/dashboard"))
+        .await
+        .unwrap();
+    assert!(matches!(
+        next_event(&mut dash).await,
+        DashboardEvent::Snapshot { .. }
+    ));
+    let (mut ws, worker_id) = joined_worker(&addr).await;
+    assert!(matches!(
+        next_event(&mut dash).await,
+        DashboardEvent::WorkerJoined { worker } if worker.id == worker_id
+    ));
+
+    let kill = format!("workers/{worker_id}/kill");
+    assert_eq!(chaos(&addr, &kill, None).await.status(), 401);
+    assert_eq!(chaos(&addr, &kill, Some("wrong")).await.status(), 401);
+    let unknown = format!("workers/{}/kill", uuid::Uuid::now_v7());
+    assert_eq!(chaos(&addr, &unknown, Some("pw")).await.status(), 404);
+
+    assert_eq!(chaos(&addr, &kill, Some("pw")).await.status(), 204);
+    assert!(ends_within(&mut ws, Duration::from_secs(2)).await);
+    assert!(matches!(
+        next_event(&mut dash).await,
+        DashboardEvent::WorkerLeft { worker_id: w, .. } if w == worker_id
+    ));
+    assert_eq!(chaos(&addr, &kill, Some("pw")).await.status(), 404);
+
+    // Without its own address this coordinator cannot add cheaters.
+    let res = reqwest::Client::new()
+        .post(format!("http://{addr}/api/chaos/cheaters"))
+        .header("authorization", "Bearer pw")
+        .json(&json!({"count": 1, "collude": false}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
+}
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn a_device_cut_off_is_noticed_by_its_silence_and_its_unit_goes_elsewhere(db: PgPool) {
+    let config = Config {
+        idle_timeout: Duration::from_millis(600),
+        ..unverified()
+    };
+    let addr = serve(db, config).await;
+    let job = create_pi_job(&addr, 1, 1000, 3).await;
+    let (mut ws, worker_id) = joined_worker(&addr).await;
+    ws.send(Message::text(r#"{"type":"request_work"}"#))
+        .await
+        .unwrap();
+    assert!(matches!(
+        next(&mut ws).await,
+        CoordinatorMessage::Assign { .. }
+    ));
+
+    let cut = format!("workers/{worker_id}/cut");
+    assert_eq!(chaos(&addr, &cut, None).await.status(), 204);
+    // The device still talks, but nothing gets through any more.
+    ws.send(Message::text(r#"{"type":"request_work"}"#))
+        .await
+        .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(300), ws.next())
+            .await
+            .is_err(),
+        "a cut-off device got an answer"
+    );
+    // Once silent for the idle timeout the session ends and the unit is free again.
+    assert!(ends_within(&mut ws, Duration::from_secs(3)).await);
+    sim_worker::run(sim(&addr)).await.unwrap();
+    assert_eq!(get_job(&addr, job.id).await.status, JobStatus::Done);
+}
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn cheaters_from_the_chaos_panel_are_caught(db: PgPool) {
+    let config = Config {
+        no_work_retry: Duration::from_millis(100),
+        ..Config::default()
+    };
+    let addr = serve_with_self_url(db, config).await;
+    // A finished, verified job provides known answers, as earlier jobs do on a server.
+    let seeded = create_pi_job(&addr, 6, 5_000, 1).await;
+    finish_with_honest_workers(&addr, seeded.id).await;
+    let (units, samples, seed) = (20, 20_000, 88);
+    let job = create_pi_job(&addr, units, samples, seed).await;
+    let (dash, _) = connect_async(format!("ws://{addr}/ws/dashboard"))
+        .await
+        .unwrap();
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    tokio::spawn(record_events(dash, seen.clone()));
+
+    let add = |body: serde_json::Value| {
+        reqwest::Client::new()
+            .post(format!("http://{addr}/api/chaos/cheaters"))
+            .json(&body)
+            .send()
+    };
+    for count in [0, 4] {
+        let res = add(json!({"count": count, "collude": false}))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 400, "count {count}");
+    }
+    assert_eq!(
+        add(json!({"count": 2, "collude": true}))
+            .await
+            .unwrap()
+            .status(),
+        202
+    );
+    finish_with_honest_workers(&addr, job.id).await;
+
+    // Colluders agree with each other, so they may get a unit or two accepted; they do
+    // not agree with known answers, which catches both.
+    let banned = || {
+        seen.lock()
+            .unwrap()
+            .iter()
+            .filter(|e| matches!(e, DashboardEvent::WorkerBanned { .. }))
+            .count()
+    };
+    let started = std::time::Instant::now();
+    while banned() < 2 {
+        assert!(
+            started.elapsed() < Duration::from_secs(60),
+            "cheaters not caught: {} of 2",
+            banned()
+        );
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    // Whatever they decided is computed again, and the result is exact.
+    let job = finish_with_honest_workers(&addr, job.id).await;
+    assert_eq!(job.status, JobStatus::Done);
+    let result: pi::JobResult = serde_json::from_value(job.result.unwrap()).unwrap();
+    let expected: u64 = (0..units)
+        .map(|unit_index| {
+            u64::from(kernels::pi::count_inside(kernels::pi::UnitParams {
+                seed,
+                unit_index,
+                samples,
+            }))
+        })
+        .sum();
+    assert_eq!(result.inside, expected, "a made-up result survived");
+}

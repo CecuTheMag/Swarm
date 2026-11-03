@@ -9,6 +9,7 @@
 	import type { PiResult } from '#lib/protocol/PiResult.ts';
 	import type { PtResult } from '#lib/protocol/PtResult.ts';
 	import type { ApiError } from '#lib/protocol/ApiError.ts';
+	import { authHeaders, loadPassword, savePassword } from '#lib/password.ts';
 
 	const live = new LiveDashboard();
 	onMount(() => live.start());
@@ -47,14 +48,9 @@
 
 	// Only the organiser starts jobs on a public address (SWARM_SUBMIT_TOKEN); the
 	// password is kept on this device so it is typed once.
-	const PASSWORD_KEY = 'swarm-submit-password';
 	let password = $state('');
 	onMount(() => {
-		try {
-			password = localStorage.getItem(PASSWORD_KEY) ?? '';
-		} catch {
-			// Storage may be unavailable (private mode); the field still works.
-		}
+		password = loadPassword();
 	});
 
 	async function submit(event: SubmitEvent) {
@@ -62,8 +58,7 @@
 		submitting = true;
 		submitError = null;
 		try {
-			const headers: Record<string, string> = { 'content-type': 'application/json' };
-			if (password) headers.authorization = `Bearer ${password}`;
+			const headers = { 'content-type': 'application/json', ...authHeaders(password) };
 			const res = await fetch('/api/jobs', {
 				method: 'POST',
 				headers,
@@ -77,11 +72,7 @@
 				submitError = password ? 'Грешна парола.' : 'Нужна е парола, за да пуснете задача.';
 				return;
 			}
-			try {
-				localStorage.setItem(PASSWORD_KEY, password);
-			} catch {
-				// Not remembered; nothing else depends on it.
-			}
+			savePassword(password);
 			if (!res.ok) submitError = ((await res.json()) as ApiError).error;
 			else if (template === 'pt') {
 				await goto(resolve('/render/[id]', { id: ((await res.json()) as { id: string }).id }));
@@ -99,7 +90,7 @@
 		stopError = null;
 		const res = await fetch(`/api/jobs/${id}/cancel`, {
 			method: 'POST',
-			headers: password ? { authorization: `Bearer ${password}` } : {}
+			headers: authHeaders(password)
 		});
 		if (res.status === 401) {
 			stopError = password ? 'Грешна парола.' : 'Нужна е парола, за да спрете задача.';

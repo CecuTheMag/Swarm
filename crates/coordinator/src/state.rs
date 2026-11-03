@@ -6,10 +6,10 @@ use protocol::{DashboardEvent, JobProgress, WorkerProgress, WorkerSummary};
 use sqlx::PgPool;
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, atomic::AtomicUsize},
     time::Duration,
 };
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, oneshot};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -57,7 +57,11 @@ pub struct Config {
     pub max_leases_per_worker: usize,
     /// Password for submitting jobs (`SWARM_SUBMIT_TOKEN`). Anyone may join as a worker,
     /// but on a public address only the organiser starts jobs. None leaves submitting open.
+    /// The chaos panel needs it too (spec 0008).
     pub submit_token: Option<String>,
+    /// This coordinator's own worker endpoint, which cheaters added by the chaos panel
+    /// connect to like any device. None turns adding cheaters off.
+    pub self_url: Option<String>,
 }
 
 impl Config {
@@ -119,6 +123,7 @@ impl Default for Config {
             no_work_retry: Duration::from_secs(2),
             max_leases_per_worker: 8,
             submit_token: None,
+            self_url: None,
         }
     }
 }
@@ -140,6 +145,20 @@ pub struct State {
     pub renders: Renders,
     /// Units decided since dashboards were last told (see [`State::flush_progress`]).
     progress: Mutex<Progress>,
+    /// How the chaos panel reaches each connected worker's session.
+    disruptions: Mutex<HashMap<Uuid, oneshot::Sender<Disruption>>>,
+    /// Cheaters added by the chaos panel that are still running.
+    pub chaos_cheaters: AtomicUsize,
+}
+
+/// What the chaos panel does to a connected worker (spec 0008).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Disruption {
+    /// The device is switched off: the connection closes and its units go back at once.
+    Kill,
+    /// The device loses its signal: nothing more arrives from it or reaches it, and the
+    /// coordinator finds out only when the connection has been silent too long.
+    CutOff,
 }
 
 /// How often dashboards hear about decided units.
@@ -165,7 +184,22 @@ impl State {
             banned: Mutex::new(HashSet::new()),
             renders: Renders::default(),
             progress: Mutex::new(Progress::default()),
+            disruptions: Mutex::new(HashMap::new()),
+            chaos_cheaters: AtomicUsize::new(0),
         })
+    }
+
+    /// Where the session of `worker_id` hears of a disruption; until it leaves.
+    pub fn disruptions_of(&self, worker_id: Uuid) -> oneshot::Receiver<Disruption> {
+        let (tx, rx) = oneshot::channel();
+        self.disruptions.lock().unwrap().insert(worker_id, tx);
+        rx
+    }
+
+    /// Disrupts a connected worker; false if it is not connected here (or already disrupted).
+    pub fn disrupt(&self, worker_id: Uuid, disruption: Disruption) -> bool {
+        let tx = self.disruptions.lock().unwrap().remove(&worker_id);
+        tx.is_some_and(|tx| tx.send(disruption).is_ok())
     }
 
     /// Sends an event to all dashboards; having no dashboards connected is fine. Units
@@ -190,6 +224,7 @@ impl State {
         self.workers.lock().unwrap().remove(&worker_id);
         self.clients.lock().unwrap().remove(&worker_id);
         self.banned.lock().unwrap().remove(&worker_id);
+        self.disruptions.lock().unwrap().remove(&worker_id);
         self.publish(DashboardEvent::WorkerLeft {
             worker_id,
             units_returned,

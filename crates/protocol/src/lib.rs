@@ -226,6 +226,17 @@ pub struct CreateJob {
     pub params: Value,
 }
 
+/// `POST /api/chaos/cheaters` body: simulated devices that make up every result join
+/// the grid, for the chaos panel (spec 0008).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct AddCheaters {
+    /// How many, 1–3.
+    pub count: u32,
+    /// All return the same wrong answer, so they agree with each other.
+    pub collude: bool,
+}
+
 /// Error body returned by the REST API.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]

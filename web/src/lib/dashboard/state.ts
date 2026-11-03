@@ -29,6 +29,18 @@ export type FeedItem = { key: number; at: number } & (
 	| { kind: 'banned'; device: DeviceInfo; wrong_results: number; units_redone: number }
 );
 
+/** What disruptions cost and what verification caught, since the page opened. */
+export interface Totals {
+	/** Devices blocked for wrong results. */
+	banned: number;
+	wrongResults: number;
+	unitsRedone: number;
+	/** Devices that left (switched off, cut off, closed the page), caught ones not counted. */
+	left: number;
+	/** Units those devices held, given back to the queue and computed elsewhere. */
+	unitsReturned: number;
+}
+
 export interface DashboardState {
 	workers: Record<string, WorkerSummary>;
 	jobs: Record<string, JobSummary>;
@@ -39,6 +51,7 @@ export interface DashboardState {
 	feed: FeedItem[];
 	/** Key of the next feed item. */
 	seq: number;
+	totals: Totals;
 }
 
 export const THROUGHPUT_WINDOW_MS = 10_000;
@@ -54,7 +67,8 @@ export const emptyState = (): DashboardState => ({
 	recentUnits: [],
 	caught: {},
 	feed: [],
-	seq: 0
+	seq: 0,
+	totals: { banned: 0, wrongResults: 0, unitsRedone: 0, left: 0, unitsReturned: 0 }
 });
 
 const byId = <T extends { id: string }>(items: T[]) =>
@@ -104,6 +118,11 @@ export function apply(state: DashboardState, event: DashboardEvent, now: number)
 				};
 			}
 			if (!worker) return { ...s, workers };
+			const totals = {
+				...s.totals,
+				left: s.totals.left + 1,
+				unitsReturned: s.totals.unitsReturned + event.units_returned
+			};
 			const last = s.feed[0];
 			if (last?.kind === 'left' && now - last.at < GROUP_MS) {
 				const grouped: FeedItem = {
@@ -112,11 +131,12 @@ export function apply(state: DashboardState, event: DashboardEvent, now: number)
 					count: last.count + 1,
 					units_returned: last.units_returned + event.units_returned
 				};
-				return { ...s, workers, feed: [grouped, ...s.feed.slice(1)] };
+				return { ...s, workers, totals, feed: [grouped, ...s.feed.slice(1)] };
 			}
 			return {
 				...s,
 				workers,
+				totals,
 				...withFeed(s, {
 					at: now,
 					kind: 'left',
@@ -133,6 +153,12 @@ export function apply(state: DashboardState, event: DashboardEvent, now: number)
 			const { wrong_results, units_redone } = event;
 			return {
 				...s,
+				totals: {
+					...s.totals,
+					banned: s.totals.banned + 1,
+					wrongResults: s.totals.wrongResults + wrong_results,
+					unitsRedone: s.totals.unitsRedone + units_redone
+				},
 				caught: {
 					...s.caught,
 					[worker.id]: { worker, at: now, wrong_results, units_redone, left_at: null }

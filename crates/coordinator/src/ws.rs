@@ -2,7 +2,7 @@
 
 use crate::{
     db::{self, Completion},
-    state::AppState,
+    state::{AppState, Disruption},
 };
 use axum::{
     extract::{
@@ -15,7 +15,7 @@ use protocol::{
     CoordinatorMessage, DashboardEvent, PROTOCOL_VERSION, WorkerMessage, WorkerSummary,
 };
 use std::{collections::HashSet, time::Duration};
-use tokio::sync::broadcast::error::RecvError;
+use tokio::sync::{broadcast::error::RecvError, oneshot};
 use uuid::Uuid;
 
 /// Sent to clients banned for wrong results (spec 0004).
@@ -119,6 +119,7 @@ async fn worker_session(mut socket: WebSocket, state: AppState) {
         connected_at: db::unix_ms(connected_at),
         units_done: 0,
     };
+    let mut disruptions = Some(state.disruptions_of(worker_id));
     state.worker_joined(summary, client_id);
     tracing::info!(%worker_id, %client_id, %client_version, "worker joined");
 
@@ -127,7 +128,7 @@ async fn worker_session(mut socket: WebSocket, state: AppState) {
         heartbeat_interval_ms: cfg.heartbeat_interval.as_millis() as u32,
     };
     if send(&mut socket, &welcome).await
-        && let Err(e) = worker_loop(&mut socket, &state, worker_id).await
+        && let Err(e) = worker_loop(&mut socket, &state, worker_id, &mut disruptions).await
     {
         tracing::error!(%worker_id, error = %e, "worker session failed");
     }
@@ -151,16 +152,42 @@ async fn worker_session(mut socket: WebSocket, state: AppState) {
     tracing::info!(%worker_id, "worker left");
 }
 
+/// The next disruption from the chaos panel; never, if none can come any more.
+async fn disrupted(disruptions: &mut Option<oneshot::Receiver<Disruption>>) -> Disruption {
+    if let Some(rx) = disruptions {
+        if let Ok(disruption) = rx.await {
+            return disruption;
+        }
+        *disruptions = None;
+    }
+    std::future::pending().await
+}
+
 async fn worker_loop(
     socket: &mut WebSocket,
     state: &AppState,
     worker_id: Uuid,
+    disruptions: &mut Option<oneshot::Receiver<Disruption>>,
 ) -> Result<(), sqlx::Error> {
     let cfg = &state.config;
     let mut active: HashSet<Uuid> = HashSet::new();
 
     loop {
-        let msg = match recv(socket, cfg.idle_timeout).await {
+        let incoming = tokio::select! {
+            incoming = recv(socket, cfg.idle_timeout) => incoming,
+            disruption = disrupted(disruptions) => {
+                tracing::info!(%worker_id, ?disruption, "worker disrupted by the chaos panel");
+                match disruption {
+                    Disruption::Kill => {
+                        let _ = socket.send(Message::Close(None)).await;
+                    }
+                    // Nothing more is read or sent; the session ends as a silent one does.
+                    Disruption::CutOff => tokio::time::sleep(cfg.idle_timeout).await,
+                }
+                return Ok(());
+            }
+        };
+        let msg = match incoming {
             Incoming::Message(m) => m,
             Incoming::Closed => return Ok(()),
             Incoming::Invalid(e) => {

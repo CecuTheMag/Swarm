@@ -1,6 +1,7 @@
 //! Рояк coordinator: job API, work-unit scheduling and result aggregation.
 
 pub mod api;
+pub mod chaos;
 pub mod db;
 pub mod render;
 pub mod state;
@@ -28,6 +29,9 @@ pub fn router(state: AppState) -> Router {
         .route("/api/jobs/{id}", get(api::get_job))
         .route("/api/jobs/{id}/cancel", post(api::cancel_job))
         .route("/api/jobs/{id}/image.png", get(api::job_image))
+        .route("/api/chaos/workers/{id}/kill", post(chaos::kill_worker))
+        .route("/api/chaos/workers/{id}/cut", post(chaos::cut_off_worker))
+        .route("/api/chaos/cheaters", post(chaos::add_cheaters))
         .route("/ws/worker", get(ws::worker))
         .route("/ws/dashboard", get(ws::dashboard))
         .with_state(state)

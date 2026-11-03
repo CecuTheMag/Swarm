@@ -44,7 +44,7 @@ impl IntoResponse for AppError {
 
 /// Checks `Authorization: Bearer <token>` when submitting needs a password. Both sides
 /// are hashed first so the comparison takes the same time whatever the guess.
-fn authorize(state: &AppState, headers: &HeaderMap) -> Result<(), AppError> {
+pub(crate) fn authorize(state: &AppState, headers: &HeaderMap) -> Result<(), AppError> {
     let Some(token) = &state.config.submit_token else {
         return Ok(());
     };

@@ -15,7 +15,9 @@ async fn main() -> anyhow::Result<()> {
     let db = coordinator::connect(&database_url)
         .await
         .context("connecting to the database")?;
-    let state = State::new(db, Config::from_env());
+    let mut config = Config::from_env();
+    config.self_url = self_url(&addr);
+    let state = State::new(db, config);
     coordinator::spawn_reaper(state.clone());
     coordinator::spawn_progress(state.clone());
     let app = coordinator::router(state);
@@ -28,6 +30,15 @@ async fn main() -> anyhow::Result<()> {
         .with_graceful_shutdown(shutdown_signal())
         .await?;
     Ok(())
+}
+
+/// The worker endpoint of this process, as reached from inside it (spec 0008).
+fn self_url(addr: &str) -> Option<String> {
+    let mut addr: std::net::SocketAddr = addr.parse().ok()?;
+    if addr.ip().is_unspecified() {
+        addr.set_ip(std::net::Ipv4Addr::LOCALHOST.into());
+    }
+    Some(format!("ws://{addr}/ws/worker"))
 }
 
 async fn shutdown_signal() {

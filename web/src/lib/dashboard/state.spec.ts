@@ -79,6 +79,28 @@ describe('dashboard state', () => {
 		expect(caughtDevices(s, 200 + CAUGHT_VISIBLE_MS)).toHaveLength(0);
 	});
 
+	it('adds up what disruptions cost and what verification caught', () => {
+		let s = emptyState();
+		for (const id of ['a', 'b', 'c']) {
+			s = apply(s, { type: 'worker_joined', worker: worker(id) }, 0);
+		}
+		s = apply(s, { type: 'worker_left', worker_id: 'a', units_returned: 3 }, 10);
+		s = apply(s, { type: 'worker_left', worker_id: 'b', units_returned: 2 }, 20);
+		s = apply(s, { type: 'worker_banned', worker_id: 'c', wrong_results: 4, units_redone: 1 }, 30);
+		// A caught device leaving is part of its ban, not a departure.
+		s = apply(s, { type: 'worker_left', worker_id: 'c', units_returned: 1 }, 40);
+		expect(s.totals).toEqual({
+			banned: 1,
+			wrongResults: 4,
+			unitsRedone: 1,
+			left: 2,
+			unitsReturned: 5
+		});
+		// A reconnecting dashboard keeps its totals.
+		s = apply(s, { type: 'snapshot', workers: [], jobs: [] }, 50);
+		expect(s.totals.banned).toBe(1);
+	});
+
 	it('ignores a ban for a worker it never saw', () => {
 		const s = apply(
 			emptyState(),

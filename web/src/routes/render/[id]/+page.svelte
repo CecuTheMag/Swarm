@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { LiveDashboard } from '#lib/dashboard/live.svelte.ts';
 	import SwarmMap from '#lib/dashboard/SwarmMap.svelte';
+	import ChaosPanel from '#lib/dashboard/ChaosPanel.svelte';
 	import {
 		caughtDevices,
 		deviceLabel,
@@ -95,6 +96,8 @@
 	const together = $derived(speedUp(live.state, live.now));
 	const workers = $derived(Object.values(live.state.workers));
 	const caught = $derived(caughtDevices(live.state, live.now));
+	const caughtIds = $derived(new Set(Object.keys(live.state.caught)));
+	const totals = $derived(live.state.totals);
 	const elapsed = $derived(
 		job ? Math.max(0, ((job.finished_at ?? live.now) - job.created_at) / 1000) : 0
 	);
@@ -208,6 +211,8 @@
 					<SwarmMap {workers} {caught} />
 				</section>
 
+				<ChaosPanel {workers} {caughtIds} {totals} />
+
 				<ol class="feed" aria-live="polite" data-testid="feed">
 					{#each live.state.feed as item (item.key)}
 						<li class={item.kind} in:fly={{ x: 24, duration: 300 }}>
@@ -238,6 +243,18 @@
 				<div class="value">{sppNow.toFixed(0)}<span class="of">/{totalSpp}</span></div>
 				<div class="label">проби на пиксел</div>
 			</div>
+			{#if totals.banned > 0}
+				<div class="stat caught">
+					<div class="value" data-testid="caught-count">{totals.banned}</div>
+					<div class="label">
+						{totals.banned === 1 ? 'хванат измамник' : 'хванати измамници'}: {count(
+							totals.wrongResults,
+							'грешен резултат отхвърлен',
+							'грешни резултата отхвърлени'
+						)}, {count(totals.unitsRedone, 'единица изчислена', 'единици изчислени')} наново
+					</div>
+				</div>
+			{/if}
 			<div class="stat">
 				<div class="value" data-testid="render-status" data-status={job?.status}>
 					{job?.status === 'done' ? 'готово' : formatTime(elapsed)}
@@ -264,10 +281,12 @@
 			grid-template-columns: minmax(0, 1fr) clamp(300px, 27vw, 440px);
 		}
 		/* As tall as the picture and no taller, so the numbers below stay on screen;
-		   the oldest events slip out of view first. */
+		   the oldest events slip out of view first, and a picture too short for the
+		   rest scrolls the column instead of covering the numbers. */
 		.side {
 			height: 0;
 			min-height: 100%;
+			overflow-y: auto;
 		}
 		.feed {
 			flex: 1;
@@ -394,5 +413,8 @@
 	}
 	.stat .label {
 		color: var(--muted);
+	}
+	.stat.caught .value {
+		color: var(--bad);
 	}
 </style>
