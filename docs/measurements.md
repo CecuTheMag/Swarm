@@ -238,6 +238,14 @@ Also found (outside the load tests):
 - WebSocket pings reset the coordinator's idle timer, so a connection kept open by a
   proxy, with the worker gone, held its units indefinitely.
 
+## A phone on mobile data through the public address
+
+2026-11-03: Nothing Phone (1), Chrome, on 5G (A1), opened `https://swarmrelay.duckdns.org/worker`
+(Let's Encrypt certificate, nothing installed) and tapped „Включи се“ on the redesigned page.
+It joined, kept the screen on and rendered a 640×360 job at 75 % power: 166 of 240 tiles in
+about two minutes, alone. The rest were spot checks that wait for a second device, so the job
+was stopped there. Battery 94 %, 35 °C, on a charger.
+
 ## Contributor safety on a real phone (spec 0007)
 
 Nothing Phone (1), Chrome 156, on USB power, worker page through `adb reverse` to the dev
