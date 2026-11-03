@@ -43,6 +43,11 @@
 			}
 		].filter((t) => t.show);
 	});
+	/** A tab stays current on its own sub-pages (a job's page is under „Задачи“). */
+	const current_ = (href: string) =>
+		page.url.pathname === href ||
+		(href !== resolve('/app/n/[id]', { id: page.params.id! }) &&
+			page.url.pathname.startsWith(href + '/'));
 </script>
 
 {#if page.url.pathname.endsWith('/live')}
@@ -69,8 +74,7 @@
 	</header>
 	<nav class="tabs" aria-label="Раздели на мрежата">
 		{#each tabs as t (t.href)}
-			<a href={t.href} aria-current={page.url.pathname === t.href ? 'page' : undefined}>{t.label}</a
-			>
+			<a href={t.href} aria-current={current_(t.href) ? 'page' : undefined}>{t.label}</a>
 		{/each}
 	</nav>
 	{@render children()}

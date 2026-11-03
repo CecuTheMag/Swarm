@@ -1159,4 +1159,34 @@ async fn a_network_sweep_is_trained_verified_and_ranked(db: PgPool) {
         client_banned(&db, cheater).await,
         "the cheater was not banned"
     );
+
+    // The console's live leaderboard agrees with the result, and the best model can be
+    // downloaded: retrained by the coordinator, it is exactly the devices' network.
+    let base = format!(
+        "http://{addr}/api/networks/{}/jobs/{}",
+        coordinator::auth::PUBLIC_NETWORK,
+        job.id
+    );
+    let live: nn::JobResult = reqwest::get(format!("{base}/leaderboard"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(live, result);
+    let model: serde_json::Value = reqwest::get(format!("{base}/model.json"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let best = &result.rows[0];
+    assert_eq!(model["hidden"], best.hidden);
+    assert_eq!(model["network"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        model["network"][0]["weights"].as_array().unwrap().len(),
+        196 * best.hidden as usize
+    );
+    let accuracy = model["accuracy"].as_f64().unwrap();
+    assert!(best.min <= accuracy && accuracy <= best.max);
 }

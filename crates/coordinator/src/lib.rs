@@ -89,6 +89,14 @@ pub fn router(state: AppState) -> Router {
             get(networks::job_image),
         )
         .route(
+            "/api/networks/{id}/jobs/{job}/leaderboard",
+            get(networks::leaderboard),
+        )
+        .route(
+            "/api/networks/{id}/jobs/{job}/model.json",
+            get(networks::model),
+        )
+        .route(
             "/api/networks/{id}/chaos/workers/{worker}/kill",
             post(chaos::network_kill),
         )

@@ -198,10 +198,10 @@ Bulgarian schools have **thousands of computers idle most of the day and all nig
 | When | Milestone |
 |---|---|
 | **Oct 2026** | WebGPU Monte Carlo kernel in a browser; coordinator skeleton with leases |
-| **Nov 2026** | Path tracer template; live dashboard; redundancy verification, reputation + honeypots; contributor safety; chaos panel; client networks with accounts, roles, approval and working hours (spec 0010) |
+| **Nov 2026** | Path tracer template; live dashboard; redundancy verification, reputation + honeypots; contributor safety; chaos panel; client networks with accounts, roles, approval and working hours (spec 0010); neural network sweeps trained bit-exact on every device (spec 0011) |
 | **≤ 25 Nov 2026** | **Register idea**; school defense: the committee joins the grid from their phones |
 | **Dec 2026–Jan 2027** | Adaptive sizing; lab node (spec 0009); first lab run (holidays!) |
-| **Feb 2027** | Job API + submitter portal; ML template; tests, load tests, docs |
+| **Feb 2027** | Job API + submitter portal; MNIST datasets and a convolutional layer for the ML template; tests, load tests, docs |
 | **≤ ~1 Mar 2027** | Upload; grid online with test accounts |
 | **Early Mar 2027** | Regional defense |
 | **Mar–Apr 2027** | Multi-school run; P2P data distribution (stretch); scaling paper-style report |
@@ -280,7 +280,7 @@ Bulgarian schools have **thousands of computers idle most of the day and all nig
 >
 > **Съществуващи решения:** системи като BOINC, изискващи инсталиране; облачни услуги срещу заплащане; национални суперкомпютри, недостъпни за ученически проекти. Предложеното решение не изисква инсталиране и използва графичните процесори чрез браузъра.
 >
-> **План за реализация:** октомври–ноември 2026 – изчислително ядро с WebGPU и резервен път през процесора, координатор, шаблони за метода Монте Карло и проследяване на лъчи, проверка на резултатите с дублиране, контролни задачи и репутация, натоварващи тестове, защита на доброволците, публичен адрес, собствени мрежи от устройства за училища и клиенти с профили, роли, одобрение на устройствата и работно време (изпълнено към ноември); декември–януари – подписани шаблони, разпределяне според устройството, локален възел за кабинета, първо изпитване в компютърен кабинет; февруари – портал за заявители и рецензенти, шаблон за машинно обучение, документация; март–април – изпитване в няколко училища.
+> **План за реализация:** октомври–ноември 2026 – изчислително ядро с WebGPU и резервен път през процесора, координатор, шаблони за метода Монте Карло и проследяване на лъчи, проверка на резултатите с дублиране, контролни задачи и репутация, натоварващи тестове, защита на доброволците, публичен адрес, собствени мрежи от устройства за училища и клиенти с профили, роли, одобрение на устройствата и работно време, търсене на параметри за невронни мрежи с обучение, побитово еднакво на всяко устройство (изпълнено към ноември); декември–януари – подписани шаблони, разпределяне според устройството, локален възел за кабинета, първо изпитване в компютърен кабинет; февруари – портал за заявители и рецензенти, реални набори от данни и конволюционни мрежи за шаблона за машинно обучение, документация; март–април – изпитване в няколко училища.
 
 ## 22. Compliance checklist
 

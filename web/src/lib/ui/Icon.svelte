@@ -21,7 +21,10 @@
 		info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M12 11v5 M12 7.5v.5',
 		alert: 'M12 4l9 16H3z M12 10v4 M12 17v.5',
 		bolt: 'M13 3L5 13h6l-1 8 8-10h-6z',
-		code: 'M8 7l-5 5 5 5M16 7l5 5-5 5'
+		code: 'M8 7l-5 5 5 5M16 7l5 5-5 5',
+		// Three layers of a neural network: inputs, hidden units, output.
+		network:
+			'M4 7m-1.5 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0 M4 17m-1.5 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0 M12 5m-1.5 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0 M12 12m-1.5 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0 M12 19m-1.5 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0 M20 12m-1.5 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0 M5.4 6.4l5.2-1M5.4 7.8l5.2 3.4M5.4 16.2l5.2-3.4M5.4 17.6l5.2 1M13.5 5.7l5.1 5.4M13.5 12h5M13.5 18.3l5.1-5.4'
 	} as const;
 	export type IconName = keyof typeof paths;
 </script>

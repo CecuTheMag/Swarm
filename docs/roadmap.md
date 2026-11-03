@@ -3,10 +3,10 @@
 What is left between today's grid and the full README vision, in build order. Each
 item gets its own spec in `docs/specs/` before work starts; this file only orders them.
 
-Status on 2026-11-03: specs 0001–0008 and 0010 implemented (π and path-tracer
+Status on 2026-11-03: specs 0001–0008, 0010 and 0011 implemented (π and path-tracer
 templates, leases with expiry, quorum verification with honeypots and reputation, CPU
 fallback, load tests, contributor safety, the chaos panel, networks that clients own
-and operate from the console) and the server public at `https://swarmrelay.duckdns.org`.
+and operate from the console, neural network sweeps) and the server public at `https://swarmrelay.duckdns.org`.
 
 ## 1. Defense readiness (before registration, ≤ 25 November 2026)
 
@@ -49,7 +49,9 @@ Trust:
 
 Templates:
 - 2D Ising model temperature sweep (phase-transition plot).
-- Hyperparameter sweep: a tiny CNN trained per unit in WGSL, with a leaderboard.
+- ~~Hyperparameter sweep~~ — done (spec 0011): an integer-only MLP trained bit-exact on
+  every device, with a live leaderboard. Next: MNIST and Fashion-MNIST, a convolutional
+  layer, successive halving (spec 0011 phase 4).
 - N-body / cellular-automata parameter sweep.
 
 Product:

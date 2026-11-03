@@ -1,6 +1,6 @@
 # 0011 — Neural network sweep
 
-Status: in progress (phase 1)
+Status: implemented (phases 1–3); phase 4 planned
 
 ## Goal
 
@@ -41,15 +41,16 @@ always agree exactly; a cheater has to guess a 256-bit digest of the final weigh
 It is also the strongest demonstration of the system: a judge's phone can retrain any
 row of the leaderboard and get the identical digest.
 
-Rounding to integers costs a little accuracy compared with `f32`; stochastic rounding
-of weight updates (with the deterministic hash) keeps small updates from vanishing.
-Phase 1 measures how close it comes to a floating-point run of the same network.
+Rounding to integers costs nothing measurable: the same networks trained in `f32` end
+within half a point of the integer ones (docs/measurements.md). Master weights in Q24
+keep even small updates from vanishing, so no stochastic rounding is needed.
 
 ## Model
 
 A multilayer perceptron: input → 1 or 2 hidden layers (16–256 units, ReLU) → 10
-classes (softmax, cross-entropy), trained with mini-batch SGD (with momentum as an
-option). Small enough to train in seconds on a phone, big enough that the settings
+classes (softmax, cross-entropy), trained with mini-batch SGD. Every unit is capped at
+2.5 · 10⁹ multiply-adds (`kernels::nn::MAX_WORK`, about 5 s on one laptop core), so no
+device gets a part that runs for minutes. Small enough to train in seconds on a phone, big enough that the settings
 matter. A convolutional layer is phase 4.
 
 ## Data
@@ -59,7 +60,7 @@ device trains on exactly the same bytes, and nothing personal ever enters it.
 
 | Dataset | Content | Size | Phase |
 |---|---|---|---|
-| `glyphs` | Procedural handwritten-style digits 0–9 (strokes with random shift, scale, slant, thickness and noise), 14×14, generated from a seed by the reference kernels | 0 bytes: every device generates it | 1 |
+| `glyphs` | Procedural handwritten-style digits 0–9 (strokes with random shift, scale, slant, thickness, noise and a stray stroke on half of them), 14×14, 4 096 train + 1 024 validation, generated from a fixed seed by the reference kernels | 0 bytes: every device generates it | 1 |
 | `mnist` | MNIST digits (CC BY-SA 3.0), downsampled to 14×14, 10 000 train + 2 000 validation | ~2.4 MB, cached | 4 |
 | `fashion` | Fashion-MNIST (MIT), same format | ~2.4 MB, cached | 4 |
 
@@ -90,37 +91,51 @@ jobs). Validation rejects counts above the validation size, wrong curve lengths 
 malformed digests.
 
 The job result is the leaderboard: every configuration with its mean accuracy over
-seeds, its spread, and its curve, sorted best first. The best model's weights are not
-uploaded by devices: the coordinator retrains that one configuration with the reference
-kernels (deterministic, so identical) when someone downloads it
-(`GET /api/networks/{id}/jobs/{job}/model.json`).
+seeds, its spread, and its curve, sorted best first. While it runs,
+`GET /api/networks/{id}/jobs/{job}/leaderboard` ranks the units decided so far. The
+best model's weights are not uploaded by devices: the coordinator retrains the first run
+of that configuration with the reference kernels (deterministic, so identical) when
+someone downloads it (`GET /api/networks/{id}/jobs/{job}/model.json`: the settings,
+its accuracy, the digest the devices agreed on, and every layer's weights as real
+numbers).
 
 ## Browser
 
-- WGSL kernels (`templates/nn/nn.wgsl`): forward pass, softmax and loss, backward pass,
-  update, one entry point each; a whole training run is encoded in a few command
-  buffers with no readback until the end, so phones stay efficient.
-- CPU fallback: the Rust reference compiled to WebAssembly, as for π and the path tracer.
+- WGSL kernels (`templates/nn/nn.wgsl`): pick the batch, forward pass, softmax and
+  loss, backward pass, update, end of step, evaluation; one entry point each, parameters
+  per dispatch through a dynamic uniform offset. Twenty steps go in one submission with
+  no readback until the end, so phones stay efficient and stopping stays responsive. A
+  rejected command buffer fails the unit instead of returning untrained weights.
+- The dataset and the initial weights come from the WebAssembly build of the reference
+  on every device (the GPU only trains), so every device starts from the same bytes.
+- CPU fallback: the Rust reference in WebAssembly, on one thread of the pool (a unit is
+  a few seconds at most).
+- Simulated devices (`sim-worker`) train units with the reference kernels and can cheat
+  (a made-up score and digest), for load tests and the resilience tools.
 - `templates/nn/vectors.json`: digests for fixed configurations; the self-test page and
   the browser tests check the WGSL kernel against them bit for bit.
 
 ## Console
 
-**Задачи** → „Невронна мрежа“: pick the data, then a preset in plain words — „Бързо
-сравнение“ (12 configurations), „Задълбочено търсене“ (72) — or choose the lists under
-„Подробни настройки“. While it runs: the leaderboard filling in, a heat map of accuracy
-over learning rate × layer size, the learning curves of the top five, and "the best so
-far" with its settings. When done: „Изтегли модела“.
+**Задачи** → „Невронна мрежа“: a preset in plain words — „Бързо сравнение“ (6
+configurations), „Нормално“ (24 × 2 runs), „Задълбочено“ (100 × 2) — or the lists under
+„Подробни настройки“; the form shows how many configurations and parts that makes. The
+job's page („Класация“) updates every two seconds while it runs: the best so far in
+words („1 скрит слой със 128 неврона · скорост на учене 0.4 · партида 32“) with its
+accuracy, a heat map of accuracy over learning rate × layer size (one hue, light to
+dark; the best of the other settings in each cell), the learning curves of the top five
+(each configuration keeps its colour while it stays in the top five; hover shows every
+value), and the full leaderboard. When done: „Изтегли модела“.
 
 ## Phases
 
-1. **Reference and template** (this spec's first commit): integer trainer and `glyphs`
+1. ~~**Reference and template**~~ (done): integer trainer and `glyphs`
    data in `crates/kernels`, protocol types, the coordinator template (split, validate,
    agree, aggregate), unit tests that it learns (well above chance) and is
    deterministic.
-2. **Browser kernels**: WGSL port, WebAssembly fallback, test vectors, self-test,
+2. ~~**Browser kernels**~~ (done): WGSL port, WebAssembly fallback, test vectors, self-test,
    browser tests in all four engines.
-3. **Console**: job form, live leaderboard, heat map, curves, model download.
+3. ~~**Console**~~ (done): job form, live leaderboard, heat map, curves, model download.
 4. **More**: MNIST and Fashion-MNIST packed datasets, a convolutional layer,
    successive halving (train many configurations briefly, continue the best).
 
@@ -132,5 +147,10 @@ far" with its settings. When done: „Изтегли модела“.
   arithmetic in tests); the softmax table sums correctly.
 - Template: split builds the grid in order; bad parameters are refused; validation and
   agreement as above; the leaderboard ranks and averages correctly.
-- Browser (phase 2): the WGSL digest equals the Rust digest for every vector, on GPU and
-  CPU paths.
+- Coordinator: the shared vectors equal the reference (`UPDATE_VECTORS=1` rewrites
+  them); end to end, simulated devices train a sweep with a cheater among them, the
+  cheater is banned and every score equals the reference; the live leaderboard equals
+  the result and the downloaded model has the accuracy the devices reported.
+- Browser: the self-test checks the vectors bit for bit on the GPU and CPU paths;
+  `e2e/sweep.e2e.ts` signs in, creates a network, joins a browser, runs a sweep through
+  the form, waits for the leaderboard and checks the downloaded model.

@@ -875,3 +875,145 @@ mod tests {
         assert_ne!(code, new_join_code());
     }
 }
+
+/// The network sweep job `job_id` of network `id` (spec 0011), and its parameters.
+async fn sweep_in(
+    state: &AppState,
+    id: Uuid,
+    job_id: Uuid,
+) -> Result<protocol::templates::nn::JobParams, AppError> {
+    let job = job_in(state, id, job_id).await?;
+    if job.template != protocol::templates::nn::ID {
+        return Err(AppError::NotFound);
+    }
+    serde_json::from_value(job.params).map_err(|e| AppError::BadRequest(e.to_string()))
+}
+
+/// `GET …/jobs/{job}/leaderboard`: the configurations ranked by the units decided so
+/// far, so the console can show the sweep while it runs.
+pub async fn leaderboard(
+    State(state): State<AppState>,
+    method: Method,
+    headers: HeaderMap,
+    Path((id, job_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<protocol::templates::nn::JobResult>, AppError> {
+    auth::network_access(&state, &method, &headers, id, Role::Viewer).await?;
+    let params = sweep_in(&state, id, job_id).await?;
+    let rows: Vec<(serde_json::Value, serde_json::Value)> = sqlx::query_as(
+        "SELECT params, output FROM units WHERE job_id = $1 AND status = 'done' AND output IS NOT NULL",
+    )
+    .bind(job_id)
+    .fetch_all(&state.db)
+    .await?;
+    let decided = rows
+        .into_iter()
+        .filter_map(|(p, o)| {
+            Some((
+                serde_json::from_value(p).ok()?,
+                serde_json::from_value(o).ok()?,
+            ))
+        })
+        .collect::<Vec<_>>();
+    let board =
+        crate::templates::nn::leaderboard(&params, &decided).map_err(AppError::BadRequest)?;
+    Ok(Json(board))
+}
+
+/// One layer of a downloaded model: `weights[i * outputs + o]` connects input `i` to
+/// output `o`; values are the trained master weights as real numbers.
+#[derive(Serialize)]
+pub struct ModelLayer {
+    pub inputs: usize,
+    pub outputs: usize,
+    pub activation: &'static str,
+    pub weights: Vec<f64>,
+    pub biases: Vec<f64>,
+}
+
+#[derive(Serialize)]
+pub struct Model {
+    pub dataset: String,
+    pub input: &'static str,
+    pub hidden: u32,
+    pub layers: u32,
+    pub learning_rate: f64,
+    pub batch: u32,
+    pub steps: u32,
+    pub seed: u32,
+    /// Validation accuracy of exactly these weights (0..1).
+    pub accuracy: f64,
+    /// SHA-256 of the integer weights, as the devices reported it.
+    pub digest: String,
+    pub network: Vec<ModelLayer>,
+}
+
+/// `GET …/jobs/{job}/model.json`: the best configuration's network. Devices never
+/// upload weights; training is deterministic, so the coordinator retrains the first
+/// run of the best configuration and gets the very weights the devices agreed on.
+pub async fn model(
+    State(state): State<AppState>,
+    method: Method,
+    headers: HeaderMap,
+    Path((id, job_id)): Path<(Uuid, Uuid)>,
+) -> Result<axum::response::Response, AppError> {
+    use axum::response::IntoResponse;
+    use protocol::templates::nn::UnitParams;
+
+    auth::network_access(&state, &method, &headers, id, Role::Viewer).await?;
+    let job = job_in(&state, id, job_id).await?;
+    let params = sweep_in(&state, id, job_id).await?;
+    let result: protocol::templates::nn::JobResult = job
+        .result
+        .and_then(|r| serde_json::from_value(r).ok())
+        .ok_or_else(|| AppError::Conflict("the sweep has not finished".into()))?;
+    let best = result.rows.first().ok_or(AppError::NotFound)?;
+    let units = crate::templates::get(protocol::templates::nn::ID)
+        .expect("registered")
+        .template
+        .split(&job.params)
+        .map_err(AppError::BadRequest)?;
+    let unit: UnitParams = units
+        .into_iter()
+        .filter_map(|u| serde_json::from_value::<UnitParams>(u).ok())
+        .find(|u| u.config == best.config)
+        .ok_or(AppError::NotFound)?;
+    let learning_rate = best.learning_rate;
+    // Seconds of CPU: off the async runtime.
+    let (output, trained) =
+        tokio::task::spawn_blocking(move || crate::templates::nn::train_unit(&unit))
+            .await
+            .map_err(|e| AppError::BadRequest(e.to_string()))?
+            .map_err(AppError::BadRequest)?;
+    let n = trained.layers.len();
+    let real = |v: &i32| f64::from(*v) / f64::from(1 << 24);
+    let model = Model {
+        dataset: params.dataset.clone(),
+        input: "14 × 14 grey pixels, row by row, each 0..1 (byte / 256)",
+        hidden: best.hidden,
+        layers: best.layers,
+        learning_rate,
+        batch: best.batch,
+        steps: params.steps,
+        seed: params.seed,
+        accuracy: f64::from(output.correct) / f64::from(result.validation),
+        digest: output.digest,
+        network: trained
+            .layers
+            .iter()
+            .enumerate()
+            .map(|(l, layer)| ModelLayer {
+                inputs: layer.fan_in,
+                outputs: layer.fan_out,
+                activation: if l + 1 < n { "relu" } else { "softmax" },
+                weights: layer.w.iter().map(real).collect(),
+                biases: layer.b.iter().map(real).collect(),
+            })
+            .collect(),
+    };
+    let name = format!("attachment; filename=\"royak-model-{job_id}.json\"");
+    Ok((
+        [(axum::http::header::CONTENT_DISPOSITION, name)],
+        Json(model),
+    )
+        .into_response())
+}

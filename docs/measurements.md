@@ -285,3 +285,34 @@ also matches the binomial standard deviation √(π(4−π)/N) = 2.00·10⁻⁴.
 
 Grid bias: testing cell corners of a 32768² grid overestimates π by 1.21·10⁻⁴;
 testing cell centres of a 16384² grid reduces it to 1.1·10⁻⁶.
+
+## Neural network sweep: integer training against f32 (spec 0011)
+
+2026-11-03, `cargo run --release -p kernels --example nn_sweep`, one core of the
+development laptop. The same networks, the same initial weights and the same batches,
+trained once with the integer arithmetic every device uses and once in `f32`; accuracy
+on the 1 024 held-out `glyphs` images (chance: 10 %).
+
+| hidden | layers | lr | batch | steps | integer | f32 | ms (integer) |
+|---|---|---|---|---|---|---|---|
+| 32 | 1 | 0.05 | 32 | 600 | 67.4 % | 67.6 % | 199 |
+| 32 | 1 | 0.2 | 32 | 600 | 71.9 % | 71.6 % | 199 |
+| 64 | 1 | 0.1 | 32 | 600 | 73.4 % | 73.8 % | 429 |
+| 128 | 1 | 0.1 | 32 | 600 | 75.1 % | 75.0 % | 1022 |
+| 128 | 1 | 0.3 | 32 | 600 | 80.9 % | 80.7 % | 1038 |
+| 64 | 2 | 0.1 | 32 | 600 | 76.4 % | 75.9 % | 638 |
+| 128 | 2 | 0.1 | 32 | 1000 | 82.7 % | 83.0 % | 3201 |
+| 128 | 1 | 0.02 | 32 | 600 | 66.2 % | 66.1 % | 1022 |
+| 16 | 1 | 0.1 | 16 | 600 | 56.2 % | 56.2 % | 54 |
+| 256 | 1 | 0.1 | 64 | 600 | 75.3 % | 75.6 % | 4010 |
+
+Integers cost nothing measurable: every pair is within half a point. The settings matter
+(56 % to 83 %), which is what makes a sweep worth running. A first version of `glyphs`
+was too easy (99–100 % for every setting); stronger distortion, noise and a stray stroke
+on half the images give the spread above.
+
+Bit-exactness, checked the same day on the shared vectors (`templates/nn/vectors.json`):
+the Rust reference, its WebAssembly build in Chromium and Firefox, and the WGSL kernel on
+Chromium's WebGPU (SwiftShader) give the same accuracy, loss curve and SHA-256 of the
+final weights for every vector. A local sweep of 48 trainings on 12 simulated devices
+finished in seconds; the best setting reached 82.8 % (1 × 128, learning rate 0.4).

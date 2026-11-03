@@ -565,6 +565,26 @@ button:disabled,
 		0 3px 10px -2px rgb(0 0 0 / 0.12);
 }
 
+/* Phones: long labels wrap onto two lines instead of running into each other, so
+   segments become rounded rectangles. */
+@media (max-width: 480px) {
+	.segmented {
+		width: 100%;
+		border-radius: 14px;
+	}
+	.segmented button svg {
+		display: none;
+	}
+	.segmented button {
+		border-radius: 11px;
+		padding: 6px 4px;
+		font-size: 0.875rem;
+		line-height: 1.2;
+		white-space: normal;
+		text-wrap: balance;
+	}
+}
+
 /* ---------- Fields ---------- */
 
 input,
