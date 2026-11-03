@@ -44,6 +44,23 @@ needs nothing installed on the device.
 If `/selftest` says WebGPU is unavailable, check `chrome://gpu` for "WebGPU: Hardware
 accelerated" and record the device anyway: unsupported devices are a result too.
 
+## School network (for spec 0009)
+
+Ten minutes on one lab PC, during the same visit. They decide whether a lab node is
+worth building; record the answers in [measurements.md](measurements.md) ("School
+network").
+
+1. **Speed.** Open `https://speed.cloudflare.com` on a lab PC and note download and
+   upload. A lab of 30 PCs on the CPU sends about 4.6 MB/s (37 Mbit/s) of render
+   results; if the upload is well above that, no lab node is needed.
+2. **Private names.** In a command prompt: `nslookup 10.0.0.1.nip.io`. The answer
+   `10.0.0.1` means the school's DNS lets a public name point to a private address (the
+   lab node needs that); no answer or an error means it blocks it.
+3. **PCs reach each other.** Plug the laptop into the lab network (the same socket or
+   switch as the PCs, not the school Wi-Fi), run `just stack` on it, and open
+   `http://<laptop's address>:7780/healthz` on a lab PC. A page that loads means lab PCs
+   can reach a machine in the lab; a timeout means they are isolated.
+
 ## After
 
 1. `just bench-report`: per-device unit count, average unit time and Msamples/s.

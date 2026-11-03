@@ -32,6 +32,11 @@ take the GPU path) and Firefox with WebGPU (Windows, macOS).
 | Date | Lab | PCs | Observed idle hours | Method |
 |---|---|---|---|---|
 
+## School network (for spec 0009)
+
+| Date | Lab | Download / upload | Private names resolve | PCs reach a laptop in the lab | Decision |
+|---|---|---|---|---|---|
+
 ## Benchmarks
 
 | Date | Device | Template | Units/s | GFLOPS | Notes |

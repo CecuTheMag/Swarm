@@ -33,7 +33,8 @@ first time.
 ## 2. Full version (December 2026 – February 2027)
 
 Scheduling:
-- Device benchmark on join; unit size targeted at a fixed expected runtime.
+- Device benchmark on join; unit size targeted at a fixed expected runtime and at
+  the device's link (slow uploads get bigger units; spec 0009 phase 2).
 - Straggler mitigation: duplicate slow units when a job is nearly done.
 - Weighted fair queuing across submitters.
 
@@ -51,6 +52,10 @@ Product:
 - OIDC sign-in and roles (contributor, school admin, submitter, reviewer, admin).
 - Submitter portal on a REST API with OpenAPI; quotas, reviewer approval for large jobs.
 - School admin console and lab/kiosk mode with time windows and caps.
+- Lab node (spec 0009, planned): one PC in the lab takes the lab's traffic over the
+  LAN, compares copies and sums passes locally, and sends ~16× fewer bytes upstream;
+  each PC tests the lab path and falls back to the server. Only if the school's
+  network checks say it pays off.
 - Reproducible job bundles: params, seeds and template hash replayed bit-exactly by
   `sim-worker`.
 
