@@ -4,6 +4,7 @@
 //! looks like, and how outputs are reduced into the job result. Workers only
 //! ever run kernels shipped with the site; jobs carry parameters, never code.
 
+pub mod nn;
 mod pi;
 pub mod pt;
 
@@ -32,7 +33,7 @@ pub struct Registered {
 }
 
 static REGISTRY: LazyLock<Vec<Registered>> = LazyLock::new(|| {
-    let all: [&'static dyn Template; 2] = [&pi::Pi, &pt::Pt];
+    let all: [&'static dyn Template; 3] = [&pi::Pi, &pt::Pt, &nn::Nn];
     all.into_iter()
         .map(|template| Registered {
             template,

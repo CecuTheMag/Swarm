@@ -153,3 +153,101 @@ pub mod pt {
         }
     }
 }
+
+pub mod nn {
+    //! Neural network sweep (spec 0011).
+
+    use serde::{Deserialize, Serialize};
+    use ts_rs::TS;
+
+    pub const ID: &str = "nn";
+    pub const VERSION: u32 = 1;
+
+    pub const DATASETS: [&str; 1] = ["glyphs"];
+    /// Values per setting in one sweep.
+    pub const MAX_VALUES: usize = 8;
+    pub const MAX_SEEDS: u32 = 5;
+    pub const MAX_UNITS: usize = 2000;
+    pub const CURVE_POINTS: usize = 16;
+
+    /// A sweep: every combination of the lists, each trained with `seeds` seeds.
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+    #[serde(deny_unknown_fields)]
+    #[ts(export, rename = "NnJobParams")]
+    pub struct JobParams {
+        pub dataset: String,
+        /// Training steps of every configuration.
+        pub steps: u32,
+        /// Units per hidden layer.
+        pub hidden: Vec<u32>,
+        /// Hidden layers: 1 or 2.
+        pub layers: Vec<u32>,
+        /// Learning rates, each above 0 and below 0.5.
+        pub learning_rate: Vec<f64>,
+        /// Batch sizes, each a power of two up to 128.
+        pub batch: Vec<u32>,
+        /// Runs of each configuration with different initial weights and batches.
+        pub seeds: u32,
+        pub seed: u32,
+    }
+
+    /// One configuration × one seed. Devices only ever see integers.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(deny_unknown_fields)]
+    #[ts(export, rename = "NnUnitParams")]
+    pub struct UnitParams {
+        pub dataset: String,
+        /// Index of the configuration in the sweep, for the leaderboard.
+        pub config: u32,
+        pub hidden: u32,
+        pub layers: u32,
+        /// Learning rate × 2¹⁶.
+        pub lr_q16: u32,
+        /// Batch size is `2^batch_log2`.
+        pub batch_log2: u32,
+        pub steps: u32,
+        pub seed: u32,
+    }
+
+    /// What a device returns for one unit.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(deny_unknown_fields)]
+    #[ts(export, rename = "NnUnitOutput")]
+    pub struct UnitOutput {
+        /// Validation images classified correctly.
+        pub correct: u32,
+        /// Mean training loss × 2¹⁶ over each sixteenth of the steps.
+        pub curve: Vec<u32>,
+        /// SHA-256 (hex) of the final weights.
+        pub digest: String,
+    }
+
+    /// One configuration on the leaderboard.
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+    #[ts(export, rename = "NnRow")]
+    pub struct Row {
+        pub config: u32,
+        pub hidden: u32,
+        pub layers: u32,
+        pub learning_rate: f64,
+        pub batch: u32,
+        /// Runs decided so far.
+        pub runs: u32,
+        /// Mean, lowest and highest validation accuracy over the runs (0..1).
+        pub accuracy: f64,
+        pub min: f64,
+        pub max: f64,
+        /// Mean training loss per curve point.
+        pub curve: Vec<f64>,
+    }
+
+    /// The leaderboard, best first.
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+    #[ts(export, rename = "NnResult")]
+    pub struct JobResult {
+        pub dataset: String,
+        /// Validation images per run.
+        pub validation: u32,
+        pub rows: Vec<Row>,
+    }
+}

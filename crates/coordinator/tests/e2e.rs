@@ -1096,3 +1096,67 @@ async fn cheaters_from_the_chaos_panel_are_caught(db: PgPool) {
         .sum();
     assert_eq!(result.inside, expected, "a made-up result survived");
 }
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn a_network_sweep_is_trained_verified_and_ranked(db: PgPool) {
+    use protocol::templates::nn;
+    let addr = serve(db.clone(), Config::default()).await;
+    let params = json!({"dataset": "glyphs", "steps": 60, "hidden": [8, 16], "layers": [1],
+                        "learning_rate": [0.05, 0.3], "batch": [16], "seeds": 2, "seed": 9});
+    let res = reqwest::Client::new()
+        .post(format!("http://{addr}/api/jobs"))
+        .json(&json!({"template": "nn", "params": params}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201);
+    let job: JobSummary = res.json().await.unwrap();
+
+    // A device that makes up every network trains alongside honest ones.
+    let cheater = uuid::Uuid::now_v7();
+    let cheating = tokio::spawn(sim_worker::run(sim_worker::Options {
+        client_id: Some(cheater),
+        cheat: sim_worker::Cheat::Random { rate: 1.0 },
+        ..sim(&addr)
+    }));
+    let job = finish_with_honest_workers(&addr, job.id).await;
+    let _ = cheating.await.unwrap();
+
+    assert_eq!(job.status, JobStatus::Done);
+    let result: nn::JobResult = serde_json::from_value(job.result.unwrap()).unwrap();
+    assert_eq!(result.rows.len(), 4);
+    assert!(
+        result
+            .rows
+            .windows(2)
+            .all(|w| w[0].accuracy >= w[1].accuracy)
+    );
+    // Every score is exactly what the reference trains: nothing made up got through.
+    let units = coordinator::templates::get("nn")
+        .unwrap()
+        .template
+        .split(&params)
+        .unwrap();
+    for row in &result.rows {
+        let runs: Vec<f64> = units
+            .iter()
+            .map(|u| serde_json::from_value::<nn::UnitParams>(u.clone()).unwrap())
+            .filter(|u| u.config == row.config)
+            .map(|u| {
+                let (out, _) = coordinator::templates::nn::train_unit(&u).unwrap();
+                f64::from(out.correct) / f64::from(result.validation)
+            })
+            .collect();
+        assert_eq!(row.runs, 2);
+        assert_eq!(
+            row.accuracy,
+            runs.iter().sum::<f64>() / 2.0,
+            "config {}",
+            row.config
+        );
+    }
+    assert!(
+        client_banned(&db, cheater).await,
+        "the cheater was not banned"
+    );
+}

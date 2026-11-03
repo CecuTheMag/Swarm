@@ -1,0 +1,95 @@
+// Neural network sweep (spec 0011): what the GPU and CPU paths share. The dataset
+// and the initial weights come from the WebAssembly build of the Rust reference, so
+// every device trains on the same bytes from the same start.
+
+import { kernelsWasmUrl } from '#lib/templates.ts';
+import type { NnUnitParams } from '#lib/protocol/NnUnitParams.ts';
+
+export const CURVE_POINTS = 16;
+
+/** Training images, then validation images; their labels in the same order. */
+export interface NnDataset {
+	dim: number;
+	trainLen: number;
+	valLen: number;
+	pixels: Uint8Array;
+	labels: Uint8Array;
+}
+
+export interface NnReference {
+	dataset(name: string): NnDataset;
+	/** Initial master weights: per layer its weights, then its biases. */
+	init(p: NnUnitParams): Uint32Array;
+	/** Trains on the CPU: correct, curve and final weights. */
+	train(p: NnUnitParams): { correct: number; curve: number[]; weights: Uint32Array };
+}
+
+/** `glyphs` (crates/kernels/src/nn/glyphs.rs). */
+const GLYPHS = { dim: 196, trainLen: 4096, valLen: 1024 };
+
+/** Layer sizes from input to output (kernels::nn::Config::sizes). */
+export function nnSizes(p: Pick<NnUnitParams, 'hidden' | 'layers'>, dim: number): number[] {
+	return [dim, ...Array<number>(p.layers).fill(p.hidden), 10];
+}
+
+export function nnWeightWords(p: Pick<NnUnitParams, 'hidden' | 'layers'>, dim: number): number {
+	const s = nnSizes(p, dim);
+	let words = 0;
+	for (let l = 0; l + 1 < s.length; l++) words += s[l] * s[l + 1] + s[l + 1];
+	return words;
+}
+
+/** SHA-256 (hex) of the final weights as little-endian 32-bit words. */
+export async function nnDigest(weights: Uint32Array): Promise<string> {
+	const bytes = new Uint8Array(weights.length * 4);
+	const view = new DataView(bytes.buffer);
+	weights.forEach((w, i) => view.setUint32(i * 4, w, true));
+	const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+	return Array.from(hash, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+interface NnExports {
+	memory: WebAssembly.Memory;
+	nn_glyphs_pixels(): number;
+	nn_glyphs_labels(): number;
+	nn_init(hidden: number, layers: number, seed: number): number;
+	nn_train(...args: number[]): number;
+}
+
+/** Instantiates the reference kernels for the neural network template. */
+export async function loadNnReference(): Promise<NnReference> {
+	const bytes = await (await fetch(kernelsWasmUrl)).arrayBuffer();
+	const { instance } = await WebAssembly.instantiate(bytes, {});
+	const k = instance.exports as unknown as NnExports;
+	let glyphs: NnDataset | undefined;
+	return {
+		dataset(name) {
+			if (name !== 'glyphs') throw new Error(`unknown dataset ${name}`);
+			if (!glyphs) {
+				const total = GLYPHS.trainLen + GLYPHS.valLen;
+				// Call before reading `memory.buffer`: generating may grow the memory,
+				// which replaces the buffer. Copy out for the same reason.
+				const pixelsPtr = k.nn_glyphs_pixels();
+				const labelsPtr = k.nn_glyphs_labels();
+				const pixels = new Uint8Array(k.memory.buffer, pixelsPtr, total * GLYPHS.dim).slice();
+				const labels = new Uint8Array(k.memory.buffer, labelsPtr, total).slice();
+				glyphs = { ...GLYPHS, pixels, labels };
+			}
+			return glyphs;
+		},
+		init(p) {
+			const ptr = k.nn_init(p.hidden, p.layers, p.seed);
+			return new Uint32Array(k.memory.buffer, ptr, nnWeightWords(p, GLYPHS.dim)).slice();
+		},
+		train(p) {
+			const ptr = k.nn_train(p.hidden, p.layers, p.lr_q16, p.batch_log2, p.steps, p.seed);
+			const words = 1 + CURVE_POINTS + nnWeightWords(p, GLYPHS.dim);
+			const out = new Uint32Array(k.memory.buffer, ptr, words).slice();
+			return {
+				correct: out[0],
+				curve: Array.from(out.subarray(1, 1 + CURVE_POINTS)),
+				weights: out.subarray(1 + CURVE_POINTS)
+			};
+		}
+	};
+}

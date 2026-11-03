@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { piShader, piVectors, ptShader, ptVectors } from '#lib/templates.ts';
+	import { nnShader, nnVectors, piShader, piVectors, ptShader, ptVectors } from '#lib/templates.ts';
 	import { sha256Hex } from '#lib/gpu/hash.ts';
 	import { agreement, decodeRgb, gpuAgrees, type Agreement } from '#lib/pt.ts';
 	import { ComputeClient } from '#lib/worker/compute-client.ts';
@@ -11,6 +11,8 @@
 	import type { PtUnitOutput } from '#lib/protocol/PtUnitOutput.ts';
 	import type { PtUnitParams } from '#lib/protocol/PtUnitParams.ts';
 	import type { TemplateRef } from '#lib/protocol/TemplateRef.ts';
+	import type { NnUnitOutput } from '#lib/protocol/NnUnitOutput.ts';
+	import type { NnUnitParams } from '#lib/protocol/NnUnitParams.ts';
 	import Icon from '#lib/ui/Icon.svelte';
 
 	interface PiRow {
@@ -27,6 +29,12 @@
 		/** Exact on the CPU; on the GPU, how closely it follows the reference. */
 		exact: boolean | null;
 		agreement: Agreement | null;
+	}
+
+	interface NnRow {
+		params: NnUnitParams;
+		expected: NnUnitOutput;
+		actual: NnUnitOutput | null;
 	}
 
 	const PI_BENCH_SAMPLES = 1 << 26;
@@ -47,6 +55,20 @@
 	let ptRows = $state<PtRow[]>(
 		ptVectors.map(({ rgb, ...params }) => ({ params, expected: rgb, exact: null, agreement: null }))
 	);
+	// Network training is integer-only: exact on the GPU as on the CPU (spec 0011).
+	let nnRows = $state<NnRow[]>(
+		nnVectors.map(({ correct, curve, digest, ...params }) => ({
+			params,
+			expected: { correct, curve, digest },
+			actual: null
+		}))
+	);
+	const nnSame = (a: NnUnitOutput | null, b: NnUnitOutput) =>
+		!!a &&
+		a.correct === b.correct &&
+		a.digest === b.digest &&
+		a.curve.length === b.curve.length &&
+		a.curve.every((v, i) => v === b.curve[i]);
 	let result = $state<'running' | 'pass' | 'fail' | 'unsupported'>('running');
 	let error = $state<string | null>(null);
 	let samplesPerSecond = $state<number | null>(null);
@@ -82,9 +104,14 @@
 					sums.length === row.expected.length && sums.every((v, i) => v === row.expected[i]);
 				row.agreement = agreement(sums, row.expected);
 			}
+			const nn: TemplateRef = { id: 'nn', version: 1, sha256: await sha256Hex(nnShader) };
+			for (const row of nnRows) {
+				row.actual = (await client.run(nn, $state.snapshot(row.params))).output as NnUnitOutput;
+			}
 			const piOk = piRows.length > 0 && piRows.every((r) => r.actual === r.expected);
 			const ptOk = ptRows.length > 0 && ptRows.every(ptPasses);
-			result = piOk && ptOk ? 'pass' : 'fail';
+			const nnOk = nnRows.length > 0 && nnRows.every((r) => nnSame(r.actual, r.expected));
+			result = piOk && ptOk && nnOk ? 'pass' : 'fail';
 
 			// Warm-up, then timed runs.
 			await runPi({ seed: 1, unit_index: 0, samples: 1 << 20 });
@@ -230,6 +257,36 @@
 									{r.agreement.close}/{r.agreement.total} съвпадат, сума ±{(
 										r.agreement.sumError * 100
 									).toFixed(2)}%
+								{/if}
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+
+		<h2>Невронна мрежа</h2>
+		<div class="table-wrap">
+			<table>
+				<thead>
+					<tr><th>Мрежа</th><th>Обучение</th><th>Очаквано</th><th>Получено</th></tr>
+				</thead>
+				<tbody>
+					{#each nnRows as r, i (i)}
+						<tr data-testid="nn-row" data-same={nnSame(r.actual, r.expected)}>
+							<td>{r.params.layers} × {r.params.hidden}</td>
+							<td>{r.params.steps} стъпки · партида {2 ** r.params.batch_log2}</td>
+							<td>{r.expected.correct} верни · {r.expected.digest.slice(0, 8)}</td>
+							<td
+								class:ok={nnSame(r.actual, r.expected)}
+								class:bad={r.actual && !nnSame(r.actual, r.expected)}
+							>
+								{#if !r.actual}
+									…
+								{:else if nnSame(r.actual, r.expected)}
+									побитово точно
+								{:else}
+									{r.actual.correct} верни · {r.actual.digest.slice(0, 8)}
 								{/if}
 							</td>
 						</tr>

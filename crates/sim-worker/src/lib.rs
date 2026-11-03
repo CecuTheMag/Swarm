@@ -2,11 +2,13 @@
 //! units with the CPU reference kernels. Used for tests, load generation and
 //! fault injection.
 
+pub mod network;
+
 use anyhow::{Context, bail};
 use futures_util::{SinkExt, StreamExt};
 use protocol::{
     Backend, CoordinatorMessage, DeviceControl, DeviceInfo, PROTOCOL_VERSION, WorkerMessage,
-    templates::{pi, pt},
+    templates::{nn, pi, pt},
 };
 use serde_json::{Value, json};
 use std::{
@@ -111,6 +113,21 @@ impl Cheat {
                     .collect();
                 Some(json!({ "rgb": pt::encode_rgb(&rgb) }))
             }
+            nn::ID => {
+                // A plausible score and a made-up network: a liar cannot know the
+                // digest without training.
+                let digest = if constant {
+                    "c".repeat(64)
+                } else {
+                    format!("{:064x}", fastrand::u128(..))
+                };
+                let correct = if constant {
+                    900
+                } else {
+                    fastrand::u32(0..=1024)
+                };
+                Some(json!({ "correct": correct, "curve": vec![20_000u32; 16], "digest": digest }))
+            }
             _ => None,
         }
     }
@@ -177,6 +194,11 @@ pub fn compute(template_id: &str, version: u32, params: &Value) -> anyhow::Resul
             Ok(serde_json::to_value(pt::UnitOutput {
                 rgb: pt::encode_rgb(&rgb),
             })?)
+        }
+        (nn::ID, nn::VERSION) => {
+            let p: nn::UnitParams = serde_json::from_value(params.clone())?;
+            let (output, _) = network::train_unit(&p).map_err(anyhow::Error::msg)?;
+            Ok(serde_json::to_value(output)?)
         }
         _ => bail!("unsupported template {template_id} v{version}"),
     }

@@ -3,6 +3,8 @@
 // reference kernels.
 
 import { kernelsWasmUrl } from '#lib/templates.ts';
+import { loadNnReference, type NnReference } from '#lib/nn.ts';
+import type { NnUnitParams } from '#lib/protocol/NnUnitParams.ts';
 
 export type CpuTask =
 	| { template: 'pi'; seed: number; unit_index: number; start: number; end: number }
@@ -19,10 +21,14 @@ export type CpuTask =
 			seed: number;
 			row_start: number;
 			row_end: number;
-	  };
+	  }
+	| ({ template: 'nn' } & NnUnitParams);
 
 export type CpuResult =
-	{ ok: true; inside: number } | { ok: true; rgb: Float32Array } | { ok: false; error: string };
+	| { ok: true; inside: number }
+	| { ok: true; rgb: Float32Array }
+	| { ok: true; correct: number; curve: number[]; weights: Uint32Array }
+	| { ok: false; error: string };
 
 interface KernelExports {
 	memory: WebAssembly.Memory;
@@ -35,9 +41,18 @@ const kernels: Promise<KernelExports> = fetch(kernelsWasmUrl)
 	.then((bytes) => WebAssembly.instantiate(bytes, {}))
 	.then(({ instance }) => instance.exports as unknown as KernelExports);
 
+// The network's reference keeps its dataset between units; loaded on first use.
+let nn: Promise<NnReference> | undefined;
+
 self.onmessage = async (event: MessageEvent<CpuTask>) => {
 	const t = event.data;
 	try {
+		if (t.template === 'nn') {
+			nn ??= loadNnReference();
+			const { correct, curve, weights } = (await nn).train(t);
+			self.postMessage({ ok: true, correct, curve, weights } satisfies CpuResult, [weights.buffer]);
+			return;
+		}
 		const k = await kernels;
 		if (t.template === 'pi') {
 			// WebAssembly returns the u32 count as a signed i32 with the same bits.
