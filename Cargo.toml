@@ -14,5 +14,10 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 
+# The reference kernels train networks in tests: optimised, but still checked for
+# integer overflow (spec 0011).
+[profile.dev.package.kernels]
+opt-level = 3
+
 [profile.release]
 lto = "thin"
