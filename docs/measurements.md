@@ -246,6 +246,12 @@ It joined, kept the screen on and rendered a 640×360 job at 75 % power: 166 of 
 about two minutes, alone. The rest were spot checks that wait for a second device, so the job
 was stopped there. Battery 94 %, 35 °C, on a charger.
 
+2026-11-03, after spec 0010: the same phone on 5G opened `/join`, typed the code `public`
+and joined on its graphics card (Adreno 6xx); the network card showed it live. The glass
+header showed the page under it sharply: the production CSS had lost
+`backdrop-filter` (only the `-webkit-` twin survived the minifier, which Chromium
+ignores). Fixed the same day; `e2e/look.e2e.ts` guards it.
+
 ## Contributor safety on a real phone (spec 0007)
 
 Nothing Phone (1), Chrome 156, on USB power, worker page through `adb reverse` to the dev
