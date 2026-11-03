@@ -1079,3 +1079,96 @@ async fn images_are_shared_until_a_unit_changes_them(db: PgPool) {
     let pi = pi_job_with(&db, &cfg, 1, 100, 1).await;
     assert!(renders.png(&db, pi).await.unwrap().is_none());
 }
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn a_ban_reopens_a_finished_job_and_withdraws_its_poisoned_known_answers(db: PgPool) {
+    let cfg = verifying();
+    // Two colluders agree on the only unit of a job, which finishes with their answer.
+    let job_id = pi_job_with(&db, &cfg, 1, 1000, 21).await;
+    let (m1, m2) = (worker(&db).await, worker(&db).await);
+    let c1 = db::claim_unit(&db, m1, &cfg).await.unwrap().unwrap();
+    let c2 = db::claim_unit(&db, m2, &cfg).await.unwrap().unwrap();
+    complete(&db, m1, &c1, &wrong(&c1), &cfg).await;
+    complete(&db, m2, &c2, &wrong(&c2), &cfg).await;
+    assert_eq!(
+        db::get_job(&db, job_id).await.unwrap().unwrap().status,
+        JobStatus::Done
+    );
+
+    // Its unit is now a known answer, and a wrong one: an honest client fails it.
+    let traps = Config {
+        new_client_honeypot_rate: 1.0,
+        ..cfg.clone()
+    };
+    let h = worker(&db).await;
+    let trap = db::claim_unit(&db, h, &traps).await.unwrap().unwrap();
+    assert_eq!(trap.unit_id, c1.unit_id);
+    let unfair = complete(&db, h, &trap, &honest(&trap), &traps).await;
+    assert!(matches!(
+        unfair,
+        Completion::Honeypot { correct: false, .. }
+    ));
+    let honeypot_failures = |w: Uuid| {
+        let db = db.clone();
+        async move {
+            sqlx::query_scalar::<_, i32>(
+                "SELECT c.honeypot_failures FROM workers w JOIN clients c ON c.id = w.client_id
+                 WHERE w.id = $1",
+            )
+            .bind(w)
+            .fetch_one(&db)
+            .await
+            .unwrap()
+        }
+    };
+    assert_eq!(
+        (standing(&db, h).await, honeypot_failures(h).await),
+        ((0, 1, false), 1)
+    );
+
+    // A correct known answer from another job exposes one colluder.
+    let finished = pi_job_with(&db, &cfg, 1, 1000, 22).await;
+    sqlx::query("UPDATE units SET status = 'done', output = $2 WHERE job_id = $1")
+        .bind(finished)
+        .bind(json!({ "inside": reference_inside(1, 1000, 22) }))
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE jobs SET status = 'done', units_done = units_total WHERE id = $1")
+        .bind(finished)
+        .execute(&db)
+        .await
+        .unwrap();
+    set_standing(&db, m1, 0, 2).await;
+    let exposed = db::claim_unit(&db, m1, &traps).await.unwrap().unwrap();
+    let caught = complete(&db, m1, &exposed, &wrong(&exposed), &traps).await;
+    assert!(standing(&db, m1).await.2, "the colluder is banned");
+    assert_eq!(caught.reopened(), &[job_id]);
+
+    // The finished job runs again without its result, and the honest client's failure
+    // is withdrawn.
+    let job = db::get_job(&db, job_id).await.unwrap().unwrap();
+    assert_eq!(
+        (job.status, job.units_done, job.result, job.finished_at),
+        (JobStatus::Running, 0, None, None)
+    );
+    assert_eq!(
+        (standing(&db, h).await, honeypot_failures(h).await),
+        ((0, 0, false), 0)
+    );
+
+    // Honest clients decide the unit anew (the other colluder, not caught yet, still has
+    // its say and is outvoted), and the result is exact.
+    for _ in 0..3 {
+        let x = worker(&db).await;
+        let Some(cx) = db::claim_unit(&db, x, &cfg).await.unwrap() else {
+            break;
+        };
+        assert_eq!(cx.unit_id, c1.unit_id);
+        complete(&db, x, &cx, &honest(&cx), &cfg).await;
+    }
+    let job = db::get_job(&db, job_id).await.unwrap().unwrap();
+    assert_eq!(job.status, JobStatus::Done);
+    let result: pi::JobResult = serde_json::from_value(job.result.unwrap()).unwrap();
+    assert_eq!(result.inside, reference_inside(1, 1000, 21));
+}

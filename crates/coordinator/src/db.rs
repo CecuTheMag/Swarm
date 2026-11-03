@@ -1011,12 +1011,15 @@ async fn adjust_client(
     })
 }
 
-/// Undoes what a banned client's results decided in jobs still running: every unit it
+/// Undoes what a banned client's results decided in jobs running or done: every unit it
 /// helped decide (alone, or by agreeing) that no longer has `redundancy` agreeing
-/// results from clients in good standing goes back to the queue. The other clients'
-/// verdicts on those units are reversed, since they were measured against a result that
-/// may be wrong, and their results count again when the unit is decided anew. This is
-/// what limits colluding cheaters: what they got accepted before being caught is redone.
+/// results from clients in good standing goes back to the queue, and a done job runs
+/// again until they are decided anew. The other clients' verdicts on those units are
+/// reversed, since they were measured against a result that may be wrong: their
+/// results count again in the new decision, and answers to the unit as a known-answer
+/// unit (which compared them with that result) no longer count for or against them.
+/// This is what limits colluding cheaters: what they got accepted before being caught
+/// is redone, also when the job had already finished.
 async fn reopen_after_ban(
     tx: &mut Transaction<'_, Postgres>,
     client_id: Uuid,
@@ -1028,7 +1031,7 @@ async fn reopen_after_ban(
          JOIN units u ON u.id = l.unit_id
          JOIN jobs j ON j.id = u.job_id
          WHERE w.client_id = $1 AND l.verdict IN ('agreed', 'trusted') AND NOT l.honeypot
-           AND u.status = 'done' AND j.status = 'running'
+           AND u.status = 'done' AND j.status IN ('running', 'done')
            AND (SELECT count(*) FROM leases l2
                 JOIN workers w2 ON w2.id = l2.worker_id
                 JOIN clients c2 ON c2.id = w2.client_id
@@ -1044,36 +1047,41 @@ async fn reopen_after_ban(
     }
     let unit_ids: Vec<Uuid> = units.iter().map(|(u, _)| *u).collect();
 
-    // Reverse the other clients' verdicts on these units; their results count again.
-    // RETURNING shows rows after the update, so the old verdicts are read first.
-    let reversed: Vec<(Uuid, i64, i64)> = sqlx::query_as(
+    // Reverse the other clients' verdicts on these units; their results count again,
+    // and their answers to them as known-answer units count neither way. RETURNING
+    // shows rows after the update, so the old verdicts are read first.
+    let reversed: Vec<(Uuid, i64, i64, i64)> = sqlx::query_as(
         "WITH old AS (
              SELECT l.id, w.client_id, l.verdict
              FROM leases l
              JOIN workers w ON w.id = l.worker_id
              JOIN clients c ON c.id = w.client_id
              WHERE l.unit_id = ANY($1) AND c.banned_at IS NULL
-               AND l.verdict IN ('agreed', 'disagreed')
+               AND l.verdict IN ('agreed', 'disagreed', 'honeypot_ok', 'honeypot_bad')
              FOR UPDATE OF l
          ), r AS (
              UPDATE leases SET verdict = NULL FROM old WHERE leases.id = old.id
              RETURNING old.client_id, old.verdict
          )
          SELECT client_id,
-                count(*) FILTER (WHERE verdict = 'agreed'),
-                count(*) FILTER (WHERE verdict = 'disagreed')
+                count(*) FILTER (WHERE verdict IN ('agreed', 'honeypot_ok')),
+                count(*) FILTER (WHERE verdict IN ('disagreed', 'honeypot_bad')),
+                count(*) FILTER (WHERE verdict = 'honeypot_bad')
          FROM r GROUP BY client_id",
     )
     .bind(&unit_ids)
     .fetch_all(&mut **tx)
     .await?;
-    for (client, correct, incorrect) in reversed {
+    for (client, correct, incorrect, honeypot_failures) in reversed {
         sqlx::query(
-            "UPDATE clients SET correct = correct - $2, incorrect = incorrect - $3 WHERE id = $1",
+            "UPDATE clients SET correct = correct - $2, incorrect = incorrect - $3,
+                 honeypot_failures = honeypot_failures - $4
+             WHERE id = $1",
         )
         .bind(client)
         .bind(correct as i32)
         .bind(incorrect as i32)
+        .bind(honeypot_failures as i32)
         .execute(&mut **tx)
         .await?;
     }
@@ -1099,12 +1107,19 @@ async fn reopen_after_ban(
     for (_, job_id) in &units {
         *per_job.entry(*job_id).or_default() += 1;
     }
+    // A done job runs again; its result is aggregated anew once the units are decided.
     for (job_id, n) in &per_job {
-        sqlx::query("UPDATE jobs SET units_done = units_done - $2 WHERE id = $1")
-            .bind(job_id)
-            .bind(n)
-            .execute(&mut **tx)
-            .await?;
+        sqlx::query(
+            "UPDATE jobs SET units_done = units_done - $2,
+                 status = CASE WHEN status = 'done' THEN 'running' ELSE status END,
+                 result = CASE WHEN status = 'done' THEN NULL ELSE result END,
+                 finished_at = CASE WHEN status = 'done' THEN NULL ELSE finished_at END
+             WHERE id = $1",
+        )
+        .bind(job_id)
+        .bind(n)
+        .execute(&mut **tx)
+        .await?;
     }
     Ok((per_job.into_keys().collect(), units.len() as u32))
 }

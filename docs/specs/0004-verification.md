@@ -59,10 +59,16 @@ banned (found by the load test, spec 0006).
   each other, but not with a known answer), or with at least 3 incorrect results and
   trust below 0.5. It cannot connect, and its undecided results are ignored.
 - Malformed outputs count as incorrect too.
-- A ban **redoes** what the client decided in jobs still running: every unit it helped
+- A ban **redoes** what the client decided in jobs running or done: every unit it helped
   decide that no longer has `redundancy` agreeing results from clients in good standing
   goes back to the queue, the other clients' verdicts on it are reversed, and their
   results count again in the new decision. This bounds what colluders get accepted.
+  A done job runs again, without its result, until those units are decided anew: a
+  job that finished before its colluders were caught does not keep their answer.
+  Answers other clients gave to such a unit as a honeypot (compared with the colluders'
+  answer) are withdrawn too, so a poisoned known answer costs honest clients nothing
+  once the colluders are caught. (Added with the chaos panel, spec 0008, which lets
+  colluders join at any moment of a job.)
 
 ## Visibility
 
