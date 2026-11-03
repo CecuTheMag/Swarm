@@ -251,4 +251,44 @@ describe('WorkerSession', () => {
 		expect(ws.readyState).toBe(3);
 		session.destroy();
 	});
+
+	it('joins the network of its link and obeys its owner (spec 0010)', async () => {
+		const session = new WorkerSession('ws://test/ws/worker', undefined, 'lab12code');
+		await session.start();
+		const ws = FakeSocket.all[0];
+		welcome(ws);
+		expect(ws.sent[0]).toMatchObject({ type: 'hello', join_code: 'lab12code' });
+		const asked = ws.requests();
+		expect(asked).toBeGreaterThan(0);
+
+		// Paused by the owner: no more requests, and a control message is no answer to
+		// one (owed replies still time out as before).
+		ws.receive({ type: 'control', control: { state: 'paused_by_owner' }, max_power: 100 });
+		for (let i = 0; i < asked; i++) ws.receive({ type: 'no_work', retry_after_ms: 100 });
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(ws.requests()).toBe(asked);
+		expect(session.status).toBe('held');
+		expect(ws.readyState).toBe(FakeSocket.OPEN);
+
+		// Running again: it asks for work at once, within the network's power limit.
+		ws.receive({ type: 'control', control: { state: 'running' }, max_power: 50 });
+		expect(ws.requests()).toBeGreaterThan(asked);
+		session.power = 100;
+		expect(session.effectivePower).toBe(50);
+		session.destroy();
+	});
+
+	it('a removed device stops instead of reconnecting', async () => {
+		const session = new WorkerSession('ws://test/ws/worker', undefined, 'lab12code');
+		await session.start();
+		const ws = FakeSocket.all[0];
+		welcome(ws);
+		ws.receive({ type: 'control', control: { state: 'removed' }, max_power: 100 });
+		ws.receive({ type: 'error', message: 'this device was removed from the network' });
+		ws.drop();
+		await vi.advanceTimersByTimeAsync(30_000);
+		expect(session.status).toBe('stopped');
+		expect(FakeSocket.all.length).toBe(1);
+		session.destroy();
+	});
 });

@@ -61,6 +61,39 @@
 		}
 	];
 
+	const features: { icon: IconName; title: string; text: string }[] = [
+		{
+			icon: 'chip',
+			title: 'Своя мрежа',
+			text: 'Кабинет, лаборатория или екип: устройствата в нея изчисляват само вашите задачи.'
+		},
+		{
+			icon: 'phone',
+			title: 'Устройства с един код',
+			text: 'Връзка или QR код. Може да изисквате одобрение за всяко ново устройство.'
+		},
+		{
+			icon: 'pause',
+			title: 'Пълен контрол',
+			text: 'Пауза на едно или на всички, максимална мощност и работно време, например само след часовете.'
+		},
+		{
+			icon: 'shield',
+			title: 'Екип с роли',
+			text: 'Собственици, администратори и наблюдатели, поканени с лична връзка.'
+		},
+		{
+			icon: 'code',
+			title: 'Програмен интерфейс',
+			text: 'Ключове за API: вашите програми пускат задачи и четат резултатите.'
+		},
+		{
+			icon: 'image',
+			title: 'На живо',
+			text: 'Всяко устройство и всяка задача в реално време, и изглед за голям екран.'
+		}
+	];
+
 	const safety: { icon: IconName; title: string; text: string }[] = [
 		{
 			icon: 'power',
@@ -122,7 +155,7 @@
 				<a class="button lg" href={resolve('/worker')}>
 					Включи това устройство <Icon name="arrow" size={18} />
 				</a>
-				<a class="button lg secondary" href="#how">Как работи</a>
+				<a class="button lg secondary" href="#organisations">За организации</a>
 			</div>
 		</div>
 
@@ -243,6 +276,33 @@
 				<span>Измамник · 3 грешни резултата</span>
 			</div>
 			<p class="muted small">Така изглежда проверката на живо по време на демонстрация.</p>
+		</div>
+	</section>
+
+	<!-- Organisations -->
+	<section id="organisations" class="section">
+		<div class="section-head" use:reveal>
+			<span class="eyebrow">За организации</span>
+			<h2>Вашата собствена мрежа от устройства.</h2>
+			<p class="muted">
+				Училища, лаборатории и изследователски екипи създават своя мрежа, добавят устройства и ги
+				управляват от една конзола.
+			</p>
+		</div>
+		<div class="uses">
+			{#each features as f, i (f.title)}
+				<article class="card use" use:reveal={i * 60}>
+					<span class="icon-tile"><Icon name={f.icon} size={22} /></span>
+					<h3>{f.title}</h3>
+					<p class="muted">{f.text}</p>
+				</article>
+			{/each}
+		</div>
+		<div class="org-cta" use:reveal>
+			<a class="button lg" href={resolve('/login')}
+				>Вход в конзолата <Icon name="arrow" size={18} /></a
+			>
+			<span class="muted">Достъпът е с покана от администратора на платформата.</span>
 		</div>
 	</section>
 
@@ -524,6 +584,13 @@
 		margin: var(--s-2) 0 0;
 	}
 
+	.org-cta {
+		display: flex;
+		align-items: center;
+		gap: var(--s-4);
+		flex-wrap: wrap;
+		margin-top: var(--s-5);
+	}
 	.schools {
 		display: flex;
 		gap: var(--s-5);

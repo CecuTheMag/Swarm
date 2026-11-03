@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { expectedBackend } from './backend.ts';
-import { SUBMIT_HEADERS } from './submit.ts';
+import { PUBLIC_NETWORK, SUBMIT_HEADERS, signIn } from './submit.ts';
 import vectors from '../../templates/pi/vectors.json' with { type: 'json' };
 import type { JobSummary } from '../src/lib/protocol/JobSummary.ts';
 import type { PiResult } from '../src/lib/protocol/PiResult.ts';
@@ -63,12 +63,11 @@ test('a browser worker computes a job with an exact result', async ({
 		)
 		.toMatchObject({ inside: big.inside });
 
-	// The dashboard reflects the finished job.
-	const dashboard = await page.context().newPage();
-	await dashboard.goto('/dashboard');
-	await expect(dashboard.locator(`[data-job-id="${job.id}"]`)).toHaveAttribute(
-		'data-status',
-		'done'
-	);
-	await expect(dashboard.getByTestId('worker-count')).toHaveText('1');
+	// The public network's console reflects the finished job and the device.
+	const admin = await page.context().newPage();
+	await signIn(admin);
+	await admin.goto(`/app/n/${PUBLIC_NETWORK}/jobs`);
+	await expect(admin.locator(`[data-job-id="${job.id}"]`)).toHaveAttribute('data-status', 'done');
+	await admin.goto(`/app/n/${PUBLIC_NETWORK}`);
+	await expect(admin.getByTestId('overview-online')).toHaveText('1');
 });

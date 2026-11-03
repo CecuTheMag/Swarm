@@ -41,7 +41,9 @@ export default defineConfig({
 				RUST_LOG: 'warn',
 				SWARM_REDUNDANCY: '1',
 				// As on the public server; the same password as e2e/submit.ts.
-				SWARM_SUBMIT_TOKEN: 'e2e-submit-password'
+				SWARM_SUBMIT_TOKEN: 'e2e-submit-password',
+				// The platform admin the console tests sign in as (e2e/submit.ts).
+				SWARM_BOOTSTRAP_ADMIN: 'e2e-admin@swarm.test:e2e admin password'
 			},
 			reuseExistingServer: false,
 			timeout: 300_000

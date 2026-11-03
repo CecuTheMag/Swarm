@@ -12,8 +12,19 @@
 	let {
 		workers,
 		caughtIds,
-		totals
-	}: { workers: WorkerSummary[]; caughtIds: Set<string>; totals: Totals } = $props();
+		totals,
+		base = '/api/chaos',
+		password: needsPassword = true
+	}: {
+		workers: WorkerSummary[];
+		caughtIds: Set<string>;
+		totals: Totals;
+		/** `/api/chaos` (public network) or `/api/networks/{id}/chaos`. */
+		base?: string;
+		/** The public network's tools take the stored submit password; a network's take
+		 * the session, and are shown only to its admins. */
+		password?: boolean;
+	} = $props();
 
 	let password = $state('');
 	let message = $state<{ text: string; bad: boolean } | null>(null);
@@ -33,7 +44,7 @@
 		busy = true;
 		message = null;
 		try {
-			const res = await fetch(`/api/chaos/${path}`, {
+			const res = await fetch(`${base}/${path}`, {
 				method: 'POST',
 				headers: { ...authHeaders(password), ...(body && { 'content-type': 'application/json' }) },
 				body: body && JSON.stringify(body)
@@ -43,7 +54,9 @@
 				bad: true,
 				text:
 					res.status === 401
-						? 'Грешна парола: въведете я отново на таблото.'
+						? needsPassword
+							? 'Грешна парола: въведете я отново на таблото.'
+							: 'Сесията изтече. Влезте отново.'
 						: res.status === 404
 							? 'Устройството вече не е свързано.'
 							: ((await res.json()) as ApiError).error
@@ -84,7 +97,7 @@
 	}
 </script>
 
-{#if password}
+{#if password || !needsPassword}
 	<section class="chaos" data-testid="chaos-panel" aria-label="Хаос">
 		<h2>Хаос</h2>
 		<div class="actions">
@@ -143,6 +156,8 @@
 	.actions button {
 		padding: 8px 10px;
 		font-size: 0.875rem;
+		white-space: normal;
+		text-align: center;
 	}
 	.message,
 	.totals {

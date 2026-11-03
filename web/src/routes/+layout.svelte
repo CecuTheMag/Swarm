@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { onNavigate } from '$app/navigation';
+	import { account } from '#lib/account.svelte.ts';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import '@fontsource-variable/inter';
@@ -11,16 +13,20 @@
 
 	let { children }: LayoutProps = $props();
 
-	const links = [
+	const links = $derived([
 		{ href: resolve('/') + '#how', label: 'Как работи', path: null },
-		{ href: resolve('/dashboard'), label: 'Табло', path: '/dashboard' },
-		{ href: resolve('/selftest'), label: 'Самопроверка', path: '/selftest' }
-	];
+		{ href: resolve('/') + '#organisations', label: 'За организации', path: null },
+		account.me
+			? { href: resolve('/app'), label: 'Конзола', path: '/app' }
+			: { href: resolve('/login'), label: 'Вход', path: '/login' }
+	]);
+	onMount(() => void account.refresh().catch(() => null));
+	const here = (p: string | null) => (p && path.startsWith(p) ? 'page' : undefined);
 
 	let menuOpen = $state(false);
 	const path = $derived(page.url.pathname);
 	// The projector page: dark, edge to edge, no footer.
-	const stage = $derived(path.startsWith('/render/'));
+	const stage = $derived(path.startsWith('/render/') || /^\/app\/n\/[^/]+\/live$/.test(path));
 
 	// Page changes cross-fade where the browser supports View Transitions.
 	onNavigate((navigation) => {
@@ -63,9 +69,7 @@
 				{#each links as link (link.href)}
 					<li>
 						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() builds the path; only a #section is added -->
-						<a href={link.href} aria-current={link.path && path === link.path ? 'page' : undefined}>
-							{link.label}
-						</a>
+						<a href={link.href} aria-current={here(link.path)}>{link.label}</a>
 					</li>
 				{/each}
 			</ul>
@@ -116,7 +120,7 @@
 				</div>
 				<ul class="foot-links">
 					<li><a href={resolve('/worker')}>Включи се</a></li>
-					<li><a href={resolve('/dashboard')}>Табло</a></li>
+					<li><a href={resolve('/app')}>Конзола</a></li>
 					<li><a href={resolve('/selftest')}>Самопроверка</a></li>
 					<li>
 						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() builds the path; only a #section is added -->

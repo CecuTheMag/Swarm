@@ -47,7 +47,9 @@ export default defineConfig({
 		// Same origin for the page and the coordinator, so WebGPU's secure-context
 		// requirement is met by a single TLS endpoint.
 		proxy: {
-			'/api': 'http://localhost:7700',
+			// The Host header stays the page's, as behind Caddy in production: the coordinator
+			// checks that changes come from this site (Origin = Host, spec 0010).
+			'/api': { target: 'http://localhost:7700', changeOrigin: false },
 			'/ws': { target: 'ws://localhost:7700', ws: true }
 		}
 	},

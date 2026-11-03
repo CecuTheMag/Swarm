@@ -2,6 +2,7 @@ import { ComputeClient } from './compute-client.ts';
 import { DEFAULT_POWER, restMs, type PauseReason } from './pacing.ts';
 import type { Backend } from '#lib/protocol/Backend.ts';
 import type { CoordinatorMessage } from '#lib/protocol/CoordinatorMessage.ts';
+import type { DeviceControl } from '#lib/protocol/DeviceControl.ts';
 import type { DeviceInfo } from '#lib/protocol/DeviceInfo.ts';
 import type { WorkerMessage } from '#lib/protocol/WorkerMessage.ts';
 
@@ -24,7 +25,15 @@ export type SessionStatus =
 	| 'waiting'
 	| 'reconnecting'
 	| 'paused'
+	| 'held'
 	| 'unsupported';
+
+/** Errors after which reconnecting would only be turned away again. */
+const FINAL_ERRORS = [
+	'this device is blocked',
+	'this device was removed',
+	'this network does not exist'
+];
 
 const CLIENT_ID_KEY = 'swarm-client-id';
 
@@ -78,6 +87,10 @@ export class WorkerSession {
 	power = $state<number>(DEFAULT_POWER);
 	/** Why the device is paused, or null. */
 	pausedFor = $state<PauseReason | null>(null);
+	/** What the network's owner allows this device (spec 0010). */
+	control = $state<DeviceControl>({ state: 'running' });
+	/** The network's power limit, in percent. */
+	maxPower = $state(100);
 
 	private compute: ComputeClient | null = null;
 	private ws: WebSocket | null = null;
@@ -106,11 +119,25 @@ export class WorkerSession {
 	private restTimer: ReturnType<typeof setTimeout> | undefined;
 	private wake: (() => void) | null = null;
 
-	/** `backend: 'wasm'` computes on the CPU even when there is a GPU. */
+	/**
+	 * `backend: 'wasm'` computes on the CPU even when there is a GPU; `joinCode` joins
+	 * that network instead of the public one.
+	 */
 	constructor(
 		private url: string,
-		private backend?: Backend
+		private backend?: Backend,
+		private joinCode?: string
 	) {}
+
+	/** The power the device actually uses: its owner's choice within the network's limit. */
+	get effectivePower(): number {
+		return Math.min(this.power, this.maxPower);
+	}
+
+	/** Whether the network's owner lets this device compute now. */
+	private get allowed(): boolean {
+		return this.control.state === 'running';
+	}
 
 	async start() {
 		if (this.running) return;
@@ -180,7 +207,8 @@ export class WorkerSession {
 				protocol_version: PROTOCOL_VERSION,
 				client_version: CLIENT_VERSION,
 				device: this.device!,
-				client_id: clientId()
+				client_id: clientId(),
+				join_code: this.joinCode
 			});
 		};
 		ws.onmessage = (event) => this.onMessage(JSON.parse(event.data) as CoordinatorMessage);
@@ -264,7 +292,7 @@ export class WorkerSession {
 	/** Units to hold so that the next ones arrive before the current one is done. */
 	private wanted(): number {
 		// Resting stretches each unit to `unitMs · 100 / power`.
-		const paced = (this.unitMs * 100) / this.power;
+		const paced = (this.unitMs * 100) / this.effectivePower;
 		const inFlight = 1 + Math.ceil(this.roundTripMs / Math.max(paced, 1));
 		return Math.min(MAX_HELD, Math.max(MIN_HELD, inFlight));
 	}
@@ -276,6 +304,7 @@ export class WorkerSession {
 			this.running &&
 			this.ws &&
 			!this.pausedFor &&
+			this.allowed &&
 			this.held.size + this.requested < this.wanted()
 		) {
 			this.requested++;
@@ -294,7 +323,8 @@ export class WorkerSession {
 	}
 
 	private onMessage(msg: CoordinatorMessage) {
-		if (msg.type !== 'error') {
+		// Errors and control messages come unasked; everything else answers a request.
+		if (msg.type !== 'error' && msg.type !== 'control') {
 			this.owed = Math.max(0, this.owed - 1);
 			clearTimeout(this.replyTimeout);
 			if (this.owed > 0 && this.ws) this.armReplyTimeout(this.ws);
@@ -327,9 +357,24 @@ export class WorkerSession {
 				this.requestWork();
 				break;
 
+			case 'control':
+				this.control = msg.control;
+				this.maxPower = msg.max_power;
+				if (this.allowed) {
+					if (this.status === 'held') this.status = 'waiting';
+					this.requestWork();
+					void this.computeNext();
+				} else if (!this.computing && this.held.size === 0) {
+					// Units already in hand are finished; no new ones are asked for.
+					this.status = 'held';
+				}
+				break;
+
 			case 'no_work':
 				this.answered();
-				if (!this.computing && this.held.size === 0) this.status = 'waiting';
+				if (!this.computing && this.held.size === 0) {
+					this.status = this.allowed ? 'waiting' : 'held';
+				}
 				// Ask again later, once, unless something else asks first.
 				if (this.requested === 0) {
 					clearTimeout(this.retry);
@@ -341,7 +386,7 @@ export class WorkerSession {
 				// The coordinator closes the connection next; onclose reconnects, except
 				// for a device it has blocked, which would only be turned away again.
 				this.error = msg.message;
-				if (msg.message.startsWith('this device is blocked')) this.stop();
+				if (FINAL_ERRORS.some((e) => msg.message.startsWith(e))) this.stop();
 				break;
 		}
 		if (this.disconnectWhenSettled && this.owed === 0) this.disconnect();
@@ -376,7 +421,7 @@ export class WorkerSession {
 			// leases than this worker means to hold.
 			this.sendExpectingReply(reply);
 			this.requestWork();
-			const rest = restMs(elapsed, this.power);
+			const rest = restMs(elapsed, this.effectivePower);
 			if (rest > 0 && this.running && !this.pausedFor) await this.rest(rest);
 		}
 		this.computing = false;
@@ -384,7 +429,7 @@ export class WorkerSession {
 		if (this.pausedFor) {
 			this.settleThenDisconnect();
 		} else if (this.ws && this.queue.length === 0 && this.status === 'computing') {
-			this.status = 'waiting';
+			this.status = this.allowed ? 'waiting' : 'held';
 		}
 	}
 

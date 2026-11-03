@@ -3,8 +3,9 @@ import { wsUrl } from '#lib/net.ts';
 import type { DashboardEvent } from '#lib/protocol/DashboardEvent.ts';
 
 /**
- * The coordinator's live event stream as reactive state: connects to /ws/dashboard,
- * reconnects when the connection drops, and ticks `now` once a second for rates.
+ * The coordinator's live event stream as reactive state: connects to `path` (the public
+ * network's /ws/dashboard, or a network's /ws/networks/{id}/live), reconnects when the
+ * connection drops, and ticks `now` once a second for rates.
  */
 export class LiveDashboard {
 	// Replaced whole by every event, never mutated: no deep proxy needed.
@@ -18,7 +19,10 @@ export class LiveDashboard {
 	private tick: ReturnType<typeof setInterval> | undefined;
 
 	/** `onEvent` sees every event after it has been applied. */
-	constructor(private onEvent?: (event: DashboardEvent) => void) {}
+	constructor(
+		private onEvent?: (event: DashboardEvent) => void,
+		private path = '/ws/dashboard'
+	) {}
 
 	start() {
 		this.closed = false;
@@ -34,7 +38,7 @@ export class LiveDashboard {
 	}
 
 	private connect() {
-		const socket = new WebSocket(wsUrl('/ws/dashboard'));
+		const socket = new WebSocket(wsUrl(this.path));
 		this.ws = socket;
 		socket.onopen = () => (this.connected = true);
 		socket.onmessage = (e) => {

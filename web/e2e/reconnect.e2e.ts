@@ -68,8 +68,8 @@ test('a worker that loses its connection mid-unit carries on after reconnecting'
 	await page.getByRole('button', { name: 'Спри' }).click();
 	await expect(page.getByTestId('status')).toHaveAttribute('data-status', 'stopped');
 	// Nothing of the routed connections is left for the next test to count as a worker.
-	const dashboard = await page.context().newPage();
-	await dashboard.goto('/dashboard');
-	await expect(dashboard.getByTestId('connection')).toHaveText('Свързано с координатора');
-	await expect(dashboard.getByTestId('worker-count')).toHaveText('0');
+	const home = await page.context().newPage();
+	await home.goto('/');
+	await expect(home.getByTestId('home-live')).toContainText('на линия');
+	await expect(home.getByTestId('home-devices')).toHaveText('0');
 });
