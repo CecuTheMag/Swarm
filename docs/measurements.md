@@ -27,6 +27,19 @@ test the CPU fallback, which is what a browser without WebGPU gets.
 Not yet tested on real devices: Safari on an iPhone (iOS 26 ships WebGPU, so it would
 take the GPU path) and Firefox with WebGPU (Windows, macOS).
 
+## School lab, 2026-11-04
+
+13 PCs (Intel i3 of 2011–2012, 4 GB, Intel HD Graphics, Windows 10), all on the CPU
+path; no WebGPU adapter on any. Each page in `docs/tests/` has the details.
+
+| Test | Result |
+|---|---|
+| Self-test, Edge and Chrome 156 | Bit-exact on all 13; 224–369 million π samples/s and 1.5–2.2 million light paths/s per PC |
+| π, public network, 400 × 2²⁸ samples | 43 s, 0 disagreements |
+| π, the lab's own network, 600 × 2²⁸ samples | 60 s |
+| Picture 1920×1080, 1 024 samples per pixel | About 70 s, 2 304 units, 0 disagreements |
+| Neural network sweep, 672 trainings | 154 s on one thread per PC; 91 s on three, with an identical leaderboard |
+
 ## School lab idle time
 
 | Date | Lab | PCs | Observed idle hours | Method |

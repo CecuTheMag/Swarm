@@ -21,14 +21,19 @@
 	const admin = $derived(network.view ? can(network.view.role, 'admin') : false);
 
 	let job = $state<JobSummary | null>(null);
-	let board = $state<NnResult | null>(null);
+	let live = $state<NnResult | null>(null);
+	// A finished sweep's own result: the live board may have been read just before
+	// the last unit, and is not read again once the job is done.
+	const board = $derived(
+		job?.status === 'done' && job.result ? (job.result as unknown as NnResult) : live
+	);
 	let error = $state<string | null>(null);
 	let missing = $state(false);
 
 	const base = $derived(`/api/networks/${id}/jobs/${jobId}`);
 	async function load() {
 		try {
-			[job, board] = await Promise.all([
+			[job, live] = await Promise.all([
 				api<JobSummary>(base),
 				api<NnResult>(`${base}/leaderboard`)
 			]);
