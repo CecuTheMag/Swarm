@@ -1,0 +1,12 @@
+[package]
+name = "primes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Counts the primes in a range of numbers, a block of the range per unit"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+swarm-program = { path = "../../../sdk/rust" }

@@ -1,0 +1,16 @@
+# Example programs for Swarm (spec 0008), built for WebAssembly:
+#   cargo build --release   (from this directory)
+# Outputs go to target/wasm32-unknown-unknown/release/*.wasm.
+[workspace]
+resolver = "3"
+members = ["primes"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1

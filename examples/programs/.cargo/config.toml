@@ -1,0 +1,6 @@
+[build]
+target = "wasm32-unknown-unknown"
+
+# Swarm needs every program to declare how much memory it may use (at most 256 MiB).
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "link-arg=--max-memory=67108864"]

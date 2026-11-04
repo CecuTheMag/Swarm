@@ -1,0 +1,10 @@
+[package]
+name = "swarm-program"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Write programs that run on Swarm, the volunteer browser grid (spec 0008)"
+
+[lints]
+workspace = true
