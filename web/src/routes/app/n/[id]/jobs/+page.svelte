@@ -48,34 +48,65 @@
 	});
 
 	// A neural network sweep (spec 0011): which settings train best. Each preset is
-	// a grid of settings; every device trains one combination.
+	// a grid of settings; every device trains one combination. Real handwriting learns
+	// from more, smaller steps; every setting stays within a unit's work limit
+	// (kernels::nn::MAX_WORK).
 	const SWEEPS = {
-		quick: {
-			hidden: [32, 64, 128],
-			layers: [1],
-			lr: [0.05, 0.2],
-			batch: [32],
-			steps: 300,
-			seeds: 1
+		mnist: {
+			quick: {
+				hidden: [64, 128, 192],
+				layers: [1],
+				lr: [0.2, 0.4],
+				batch: [16],
+				steps: 2000,
+				seeds: 1
+			},
+			normal: {
+				hidden: [64, 128, 192],
+				layers: [1, 2],
+				lr: [0.1, 0.2, 0.4],
+				batch: [16],
+				steps: 3000,
+				seeds: 2
+			},
+			deep: {
+				hidden: [32, 64, 96, 128, 192, 256],
+				layers: [1, 2],
+				lr: [0.05, 0.1, 0.2, 0.3, 0.45],
+				batch: [8, 16],
+				steps: 2500,
+				seeds: 2
+			}
 		},
-		normal: {
-			hidden: [32, 64, 128],
-			layers: [1, 2],
-			lr: [0.05, 0.1, 0.2, 0.4],
-			batch: [32],
-			steps: 600,
-			seeds: 2
-		},
-		deep: {
-			hidden: [16, 32, 64, 128, 256],
-			layers: [1, 2],
-			lr: [0.02, 0.05, 0.1, 0.2, 0.4],
-			batch: [16, 32],
-			steps: 600,
-			seeds: 2
+		glyphs: {
+			quick: {
+				hidden: [32, 64, 128],
+				layers: [1],
+				lr: [0.05, 0.2],
+				batch: [32],
+				steps: 300,
+				seeds: 1
+			},
+			normal: {
+				hidden: [32, 64, 128],
+				layers: [1, 2],
+				lr: [0.05, 0.1, 0.2, 0.4],
+				batch: [32],
+				steps: 600,
+				seeds: 2
+			},
+			deep: {
+				hidden: [16, 32, 64, 128, 256],
+				layers: [1, 2],
+				lr: [0.02, 0.05, 0.1, 0.2, 0.4],
+				batch: [16, 32],
+				steps: 600,
+				seeds: 2
+			}
 		}
 	};
-	let sweep = $state<keyof typeof SWEEPS>('normal');
+	let dataset = $state<keyof typeof SWEEPS>('mnist');
+	let sweep = $state<keyof typeof SWEEPS.mnist>('normal');
 	let nnHidden = $state('');
 	let nnLayers = $state('');
 	let nnLr = $state('');
@@ -83,7 +114,7 @@
 	let nnSteps = $state(600);
 	let nnSeeds = $state(2);
 	$effect(() => {
-		const s = SWEEPS[sweep];
+		const s = SWEEPS[dataset][sweep];
 		nnHidden = s.hidden.join(', ');
 		nnLayers = s.layers.join(', ');
 		nnLr = s.lr.join(', ');
@@ -118,7 +149,7 @@
 							? {
 									template,
 									params: {
-										dataset: 'glyphs',
+										dataset,
 										steps: nnSteps,
 										hidden: list(nnHidden),
 										layers: list(nnLayers),
@@ -210,6 +241,25 @@
 				<p class="muted">
 					Търси с кои настройки малка невронна мрежа се учи най-добре да разпознава ръкописни цифри.
 					Всяко устройство обучава една настройка, а резултатите се подреждат в класация.
+				</p>
+				<div class="segmented stack-sm" role="group" aria-label="Цифри за обучение">
+					<button
+						type="button"
+						aria-pressed={dataset === 'mnist'}
+						onclick={() => (dataset = 'mnist')}
+						data-testid="dataset-mnist">Истински почерк (MNIST)</button
+					>
+					<button
+						type="button"
+						aria-pressed={dataset === 'glyphs'}
+						onclick={() => (dataset = 'glyphs')}
+						data-testid="dataset-glyphs">Рисувани от компютъра</button
+					>
+				</div>
+				<p class="muted small">
+					{dataset === 'mnist'
+						? 'Цифри, написани на ръка от 500 души: 10 000 за учене и 2 000 за проверка (2,4 MB, изтегля се веднъж на устройство).'
+						: 'Цифри, които всяко устройство рисува само: нищо не се изтегля.'}
 				</p>
 				<div class="segmented stack-sm" role="group" aria-label="Обхват на търсенето">
 					<button type="button" aria-pressed={sweep === 'quick'} onclick={() => (sweep = 'quick')}

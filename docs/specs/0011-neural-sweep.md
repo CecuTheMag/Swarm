@@ -1,6 +1,6 @@
 # 0011 — Neural network sweep
 
-Status: implemented (phases 1–3); phase 4 planned
+Status: implemented (phases 1–3, and MNIST of phase 4); the rest of phase 4 planned
 
 ## Goal
 
@@ -49,7 +49,7 @@ keep even small updates from vanishing, so no stochastic rounding is needed.
 
 A multilayer perceptron: input → 1 or 2 hidden layers (16–256 units, ReLU) → 10
 classes (softmax, cross-entropy), trained with mini-batch SGD. Every unit is capped at
-2.5 · 10⁹ multiply-adds (`kernels::nn::MAX_WORK`, about 5 s on one laptop core), so no
+5 · 10⁹ multiply-adds (`kernels::nn::MAX_WORK`, about 10 s on one laptop core), so no
 device gets a part that runs for minutes. Small enough to train in seconds on a phone, big enough that the settings
 matter. A convolutional layer is phase 4.
 
@@ -61,7 +61,7 @@ device trains on exactly the same bytes, and nothing personal ever enters it.
 | Dataset | Content | Size | Phase |
 |---|---|---|---|
 | `glyphs` | Procedural handwritten-style digits 0–9 (strokes with random shift, scale, slant, thickness, noise and a stray stroke on half of them), 14×14, 4 096 train + 1 024 validation, generated from a fixed seed by the reference kernels | 0 bytes: every device generates it | 1 |
-| `mnist` | MNIST digits (CC BY-SA 3.0), downsampled to 14×14, 10 000 train + 2 000 validation | ~2.4 MB, cached | 4 |
+| `mnist` | MNIST (CC BY-SA 3.0): real handwriting, 2 × 2 averaged to 14×14 (`tools/pack_mnist.py`); the first 10 000 of its training set to train, the first 2 000 of its test set (other writers) to validate | 2.4 MB (`templates/nn/mnist14.bin`, SHA-256 pinned in `kernels::nn::mnist`), downloaded once per device | 4 (done) |
 | `fashion` | Fashion-MNIST (MIT), same format | ~2.4 MB, cached | 4 |
 
 Pixels are `u8`; a fixed validation split is never trained on.
@@ -136,8 +136,9 @@ value), and the full leaderboard. When done: „Изтегли модела“.
 2. ~~**Browser kernels**~~ (done): WGSL port, WebAssembly fallback, test vectors, self-test,
    browser tests in all four engines.
 3. ~~**Console**~~ (done): job form, live leaderboard, heat map, curves, model download.
-4. **More**: MNIST and Fashion-MNIST packed datasets, a convolutional layer,
-   successive halving (train many configurations briefly, continue the best).
+4. **More**: ~~MNIST~~ (done: the default in the console, with its own presets;
+   about 95 % for 128 neurons, batch 16, 4 000 steps); Fashion-MNIST, a convolutional
+   layer, successive halving (train many configurations briefly, continue the best).
 
 ## Tests
 

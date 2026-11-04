@@ -154,14 +154,16 @@
 		{/if}
 	</section>
 
-	{#if job.status === 'done' && best && params?.dataset === 'glyphs'}
+	{#if job.status === 'done' && best}
 		<section class="card">
 			<h3>Изпробвайте мрежата</h3>
 			<p class="muted small">
-				Най-добрата мрежа от класацията, с теглата, които устройствата провериха. Тя е виждала само
-				рисувани от компютъра цифри.
+				Най-добрата мрежа от класацията, с теглата, които устройствата провериха.
+				{params.dataset === 'mnist'
+					? 'Учила се е от 10 000 цифри, написани на ръка от хора.'
+					: 'Тя е виждала само рисувани от компютъра цифри.'}
 			</p>
-			<DigitPad url="{base}/model.json" />
+			<DigitPad url="{base}/model.json" dataset={params.dataset} />
 		</section>
 	{/if}
 

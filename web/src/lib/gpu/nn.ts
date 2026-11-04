@@ -100,6 +100,7 @@ export function createNnKernel(device: GPUDevice, reference: NnReference): NnKer
 	}
 
 	async function run(p: NnUnitParams, signal?: AbortSignal): Promise<NnUnitOutput> {
+		await reference.prepare(p.dataset);
 		const data = reference.dataset(p.dataset);
 		const { pixels, labels } = dataset(p.dataset);
 		const sizes = nnSizes(p, data.dim);

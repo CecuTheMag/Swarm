@@ -60,9 +60,9 @@ pub extern "C" fn pt_render_rows(
     })
 }
 
-/// `glyphs`, and the same images as the browser uploads them to the GPU: pixels of
+/// A dataset, and the same images as the browser uploads them to the GPU: pixels of
 /// the training then validation images, and their labels in the same order.
-struct Glyphs {
+struct Images {
     data: kernels::nn::Dataset,
     pixels: Vec<u8>,
     labels: Vec<u8>,
@@ -70,24 +70,64 @@ struct Glyphs {
 
 thread_local! {
     /// Generated on first use.
-    static GLYPHS: std::cell::OnceCell<Glyphs> = const { std::cell::OnceCell::new() };
+    static GLYPHS: std::cell::OnceCell<Images> = const { std::cell::OnceCell::new() };
+    /// `mnist`, once the page has handed over the file (see [`nn_mnist_buffer`]).
+    static MNIST: std::cell::OnceCell<Images> = const { std::cell::OnceCell::new() };
+    static MNIST_IN: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
     /// Holds the last result of [`nn_init`] or [`nn_train`].
     static NN_OUT: std::cell::RefCell<Vec<u32>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-fn with_glyphs<T>(f: impl FnOnce(&Glyphs) -> T) -> T {
-    GLYPHS.with(|cell| {
-        f(cell.get_or_init(|| {
-            let data = kernels::nn::glyphs::dataset();
-            let pixels = [data.train_x.as_slice(), &data.val_x].concat();
-            let labels = [data.train_y.as_slice(), &data.val_y].concat();
-            Glyphs {
-                data,
-                pixels,
-                labels,
-            }
-        }))
+impl Images {
+    fn new(data: kernels::nn::Dataset) -> Self {
+        let pixels = [data.train_x.as_slice(), &data.val_x].concat();
+        let labels = [data.train_y.as_slice(), &data.val_y].concat();
+        Images {
+            data,
+            pixels,
+            labels,
+        }
+    }
+}
+
+fn with_glyphs<T>(f: impl FnOnce(&Images) -> T) -> T {
+    GLYPHS.with(|cell| f(cell.get_or_init(|| Images::new(kernels::nn::glyphs::dataset()))))
+}
+
+/// A buffer of [`kernels::nn::mnist::BYTES`] bytes for the page to copy the packed
+/// `mnist` file into, then call [`nn_mnist_load`]. The page checks the file's SHA-256.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn nn_mnist_buffer() -> *mut u8 {
+    MNIST_IN.with_borrow_mut(|b| {
+        b.resize(kernels::nn::mnist::BYTES, 0);
+        b.as_mut_ptr()
     })
+}
+
+/// Reads the file copied into [`nn_mnist_buffer`]: 1 if it is a valid `mnist`.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn nn_mnist_load() -> u32 {
+    let parsed = MNIST_IN.with_borrow_mut(|b| kernels::nn::mnist::parse(&std::mem::take(b)));
+    match parsed {
+        Ok(data) => {
+            MNIST.with(|cell| {
+                let _ = cell.set(Images::new(data));
+            });
+            1
+        }
+        Err(_) => 0,
+    }
+}
+
+/// The dataset `0` (`glyphs`) or `1` (`mnist`, once loaded).
+fn with_dataset<T>(dataset: u32, f: impl FnOnce(&Images) -> T) -> Option<T> {
+    match dataset {
+        0 => Some(with_glyphs(f)),
+        1 => MNIST.with(|cell| cell.get().map(f)),
+        _ => None,
+    }
 }
 
 /// Pixels of `glyphs` (training images, then validation images; 196 bytes each).
@@ -136,12 +176,14 @@ pub extern "C" fn nn_init(hidden: u32, layers: u32, seed: u32) -> *const u32 {
     })
 }
 
-/// Trains a configuration on `glyphs` (see [`kernels::nn::train`]). The result is
-/// the number of correct validation images, the 16 curve points, then the final
-/// weights as for [`nn_init`]; valid until the next call.
+/// Trains a configuration on dataset `dataset` (see [`with_dataset`] and
+/// [`kernels::nn::train`]). The result is the number of correct validation images,
+/// the 16 curve points, then the final weights as for [`nn_init`]; valid until the
+/// next call. Null for a dataset that is not loaded.
 #[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn nn_train(
+    dataset: u32,
     hidden: u32,
     layers: u32,
     lr_q16: u32,
@@ -157,7 +199,9 @@ pub extern "C" fn nn_train(
         steps,
         seed,
     };
-    let trained = with_glyphs(|g| kernels::nn::train(&cfg, &g.data));
+    let Some(trained) = with_dataset(dataset, |d| kernels::nn::train(&cfg, &d.data)) else {
+        return std::ptr::null();
+    };
     NN_OUT.with_borrow_mut(|out| {
         out.clear();
         out.push(trained.correct);

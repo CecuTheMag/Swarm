@@ -1,10 +1,19 @@
 <script lang="ts">
 	import { api, failureText } from '#lib/api.ts';
-	import { networkOf, rasterize, SIDE, type Model, type Point, type Reading } from './digit.ts';
+	import {
+		networkOf,
+		PENS,
+		rasterize,
+		SIDE,
+		type Model,
+		type Point,
+		type Reading
+	} from './digit.ts';
 
 	// Try the sweep's best network (spec 0011): draw a digit and watch the network the
 	// room trained read it, as you draw.
-	let { url }: { url: string } = $props();
+	let { url, dataset }: { url: string; dataset: string } = $props();
+	const pen = $derived(PENS[dataset] ?? PENS.glyphs);
 
 	let read = $state<((pixels: Uint8Array) => Reading) | null>(null);
 	let error = $state<string | null>(null);
@@ -58,7 +67,7 @@
 		if (frame) return;
 		frame = requestAnimationFrame(() => {
 			frame = 0;
-			const pixels = rasterize(strokes);
+			const pixels = rasterize(strokes, pen);
 			if (strokes.length > 0 && read) reading = read(pixels);
 			paint(pixels);
 		});
@@ -89,7 +98,7 @@
 		v.putImageData(image, 0, 0);
 	}
 	$effect(() => {
-		if (pad && preview) paint(rasterize(strokes));
+		if (pad && preview) paint(rasterize(strokes, pen));
 	});
 
 	const ranked = $derived(reading?.probabilities ?? Array<number>(10).fill(0));

@@ -163,7 +163,7 @@ pub mod nn {
     pub const ID: &str = "nn";
     pub const VERSION: u32 = 1;
 
-    pub const DATASETS: [&str; 1] = ["glyphs"];
+    pub const DATASETS: [&str; 2] = ["glyphs", "mnist"];
     /// Values per setting in one sweep.
     pub const MAX_VALUES: usize = 8;
     pub const MAX_SEEDS: u32 = 5;

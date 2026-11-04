@@ -49,7 +49,9 @@ self.onmessage = async (event: MessageEvent<CpuTask>) => {
 	try {
 		if (t.template === 'nn') {
 			nn ??= loadNnReference();
-			const { correct, curve, weights } = (await nn).train(t);
+			const reference = await nn;
+			await reference.prepare(t.dataset);
+			const { correct, curve, weights } = reference.train(t);
 			self.postMessage({ ok: true, correct, curve, weights } satisfies CpuResult, [weights.buffer]);
 			return;
 		}

@@ -424,6 +424,14 @@ mod vectors {
             unit(1, 16, 2, 0.2, 4, 30, 2),
             unit(2, 5, 2, 0.45, 0, 40, 3),
             unit(3, 32, 1, 0.05, 7, 5, 0xffff_ffff),
+            UnitParams {
+                dataset: "mnist".into(),
+                ..unit(4, 24, 1, 0.3, 4, 40, 5)
+            },
+            UnitParams {
+                dataset: "mnist".into(),
+                ..unit(5, 12, 2, 0.4, 2, 30, 6)
+            },
         ]
         .into_iter()
         .map(|params| {

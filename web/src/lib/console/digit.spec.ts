@@ -24,7 +24,7 @@ describe('trying out a trained network', () => {
 		const { instance } = await WebAssembly.instantiate(await readFile(wasmPath), {});
 		const k = instance.exports as unknown as Exports;
 		const [hidden, layers] = [32, 2];
-		const ptr = k.nn_train(hidden, layers, 13107, 5, 200, 7);
+		const ptr = k.nn_train(0, hidden, layers, 13107, 5, 200, 7);
 		const sizes = [DIM, ...Array<number>(layers).fill(hidden), 10];
 		let words = 0;
 		for (let l = 0; l + 1 < sizes.length; l++) words += sizes[l] * sizes[l + 1] + sizes[l + 1];

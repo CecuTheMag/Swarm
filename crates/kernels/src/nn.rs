@@ -19,6 +19,7 @@
 //! shifts; the loss uses [`tables::LOG2`].
 
 pub mod glyphs;
+pub mod mnist;
 pub mod tables;
 
 use crate::rng::{sample2, unit_base};
@@ -42,8 +43,9 @@ pub const MAX_HIDDEN: u32 = 256;
 pub const MAX_BATCH_LOG2: u32 = 7;
 pub const MAX_STEPS: u32 = 5000;
 /// Most multiply-adds of a unit's forward passes (weights × batch × steps): about
-/// 5 s on one laptop core, so no device gets a unit that runs for minutes.
-pub const MAX_WORK: u64 = 2_500_000_000;
+/// 10 s on one laptop core (25 s on a school PC of 2012), so no device gets a unit
+/// that runs for minutes.
+pub const MAX_WORK: u64 = 5_000_000_000;
 
 /// Training images and the held-out validation images, `dim` bytes each.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -474,13 +476,24 @@ mod tests {
     #[test]
     fn extreme_settings_stay_within_i32() {
         // Debug builds check every operation for overflow.
-        let data = glyphs::dataset();
-        for c in [
-            cfg(MAX_HIDDEN, 2, 0.49, MAX_BATCH_LOG2, 30),
-            cfg(1, 1, 0.49, 0, 200),
-            cfg(256, 1, 0.3, 3, 60),
-        ] {
-            train(&c, &data);
+        for data in [glyphs::dataset(), mnist::dataset()] {
+            for c in [
+                cfg(MAX_HIDDEN, 2, 0.49, MAX_BATCH_LOG2, 30),
+                cfg(1, 1, 0.49, 0, 200),
+                cfg(256, 1, 0.3, 3, 60),
+            ] {
+                train(&c, &data);
+            }
         }
+    }
+
+    #[test]
+    fn real_handwriting_is_learnt() {
+        let data = mnist::dataset();
+        assert_eq!(data.val_y.len(), mnist::VALIDATION);
+        let t = train(&cfg(64, 1, 0.2, 5, 400), &data);
+        let accuracy = t.correct as f64 / data.val_y.len() as f64;
+        println!("mnist accuracy {accuracy}");
+        assert!(accuracy > 0.85, "accuracy {accuracy}");
     }
 }
