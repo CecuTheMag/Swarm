@@ -214,6 +214,43 @@ describe('WorkerSession', () => {
 		session.destroy();
 	});
 
+	it('a CPU device trains one network per thread at once, other units alone', async () => {
+		vi.stubGlobal('navigator', { hardwareConcurrency: 4 });
+		const session = new WorkerSession('ws://test/ws/worker');
+		await session.start();
+		const ws = FakeSocket.all[0];
+		welcome(ws);
+		const nn = (lease: string): CoordinatorMessage => ({
+			...(assign(lease) as Extract<CoordinatorMessage, { type: 'assign' }>),
+			template: { id: 'nn', version: 1, sha256: '' }
+		});
+		ws.receive(nn('a'));
+		// Three lanes (all threads but one) and one unit in advance: four held.
+		expect(ws.requests()).toBe(4);
+		ws.receive(nn('b'));
+		ws.receive(nn('c'));
+		ws.receive(nn('d'));
+		ws.receive(assign('pi'));
+		await vi.waitFor(() => expect(runs.map((r) => r.lease)).toEqual(['a', 'b', 'c']));
+
+		// A thread frees up: the next network starts; the π unit waits for all of them.
+		runs[1].resolve();
+		await vi.waitFor(() => expect(runs.map((r) => r.lease)).toEqual(['a', 'b', 'c', 'd']));
+		runs[0].resolve();
+		runs[2].resolve();
+		await vi.advanceTimersByTimeAsync(0);
+		expect(runs).toHaveLength(4);
+		runs[3].resolve();
+		await vi.waitFor(() => expect(runs.map((r) => r.lease).at(-1)).toBe('pi'));
+		expect(ws.sent.filter((m) => m.type === 'result').map((m) => m.lease_id)).toEqual([
+			'b',
+			'a',
+			'c',
+			'd'
+		]);
+		session.destroy();
+	});
+
 	it('rests between units at reduced power', async () => {
 		const session = new WorkerSession('ws://test/ws/worker');
 		session.power = 50;

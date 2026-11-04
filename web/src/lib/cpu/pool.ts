@@ -5,7 +5,10 @@ export function cpuThreads(): number {
 	return Math.max(1, (navigator.hardwareConcurrency || 2) - 1);
 }
 
-/** A fixed set of CPU threads (Web Workers), each running one task at a time. */
+/**
+ * A fixed set of CPU threads (Web Workers), each running one task at a time. Several
+ * runs may share it: each task takes the next free thread.
+ */
 export interface CpuPool {
 	readonly threads: number;
 	/**
@@ -18,6 +21,8 @@ export interface CpuPool {
 		done: (task: CpuTask, result: CpuResult & { ok: true }) => void,
 		signal?: AbortSignal
 	): Promise<void>;
+	/** Runs one task on the next free thread; other runs may share the pool meanwhile. */
+	runOne(task: CpuTask, signal?: AbortSignal): Promise<CpuResult & { ok: true }>;
 	destroy(): void;
 }
 
@@ -38,16 +43,37 @@ export function createCpuPool(threads: number): CpuPool {
 		});
 	}
 
+	// Threads not running a task; runs wait their turn for one.
+	const free = [...workers];
+	const waiting: ((worker: Worker) => void)[] = [];
+	function acquire(): Promise<Worker> {
+		const worker = free.pop();
+		return worker ? Promise.resolve(worker) : new Promise((resolve) => waiting.push(resolve));
+	}
+	function release(worker: Worker) {
+		const next = waiting.shift();
+		if (next) next(worker);
+		else free.push(worker);
+	}
+	async function runOne(task: CpuTask, signal?: AbortSignal) {
+		signal?.throwIfAborted();
+		const worker = await acquire();
+		try {
+			return await run(worker, task);
+		} finally {
+			release(worker);
+		}
+	}
+
 	return {
 		threads,
 		async runAll(next, done, signal) {
 			const settled = await Promise.allSettled(
-				workers.map(async (worker) => {
+				workers.map(async () => {
 					for (let task = next(); task; task = next()) {
-						signal?.throwIfAborted();
 						// Awaited before `done` touches shared state: not `x += await …`,
 						// which reads `x` first and loses updates from other threads.
-						const result = await run(worker, task);
+						const result = await runOne(task, signal);
 						done(task, result);
 					}
 				})
@@ -55,6 +81,7 @@ export function createCpuPool(threads: number): CpuPool {
 			const failed = settled.find((r) => r.status === 'rejected');
 			if (failed) throw failed.reason;
 		},
+		runOne,
 		destroy() {
 			for (const worker of workers) worker.terminate();
 		}

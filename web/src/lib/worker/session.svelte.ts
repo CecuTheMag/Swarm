@@ -1,4 +1,5 @@
 import { ComputeClient } from './compute-client.ts';
+import { cpuThreads } from '#lib/cpu/pool.ts';
 import { DEFAULT_POWER, restMs, type PauseReason } from './pacing.ts';
 import type { Backend } from '#lib/protocol/Backend.ts';
 import type { CoordinatorMessage } from '#lib/protocol/CoordinatorMessage.ts';
@@ -62,6 +63,10 @@ function clientId(): string | undefined {
 const MIN_HELD = 2;
 const MAX_HELD = 8;
 
+// Templates whose CPU kernel uses a single thread: a CPU device computes one such unit
+// per thread at once. The others use every thread, one unit at a time.
+const ONE_THREAD = new Set(['nn']);
+
 type Assignment = Extract<CoordinatorMessage, { type: 'assign' }>;
 
 /**
@@ -98,9 +103,12 @@ export class WorkerSession {
 	/** Leases assigned whose result has not been sent yet (heartbeats keep them alive). */
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
 	private held = new Set<string>();
-	/** Assigned units waiting for the one computing to finish. */
+	/** Assigned units waiting for a lane. */
 	private queue: Assignment[] = [];
-	private computing = false;
+	/** Units computing at once: one, or one per CPU thread for ONE_THREAD templates. */
+	private lanes = 0;
+	/** Lanes the latest assigned unit allows; more units are fetched in advance for them. */
+	private parallel = 1;
 	/** Work requests sent and not yet answered. */
 	private requested = 0;
 	private requestSentAt: number[] = [];
@@ -116,8 +124,9 @@ export class WorkerSession {
 	/** Disconnect once every answer owed has arrived (pausing). */
 	private disconnectWhenSettled = false;
 	private settleTimer: ReturnType<typeof setTimeout> | undefined;
-	private restTimer: ReturnType<typeof setTimeout> | undefined;
-	private wake: (() => void) | null = null;
+	/** Lanes resting between units, each with its wake-up timer. */
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
+	private resting = new Map<() => void, ReturnType<typeof setTimeout>>();
 
 	/**
 	 * `backend: 'wasm'` computes on the CPU even when there is a GPU; `joinCode` joins
@@ -132,6 +141,16 @@ export class WorkerSession {
 	/** The power the device actually uses: its owner's choice within the network's limit. */
 	get effectivePower(): number {
 		return Math.min(this.power, this.maxPower);
+	}
+
+	private get computing(): boolean {
+		return this.lanes > 0;
+	}
+
+	/** Units of `unit`'s template this device computes at once. */
+	private lanesFor(unit: Assignment): number {
+		const cpu = this.device?.backend === 'wasm' && ONE_THREAD.has(unit.template.id);
+		return cpu ? cpuThreads() : 1;
 	}
 
 	/** Whether the network's owner lets this device compute now. */
@@ -186,7 +205,7 @@ export class WorkerSession {
 			this.disconnectWhenSettled = false;
 			clearTimeout(this.settleTimer);
 			this.requestWork();
-			void this.computeNext();
+			this.computeNext();
 		} else {
 			this.reconnectDelay = 1000;
 			this.connect();
@@ -294,7 +313,7 @@ export class WorkerSession {
 		// Resting stretches each unit to `unitMs · 100 / power`.
 		const paced = (this.unitMs * 100) / this.effectivePower;
 		const inFlight = 1 + Math.ceil(this.roundTripMs / Math.max(paced, 1));
-		return Math.min(MAX_HELD, Math.max(MIN_HELD, inFlight));
+		return Math.min(MAX_HELD, Math.max(MIN_HELD, inFlight) + this.parallel - 1);
 	}
 
 	/** Asks for units until `wanted()` are held or requested. */
@@ -346,7 +365,8 @@ export class WorkerSession {
 				this.answered();
 				this.held.add(msg.lease_id);
 				this.queue.push(msg);
-				void this.computeNext();
+				this.parallel = this.lanesFor(msg);
+				this.computeNext();
 				// Fetch the next unit while this one computes.
 				this.requestWork();
 				break;
@@ -363,7 +383,7 @@ export class WorkerSession {
 				if (this.allowed) {
 					if (this.status === 'held') this.status = 'waiting';
 					this.requestWork();
-					void this.computeNext();
+					this.computeNext();
 				} else if (!this.computing && this.held.size === 0) {
 					// Units already in hand are finished; no new ones are asked for.
 					this.status = 'held';
@@ -392,10 +412,16 @@ export class WorkerSession {
 		if (this.disconnectWhenSettled && this.owed === 0) this.disconnect();
 	}
 
-	/** Computes queued units one at a time, resting between them at reduced power. */
-	private async computeNext() {
-		if (this.computing) return;
-		this.computing = true;
+	/** Opens lanes for the queued units, as many as the next unit allows. */
+	private computeNext() {
+		while (this.running && this.queue.length > 0 && this.lanes < this.lanesFor(this.queue[0])) {
+			this.lanes++;
+			void this.lane();
+		}
+	}
+
+	/** Computes queued units one after another, resting between them at reduced power. */
+	private async lane() {
 		for (let unit = this.nextUnit(); unit; unit = this.nextUnit()) {
 			// The queue only holds units of the current connection, but the connection may
 			// be lost and replaced while this one computes.
@@ -424,8 +450,8 @@ export class WorkerSession {
 			const rest = restMs(elapsed, this.effectivePower);
 			if (rest > 0 && this.running && !this.pausedFor) await this.rest(rest);
 		}
-		this.computing = false;
-		if (!this.running) return;
+		this.lanes--;
+		if (!this.running || this.lanes > 0) return;
 		if (this.pausedFor) {
 			this.settleThenDisconnect();
 		} else if (this.ws && this.queue.length === 0 && this.status === 'computing') {
@@ -433,23 +459,36 @@ export class WorkerSession {
 		}
 	}
 
-	/** The next unit to compute; none while paused. */
+	/**
+	 * The next unit for a lane; none while paused, or when the next unit allows fewer
+	 * lanes than are open (this lane closes; the others carry on).
+	 */
 	private nextUnit(): Assignment | undefined {
-		return this.pausedFor ? undefined : this.queue.shift();
+		const next = this.queue[0];
+		if (this.pausedFor || !next || this.lanes > this.lanesFor(next)) return undefined;
+		return this.queue.shift();
 	}
 
 	/** Waits `ms`, or until a pause or stop interrupts. */
 	private rest(ms: number): Promise<void> {
 		return new Promise((resolve) => {
-			this.wake = resolve;
-			this.restTimer = setTimeout(() => this.interruptRest(), ms);
+			const wake = () => {
+				this.resting.delete(wake);
+				resolve();
+			};
+			this.resting.set(
+				wake,
+				setTimeout(() => wake(), ms)
+			);
 		});
 	}
 
+	/** Ends every lane's rest at once. */
 	private interruptRest() {
-		clearTimeout(this.restTimer);
-		this.wake?.();
-		this.wake = null;
+		for (const [wake, timer] of this.resting) {
+			clearTimeout(timer);
+			wake();
+		}
 	}
 
 	private fail(message: string) {

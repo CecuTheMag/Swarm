@@ -47,6 +47,19 @@ test('a neural network sweep trains on a device and is ranked', async ({ page, b
 	expect(model.network).toHaveLength(2);
 	expect(Math.abs(model.accuracy * 100 - best)).toBeLessThan(0.051);
 
+	// The same network reads a digit drawn on the page, as the pen moves.
+	const pad = page.getByTestId('digit-pad');
+	await expect(pad).toHaveAttribute('data-ready', 'true', { timeout: 30_000 });
+	await pad.scrollIntoViewIfNeeded();
+	const box = (await pad.locator('canvas.pad').boundingBox())!;
+	await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.15);
+	await page.mouse.down();
+	await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.85, { steps: 12 });
+	await page.mouse.up();
+	await expect(page.getByTestId('digit-guess')).toHaveText(/^\d$/);
+	await page.getByRole('button', { name: 'Изчисти' }).click();
+	await expect(page.getByTestId('digit-guess')).toHaveText('–');
+
 	// Clean up: later tests start with an empty network list.
 	await page.goto(`${networkUrl}/rules`);
 	await page.getByTestId('delete-network').click();

@@ -5,6 +5,7 @@
 	import { can, useNetwork } from '#lib/console/networks.svelte.ts';
 	import SweepCurves from '#lib/console/SweepCurves.svelte';
 	import SweepHeatmap from '#lib/console/SweepHeatmap.svelte';
+	import DigitPad from '#lib/console/DigitPad.svelte';
 	import ConfirmButton from '#lib/ui/ConfirmButton.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
 	import type { JobSummary } from '#lib/protocol/JobSummary.ts';
@@ -147,6 +148,17 @@
 			</p>
 		{/if}
 	</section>
+
+	{#if job.status === 'done' && best && params?.dataset === 'glyphs'}
+		<section class="card">
+			<h3>Изпробвайте мрежата</h3>
+			<p class="muted small">
+				Най-добрата мрежа от класацията, с теглата, които устройствата провериха. Тя е виждала само
+				рисувани от компютъра цифри.
+			</p>
+			<DigitPad url="{base}/model.json" />
+		</section>
+	{/if}
 
 	<div class="charts">
 		<section class="card">

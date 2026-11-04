@@ -33,7 +33,8 @@ interface Kernel {
 }
 
 let kernels: Map<string, Kernel> | undefined;
-let current: AbortController | undefined;
+// Units computing now; a CPU device trains several networks at once.
+const current = new Set<AbortController>();
 
 const post = (msg: ComputeResponse) => self.postMessage(msg);
 
@@ -103,8 +104,9 @@ function initCpu(hashes: Hashes): DeviceInfo {
 
 self.onmessage = async (event: MessageEvent<ComputeRequest>) => {
 	const req = event.data;
+	let run: AbortController | undefined;
 	if (req.kind === 'abort') {
-		current?.abort();
+		for (const controller of current) controller.abort();
 		return;
 	}
 	try {
@@ -119,9 +121,11 @@ self.onmessage = async (event: MessageEvent<ComputeRequest>) => {
 		if (kernel.sha256 !== req.template.sha256) {
 			throw new Error(`template ${req.template.id} hash mismatch; refusing to run`);
 		}
-		current = new AbortController();
+		const controller = new AbortController();
+		current.add(controller);
+		run = controller;
 		const started = performance.now();
-		const output = await kernel.run(req.params, current.signal);
+		const output = await kernel.run(req.params, controller.signal);
 		post({
 			kind: 'reply',
 			id: req.id,
@@ -136,6 +140,6 @@ self.onmessage = async (event: MessageEvent<ComputeRequest>) => {
 			error: e instanceof Error ? e.message : String(e)
 		});
 	} finally {
-		current = undefined;
+		if (run) current.delete(run);
 	}
 };
