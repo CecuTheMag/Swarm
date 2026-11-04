@@ -44,6 +44,30 @@ The identical leaderboard is the point of integer training (spec 0011): 1 344
 trainings, on different PCs, in a different order, two thread counts, gave the same
 bits.
 
+## Real handwriting (MNIST)
+
+Added the same day (spec 0011, phase 4): 10 000 handwritten digits to learn from and
+2 000 by other writers to score on, 14 × 14, a 2.4 MB file every device downloads once.
+The console's „Задълбочено“ preset for it, on the 13 PCs, every CPU thread:
+
+| | |
+|---|---|
+| Settings × runs | 120 × 2 (6 layer sizes 32–256, 1–2 layers, 5 learning rates 0.05–0.45, batch 8 and 16), 2 500 steps each |
+| Time | 112 s |
+| Best | **93.7 %** of the 2 000 unseen digits (1 layer of 256 neurons, rate 0.45, batch 16); range of its two runs 93.5–93.8 % |
+| Worst | 86.5 % (2 × 256, rate 0.05) |
+| Verdicts | 52 agreed, 214 trusted, 2 known-answer checks passed; no disagreement, no lost unit |
+| Time per training | 11 s on average; the slowest 81 s |
+
+The slowest trainings were the first on each PC: each of a PC's three threads
+downloaded the 2.4 MB file at the same moment, 39 downloads through the home server's
+upload. A device now downloads it once for all its threads (not yet measured in the
+lab; later jobs read it from the browser's cache in any case).
+
+For comparison, the same kind of network trained in floating point on all 60 000
+MNIST images at 28 × 28 reaches about 97–98 %; 93.7 % from a sixth of the images at a
+quarter of the pixels, in integers, is in line.
+
 ## Found
 
 - The sweep's page could show a finished sweep one row short: it read the live
@@ -57,8 +81,9 @@ bits.
 
 Not yet for real machine learning, and these numbers should not be presented as if:
 
-- `glyphs` is a generated dataset; 84 % on it says little about real tasks. A network
-  of this kind gets about 97–98 % on real handwritten digits (MNIST).
+- `glyphs` is a generated dataset; 84 % on it says little about real tasks. On real
+  handwriting (MNIST, above) the room's best network reads 93.7 % of digits it never
+  saw; full-size MNIST networks reach 97–98 %.
 - The networks are small (up to ~120 000 weights) and train for seconds.
 - The 13 PCs of 2012 together, with every thread, do about as much as one or two modern
   laptops.

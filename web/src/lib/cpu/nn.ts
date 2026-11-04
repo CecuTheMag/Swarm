@@ -1,7 +1,13 @@
 import { nnDigest } from '#lib/nn.ts';
+import { mnistUrl } from '#lib/templates.ts';
 import type { NnUnitParams } from '#lib/protocol/NnUnitParams.ts';
 import type { NnUnitOutput } from '#lib/protocol/NnUnitOutput.ts';
 import type { CpuPool } from './pool.ts';
+
+// Each thread of the pool loads its own copy of a downloaded dataset. The first unit
+// fetches the file once for all of them, so the others read it from the browser's
+// cache instead of all downloading it at the same moment.
+let mnistFetched: Promise<unknown> | undefined;
 
 /**
  * Trains a network unit on one of the pool's threads. Training cannot be split
@@ -13,6 +19,12 @@ export async function trainCpuNn(
 	p: NnUnitParams,
 	signal?: AbortSignal
 ): Promise<NnUnitOutput> {
+	if (p.dataset === 'mnist') {
+		mnistFetched ??= fetch(mnistUrl)
+			.then((res) => res.arrayBuffer())
+			.catch(() => (mnistFetched = undefined));
+		await mnistFetched;
+	}
 	const result = await pool.runOne({ template: 'nn', ...p }, signal);
 	if (!('weights' in result)) throw new Error('the CPU thread returned no network');
 	return { correct: result.correct, curve: result.curve, digest: await nnDigest(result.weights) };

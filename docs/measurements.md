@@ -39,6 +39,7 @@ path; no WebGPU adapter on any. Each page in `docs/tests/` has the details.
 | π, the lab's own network, 600 × 2²⁸ samples | 60 s |
 | Picture 1920×1080, 1 024 samples per pixel | About 70 s, 2 304 units, 0 disagreements |
 | Neural network sweep, 672 trainings | 154 s on one thread per PC; 91 s on three, with an identical leaderboard |
+| MNIST sweep, 240 trainings of 2 500 steps | 112 s; best 93.7 % of 2 000 unseen handwritten digits |
 
 ## School lab idle time
 

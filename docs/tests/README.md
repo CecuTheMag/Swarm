@@ -22,7 +22,7 @@ home, the school's own network.
 | [2026-11-04-lab-public-pi.md](2026-11-04-lab-public-pi.md) | 13 PCs on the public network: 107 billion samples of π in 43 s, no disagreement |
 | [2026-11-04-lab-own-network.md](2026-11-04-lab-own-network.md) | A client's own network: account, join code, visible windows on every screen, π in 60 s |
 | [2026-11-04-lab-render.md](2026-11-04-lab-render.md) | A 1920×1080 picture, 2.1 billion light paths, in about 70 s |
-| [2026-11-04-lab-nn-sweeps.md](2026-11-04-lab-nn-sweeps.md) | Neural network sweeps up to 672 trainings; every training verified; all cores |
+| [2026-11-04-lab-nn-sweeps.md](2026-11-04-lab-nn-sweeps.md) | Neural network sweeps up to 672 trainings, all cores; real handwriting (MNIST): 93.7 % from 240 trainings in 112 s |
 
 ## Before the lab
 
