@@ -135,8 +135,11 @@ async fn reject(socket: &mut WebSocket, message: impl Into<String>) {
 
 async fn worker_session(mut socket: WebSocket, state: AppState) {
     let cfg = &state.config;
-    let (client_version, device, client_id, join_code) = match recv(&mut socket, cfg.idle_timeout)
-        .await
+    let (client_version, device, client_id, join_code, community) = match recv(
+        &mut socket,
+        cfg.idle_timeout,
+    )
+    .await
     {
         Incoming::Message(WorkerMessage::Hello {
             protocol_version,
@@ -144,6 +147,7 @@ async fn worker_session(mut socket: WebSocket, state: AppState) {
             device,
             client_id,
             join_code,
+            community,
         }) => {
             if protocol_version != PROTOCOL_VERSION {
                 return reject(
@@ -158,6 +162,7 @@ async fn worker_session(mut socket: WebSocket, state: AppState) {
                 device,
                 client_id.unwrap_or_else(Uuid::now_v7),
                 join_code,
+                community.unwrap_or(true),
             )
         }
         Incoming::Message(_) => return reject(&mut socket, "expected hello").await,
@@ -187,8 +192,11 @@ async fn worker_session(mut socket: WebSocket, state: AppState) {
         &device,
         &client_version,
         client_id,
-        rules.id,
-        approval,
+        db::Joining {
+            network_id: rules.id,
+            approval,
+            community,
+        },
     )
     .await;
     let (connected_at, device_record) = match registration {

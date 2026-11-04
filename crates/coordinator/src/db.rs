@@ -51,6 +51,8 @@ struct JobRow {
     units_done: i32,
     result: Option<Json<Value>>,
     error: Option<String>,
+    quorum: i32,
+    owner_network_id: Option<Uuid>,
     created_at: OffsetDateTime,
     finished_at: Option<OffsetDateTime>,
 }
@@ -68,6 +70,8 @@ impl From<JobRow> for JobSummary {
             units_done: r.units_done as u32,
             result: r.result.map(|j| j.0),
             error: r.error,
+            quorum: r.quorum as u32,
+            owner_network_id: r.owner_network_id,
             created_at: unix_ms(r.created_at),
             finished_at: r.finished_at.map(unix_ms),
         }
@@ -77,20 +81,63 @@ impl From<JobRow> for JobSummary {
 /// Columns of `JobRow`; a macro so queries stay `&'static str` (checked by sqlx).
 macro_rules! job_columns {
     () => {
-        "id, network_id, template, status, params, units_total, units_done, result, error, created_at, finished_at"
+        "id, network_id, template, status, params, units_total, units_done, result, error, quorum,
+         owner_network_id, created_at, finished_at"
     };
 }
 
-/// Creates a job and all its units in one transaction. Each unit needs `redundancy`
-/// agreeing results (spec 0004).
-pub async fn create_job(
-    db: &PgPool,
-    network_id: Uuid,
-    template: &templates::Registered,
-    params: &Value,
-    unit_params: Vec<Value>,
-    redundancy: u32,
-) -> sqlx::Result<JobSummary> {
+/// A job to create.
+pub struct NewJob<'a> {
+    /// The network whose devices compute it.
+    pub network_id: Uuid,
+    pub template: &'a templates::Registered,
+    pub params: &'a Value,
+    pub unit_params: Vec<Value>,
+    /// Agreeing results each unit needs (spec 0004).
+    pub quorum: u32,
+    /// Hash of the code workers run: the template's kernel, or a program's module.
+    pub kernel_sha256: Option<String>,
+    /// The program a program job runs (spec 0012).
+    pub program_id: Option<Uuid>,
+    /// The network that submitted a job running on the public network.
+    pub owner_network_id: Option<Uuid>,
+}
+
+impl<'a> NewJob<'a> {
+    /// A job of one of Рояк's templates.
+    pub fn new(
+        network_id: Uuid,
+        template: &'a templates::Registered,
+        params: &'a Value,
+        unit_params: Vec<Value>,
+        quorum: u32,
+    ) -> Self {
+        Self {
+            network_id,
+            template,
+            params,
+            unit_params,
+            quorum,
+            kernel_sha256: template.sha256.clone(),
+            program_id: None,
+            owner_network_id: None,
+        }
+    }
+}
+
+/// Creates a job and all its units in one transaction.
+pub async fn create_job(db: &PgPool, new: NewJob<'_>) -> sqlx::Result<JobSummary> {
+    let NewJob {
+        network_id,
+        template,
+        params,
+        unit_params,
+        quorum,
+        kernel_sha256,
+        program_id,
+        owner_network_id,
+    } = new;
+    let quorum = quorum.max(1) as i32;
     let job_id = Uuid::now_v7();
     let mut tx = db.begin().await?;
     // Results are committed without waiting for the disk (see `connect`); a job the
@@ -100,8 +147,8 @@ pub async fn create_job(
         .await?;
     let job: JobRow = sqlx::query_as(concat!(
         "INSERT INTO jobs (id, template, template_version, template_sha256, params, status,
-                           units_total, network_id)
-         VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7)
+                           units_total, network_id, quorum, program_id, owner_network_id)
+         VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7, $8, $9, $10)
          RETURNING ",
         job_columns!(),
         ""
@@ -109,10 +156,13 @@ pub async fn create_job(
     .bind(job_id)
     .bind(template.template.id())
     .bind(template.template.version() as i32)
-    .bind(&template.sha256)
+    .bind(&kernel_sha256)
     .bind(Json(params))
     .bind(unit_params.len() as i32)
     .bind(network_id)
+    .bind(quorum)
+    .bind(program_id)
+    .bind(owner_network_id)
     .fetch_one(&mut *tx)
     .await?;
 
@@ -128,13 +178,36 @@ pub async fn create_job(
     .bind(&seqs)
     .bind(&unit_params)
     .bind(job.created_at)
-    .bind(redundancy.max(1) as i32)
+    .bind(quorum)
     .bind(network_id)
     .execute(&mut *tx)
     .await?;
 
     tx.commit().await?;
     Ok(job.into())
+}
+
+/// Jobs a network has queued or running on the public network (spec 0012).
+pub async fn public_jobs_of(db: &PgPool, network_id: Uuid) -> sqlx::Result<i64> {
+    sqlx::query_scalar(
+        "SELECT count(*) FROM jobs
+         WHERE owner_network_id = $1 AND status IN ('queued', 'running')",
+    )
+    .bind(network_id)
+    .fetch_one(db)
+    .await
+}
+
+/// The accepted output of each unit of a job in unit order; `None` for units not
+/// decided yet.
+pub async fn unit_outputs(db: &PgPool, job_id: Uuid) -> sqlx::Result<Vec<Option<Value>>> {
+    let outputs: Vec<Option<Json<Value>>> = sqlx::query_scalar(
+        "SELECT CASE WHEN status = 'done' THEN output END FROM units WHERE job_id = $1 ORDER BY seq",
+    )
+    .bind(job_id)
+    .fetch_all(db)
+    .await?;
+    Ok(outputs.into_iter().map(|o| o.map(|j| j.0)).collect())
 }
 
 pub async fn get_job(db: &PgPool, id: Uuid) -> sqlx::Result<Option<JobSummary>> {
@@ -158,7 +231,8 @@ pub async fn recent_jobs(
     let rows: Vec<JobRow> = sqlx::query_as(concat!(
         "SELECT ",
         job_columns!(),
-        " FROM jobs WHERE network_id = $1 ORDER BY created_at DESC LIMIT $2"
+        " FROM jobs WHERE network_id = $1 OR owner_network_id = $1
+          ORDER BY created_at DESC LIMIT $2"
     ))
     .bind(network_id)
     .bind(limit)
@@ -188,17 +262,41 @@ pub struct DeviceRecord {
     pub paused: bool,
 }
 
-/// Registers a worker connection under its client and its device in `network_id`,
-/// creating either on first sight; a new device waits for approval when `approval`.
+/// What a connection joins.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Joining {
+    pub network_id: Uuid,
+    /// A new device waits for approval.
+    pub approval: bool,
+    /// The device also runs reviewed community programs on the public network (spec 0012).
+    pub community: bool,
+}
+
+impl Joining {
+    pub fn open(network_id: Uuid) -> Self {
+        Self {
+            network_id,
+            approval: false,
+            community: true,
+        }
+    }
+}
+
+/// Registers a worker connection under its client and its device in its network,
+/// creating either on first sight.
 pub async fn insert_worker(
     db: &PgPool,
     id: Uuid,
     device: &DeviceInfo,
     client_version: &str,
     client_id: Uuid,
-    network_id: Uuid,
-    approval: bool,
+    joining: Joining,
 ) -> sqlx::Result<Registration> {
+    let Joining {
+        network_id,
+        approval,
+        community,
+    } = joining;
     let mut tx = db.begin().await?;
     sqlx::query("INSERT INTO clients (id) VALUES ($1) ON CONFLICT (id) DO NOTHING")
         .bind(client_id)
@@ -238,8 +336,8 @@ pub async fn insert_worker(
     }
     let connected_at = sqlx::query_scalar(
         "INSERT INTO workers (id, backend, vendor, architecture, client_version, client_id,
-                              network_id, device_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING connected_at",
+                              network_id, device_id, community)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING connected_at",
     )
     .bind(id)
     .bind(backend)
@@ -249,6 +347,7 @@ pub async fn insert_worker(
     .bind(client_id)
     .bind(network_id)
     .bind(record.id)
+    .bind(community)
     .fetch_one(&mut *tx)
     .await?;
     tx.commit().await?;
@@ -313,33 +412,37 @@ pub struct Claim {
     pub job_started: Option<JobSummary>,
 }
 
-/// A worker's client and its standing.
+/// A worker's client and its standing, and whether the worker runs community programs.
+#[derive(FromRow)]
 struct ClientStanding {
     id: Uuid,
     correct: i32,
     incorrect: i32,
     banned: bool,
+    community: bool,
 }
 
 async fn client_of(
     tx: &mut Transaction<'_, Postgres>,
     worker_id: Uuid,
 ) -> sqlx::Result<ClientStanding> {
-    let row: Option<(Uuid, i32, i32, bool)> = sqlx::query_as(
-        "SELECT c.id, c.correct, c.incorrect, c.banned_at IS NOT NULL
-         FROM workers w JOIN clients c ON c.id = w.client_id WHERE w.id = $1",
+    // Workers registered before spec 0004 have no client: each is its own, untrusted.
+    let row: Option<ClientStanding> = sqlx::query_as(
+        "SELECT coalesce(c.id, w.id) AS id, coalesce(c.correct, 0) AS correct,
+                coalesce(c.incorrect, 0) AS incorrect,
+                coalesce(c.banned_at IS NOT NULL, false) AS banned, w.community
+         FROM workers w LEFT JOIN clients c ON c.id = w.client_id WHERE w.id = $1",
     )
     .bind(worker_id)
     .fetch_optional(&mut **tx)
     .await?;
-    // Workers registered before spec 0004 have no client: each is its own, untrusted.
-    let (id, correct, incorrect, banned) = row.unwrap_or((worker_id, 0, 0, false));
-    Ok(ClientStanding {
-        id,
-        correct,
-        incorrect,
-        banned,
-    })
+    Ok(row.unwrap_or(ClientStanding {
+        id: worker_id,
+        correct: 0,
+        incorrect: 0,
+        banned: false,
+        community: true,
+    }))
 }
 
 /// Leases a unit to `worker_id`, or returns `None` if there is nothing for it (or its
@@ -355,7 +458,8 @@ async fn client_of(
 ///
 /// A device works for its own network; when that has nothing pending and `lend` is set,
 /// for the public network (spec 0010). Honeypots come from either, never from another
-/// client's network.
+/// client's network. Program units of the public network go only to devices that allow
+/// community programs (spec 0012).
 pub async fn claim_unit(
     db: &PgPool,
     worker_id: Uuid,
@@ -382,20 +486,35 @@ pub async fn claim_unit(
         return Ok(Some(claim));
     }
 
-    let mut unit = pending_unit(&mut tx, client.id, worker_id, network_id).await?;
+    let own_programs = network_id != PUBLIC_NETWORK || client.community;
+    let mut unit = pending_unit(&mut tx, client.id, worker_id, network_id, own_programs).await?;
     if unit.is_none() && lend && network_id != PUBLIC_NETWORK {
-        unit = pending_unit(&mut tx, client.id, worker_id, PUBLIC_NETWORK).await?;
+        unit = pending_unit(
+            &mut tx,
+            client.id,
+            worker_id,
+            PUBLIC_NETWORK,
+            client.community,
+        )
+        .await?;
     }
-    let Some((unit_id, job_id, Json(params), target)) = unit else {
+    let Some(PendingUnit {
+        id: unit_id,
+        job_id,
+        params: Json(params),
+        target,
+        quorum,
+    }) = unit
+    else {
         return Ok(None);
     };
 
     let (active, results) = unit_copies(&mut tx, unit_id).await?;
-    let solo = cfg.redundancy > 1
+    let solo = quorum > 1
         && trusted
         && active == 0
         && results == 0
-        && target == cfg.redundancy as i32
+        && target == quorum
         && fastrand::f64() >= cfg.spot_check_rate;
     if solo || active + results + 1 >= i64::from(target) {
         sqlx::query("UPDATE units SET status = 'leased' WHERE id = $1")
@@ -430,16 +549,30 @@ pub async fn claim_unit(
     }))
 }
 
-/// The next pending unit of `network_id` this client may take, locked.
+/// A unit a client may take, with what deciding it needs.
+#[derive(FromRow)]
+struct PendingUnit {
+    id: Uuid,
+    job_id: Uuid,
+    params: Json<Value>,
+    target: i32,
+    quorum: i32,
+}
+
+/// The next pending unit of `network_id` this client may take, locked; program units
+/// only with `programs`.
 async fn pending_unit(
     tx: &mut Transaction<'_, Postgres>,
     client_id: Uuid,
     worker_id: Uuid,
     network_id: Uuid,
-) -> sqlx::Result<Option<(Uuid, Uuid, Json<Value>, i32)>> {
+    programs: bool,
+) -> sqlx::Result<Option<PendingUnit>> {
     sqlx::query_as(
-        "SELECT u.id, u.job_id, u.params, u.target FROM units u
+        "SELECT u.id, u.job_id, u.params, u.target, j.quorum FROM units u
+         JOIN jobs j ON j.id = u.job_id
          WHERE u.network_id = $3 AND u.status = 'pending'
+           AND (j.program_id IS NULL OR $4)
            AND NOT EXISTS (
                SELECT 1 FROM leases l JOIN workers w ON w.id = l.worker_id
                WHERE l.unit_id = u.id AND l.released_at IS NULL
@@ -452,6 +585,7 @@ async fn pending_unit(
     .bind(client_id)
     .bind(worker_id)
     .bind(network_id)
+    .bind(programs)
     .fetch_optional(&mut **tx)
     .await
 }
@@ -479,7 +613,7 @@ async fn claim_honeypot(
     };
     let template = template_ref(tx, job_id).await?;
     if template.sha256.is_empty() {
-        // The template is no longer registered.
+        // The job's template is no longer registered.
         return Ok(None);
     }
     let (lease_id, expires_at) = insert_lease(tx, unit_id, worker_id, cfg, true, false).await?;
@@ -554,18 +688,22 @@ async fn insert_lease(
     Ok((lease_id, expires_at))
 }
 
+/// The code a worker must run for the job's units: today's kernel of its template, or
+/// the module of its program. Empty for a template no longer registered.
 async fn template_ref(
     tx: &mut Transaction<'_, Postgres>,
     job_id: Uuid,
 ) -> sqlx::Result<TemplateRef> {
-    let (id, version): (String, i32) =
-        sqlx::query_as("SELECT template, template_version FROM jobs WHERE id = $1")
-            .bind(job_id)
-            .fetch_one(&mut **tx)
-            .await?;
-    let sha256 = templates::get(&id)
-        .map(|t| t.sha256.clone())
-        .unwrap_or_default();
+    let (id, version, stored): (String, i32, Option<String>) = sqlx::query_as(
+        "SELECT template, template_version, template_sha256 FROM jobs WHERE id = $1",
+    )
+    .bind(job_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    let sha256 = match templates::get(&id) {
+        Some(t) => t.sha256.clone().or(stored).unwrap_or_default(),
+        None => String::new(),
+    };
     Ok(TemplateRef {
         id,
         version: version as u32,
@@ -691,6 +829,18 @@ impl Completion {
     }
 }
 
+/// A lease that can still be completed, with what deciding its unit needs.
+#[derive(FromRow)]
+struct ActiveLease {
+    unit_id: Uuid,
+    job_id: Uuid,
+    template: String,
+    params: Json<Value>,
+    honeypot: bool,
+    solo: bool,
+    quorum: i32,
+}
+
 /// Records a worker's result for a lease and, when enough results are in, decides the
 /// unit (spec 0004). The unit row lock serialises completions of one unit; the job row
 /// lock serialises progress, so exactly one completion finishes and aggregates the job.
@@ -704,8 +854,8 @@ pub async fn complete_lease(
 ) -> sqlx::Result<Completion> {
     let mut tx = db.begin().await?;
 
-    let lease: Option<(Uuid, Uuid, String, Json<Value>, bool, bool)> = sqlx::query_as(
-        "SELECT u.id, u.job_id, j.template, u.params, l.honeypot, l.solo
+    let lease: Option<ActiveLease> = sqlx::query_as(
+        "SELECT u.id AS unit_id, u.job_id, j.template, u.params, l.honeypot, l.solo, j.quorum
          FROM leases l
          JOIN units u ON u.id = l.unit_id
          JOIN jobs j ON j.id = u.job_id
@@ -718,7 +868,16 @@ pub async fn complete_lease(
     .bind(worker_id)
     .fetch_optional(&mut *tx)
     .await?;
-    let Some((unit_id, job_id, template_id, Json(unit_params), honeypot, solo)) = lease else {
+    let Some(ActiveLease {
+        unit_id,
+        job_id,
+        template: template_id,
+        params: Json(unit_params),
+        honeypot,
+        solo,
+        quorum,
+    }) = lease
+    else {
         return Ok(Completion::StaleLease);
     };
     let client = client_of(&mut tx, worker_id).await?;
@@ -790,7 +949,7 @@ pub async fn complete_lease(
     }
 
     // A trusted client's solo unit, or no verification at all: one result decides.
-    if solo || cfg.redundancy <= 1 {
+    if solo || quorum <= 1 {
         let bans = record_verdicts(&mut tx, &[(lease_id, "trusted")], cfg).await?;
         let decided = decide(
             &mut tx,
@@ -818,7 +977,7 @@ pub async fn complete_lease(
     .bind(unit_id)
     .fetch_all(&mut *tx)
     .await?;
-    let quorum = cfg.redundancy as usize;
+    let quorum = quorum as usize;
 
     if results.len() >= quorum {
         // The largest group of mutually agreeing results; the earliest wins ties.
@@ -1119,7 +1278,7 @@ async fn adjust_client(
         .await?;
     tracing::warn!(%client_id, correct, incorrect, honeypot_failures, "client banned");
 
-    let (reopened_jobs, units_redone) = reopen_after_ban(tx, client_id, cfg).await?;
+    let (reopened_jobs, units_redone) = reopen_after_ban(tx, client_id).await?;
     Ok(Bans {
         clients: vec![Ban {
             client_id,
@@ -1131,7 +1290,7 @@ async fn adjust_client(
 }
 
 /// Undoes what a banned client's results decided in jobs running or done: every unit it
-/// helped decide (alone, or by agreeing) that no longer has `redundancy` agreeing
+/// helped decide (alone, or by agreeing) that no longer has its job's quorum of agreeing
 /// results from clients in good standing goes back to the queue, and a done job runs
 /// again until they are decided anew. The other clients' verdicts on those units are
 /// reversed, since they were measured against a result that may be wrong: their
@@ -1142,7 +1301,6 @@ async fn adjust_client(
 async fn reopen_after_ban(
     tx: &mut Transaction<'_, Postgres>,
     client_id: Uuid,
-    cfg: &Config,
 ) -> sqlx::Result<(Vec<Uuid>, u32)> {
     let units: Vec<(Uuid, Uuid)> = sqlx::query_as(
         "SELECT DISTINCT u.id, u.job_id FROM leases l
@@ -1155,10 +1313,9 @@ async fn reopen_after_ban(
                 JOIN workers w2 ON w2.id = l2.worker_id
                 JOIN clients c2 ON c2.id = w2.client_id
                 WHERE l2.unit_id = u.id AND l2.verdict IN ('agreed', 'trusted')
-                  AND c2.banned_at IS NULL) < $2",
+                  AND c2.banned_at IS NULL) < j.quorum",
     )
     .bind(client_id)
-    .bind(cfg.redundancy as i32)
     .fetch_all(&mut **tx)
     .await?;
     if units.is_empty() {
@@ -1209,7 +1366,7 @@ async fn reopen_after_ban(
     // next result triggers a fresh decision over all of them.
     sqlx::query(
         "UPDATE units u SET status = 'pending', output = NULL,
-             target = GREATEST($2, 1 + (
+             target = GREATEST((SELECT quorum FROM jobs WHERE id = u.job_id), 1 + (
                  SELECT count(*) FROM leases l
                  JOIN workers w ON w.id = l.worker_id
                  JOIN clients c ON c.id = w.client_id
@@ -1218,7 +1375,6 @@ async fn reopen_after_ban(
          WHERE u.id = ANY($1)",
     )
     .bind(&unit_ids)
-    .bind(cfg.redundancy as i32)
     .execute(&mut **tx)
     .await?;
 

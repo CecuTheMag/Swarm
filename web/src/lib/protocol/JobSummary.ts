@@ -6,4 +6,13 @@ export type JobSummary = { id: string, network_id: string, template: string, sta
 /**
  * Why the job failed, when it did.
  */
-error: string | null, created_at: number, finished_at: number | null, };
+error: string | null, 
+/**
+ * Agreeing results each unit needs (spec 0004).
+ */
+quorum: number, 
+/**
+ * The network that submitted it, when it runs on the public network for another
+ * network (spec 0012).
+ */
+owner_network_id: string | null, created_at: number, finished_at: number | null, };

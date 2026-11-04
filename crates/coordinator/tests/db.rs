@@ -37,9 +37,20 @@ async fn worker_of(db: &PgPool, client_id: Uuid) -> Uuid {
         vendor: "test".into(),
         architecture: "test".into(),
     };
-    let registration = db::insert_worker(db, id, &device, "test", client_id, PUBLIC_NETWORK, false)
-        .await
-        .unwrap();
+    let registration = db::insert_worker(
+        db,
+        id,
+        &device,
+        "test",
+        client_id,
+        db::Joining {
+            network_id: PUBLIC_NETWORK,
+            approval: false,
+            community: true,
+        },
+    )
+    .await
+    .unwrap();
     assert!(
         matches!(registration, db::Registration::Registered { .. }),
         "client is not banned"
@@ -52,11 +63,13 @@ async fn pi_job(db: &PgPool, units: u32, samples: u32, seed: u32) -> (Uuid, Valu
     let t = templates::get(pi::ID).unwrap();
     let job = db::create_job(
         db,
-        PUBLIC_NETWORK,
-        t,
-        &params,
-        t.template.split(&params).unwrap(),
-        1,
+        db::NewJob::new(
+            PUBLIC_NETWORK,
+            t,
+            &params,
+            t.template.split(&params).unwrap(),
+            1,
+        ),
     )
     .await
     .unwrap();
@@ -536,11 +549,13 @@ async fn pi_job_with(db: &PgPool, cfg: &Config, units: u32, samples: u32, seed: 
     let t = templates::get(pi::ID).unwrap();
     db::create_job(
         db,
-        PUBLIC_NETWORK,
-        t,
-        &params,
-        t.template.split(&params).unwrap(),
-        cfg.redundancy,
+        db::NewJob::new(
+            PUBLIC_NETWORK,
+            t,
+            &params,
+            t.template.split(&params).unwrap(),
+            cfg.redundancy,
+        ),
     )
     .await
     .unwrap()
@@ -1074,8 +1089,11 @@ async fn a_banned_client_is_blocked_and_what_it_decided_is_redone(db: PgPool) {
             &device,
             "test",
             client,
-            PUBLIC_NETWORK,
-            false
+            db::Joining {
+                network_id: PUBLIC_NETWORK,
+                approval: false,
+                community: true,
+            },
         )
         .await
         .unwrap(),
@@ -1240,11 +1258,13 @@ async fn images_are_shared_until_a_unit_changes_them(db: PgPool) {
     let t = templates::get(protocol::templates::pt::ID).unwrap();
     let job = db::create_job(
         &db,
-        PUBLIC_NETWORK,
-        t,
-        &params,
-        t.template.split(&params).unwrap(),
-        1,
+        db::NewJob::new(
+            PUBLIC_NETWORK,
+            t,
+            &params,
+            t.template.split(&params).unwrap(),
+            1,
+        ),
     )
     .await
     .unwrap();

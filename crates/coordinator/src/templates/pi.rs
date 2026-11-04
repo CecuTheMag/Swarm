@@ -23,8 +23,8 @@ impl Template for Pi {
         VERSION
     }
 
-    fn kernel_source(&self) -> &'static str {
-        include_str!("../../../../templates/pi/pi.wgsl")
+    fn kernel_source(&self) -> Option<&'static str> {
+        Some(include_str!("../../../../templates/pi/pi.wgsl"))
     }
 
     fn split(&self, params: &Value) -> Result<Vec<Value>, String> {

@@ -78,8 +78,8 @@ impl Template for Pt {
         VERSION
     }
 
-    fn kernel_source(&self) -> &'static str {
-        include_str!("../../../../templates/pt/pt.wgsl")
+    fn kernel_source(&self) -> Option<&'static str> {
+        Some(include_str!("../../../../templates/pt/pt.wgsl"))
     }
 
     /// One unit per tile per pass, pass-major: the whole image appears first, then

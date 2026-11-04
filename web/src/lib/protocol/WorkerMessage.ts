@@ -14,4 +14,9 @@ client_id?: string,
 /**
  * The network joined, from its join link (spec 0010); none joins the public one.
  */
-join_code?: string, } | { "type": "request_work" } | { "type": "heartbeat", lease_ids: Array<string>, } | { "type": "result", lease_id: string, output: JsonValue, elapsed_ms: number, } | { "type": "failed", lease_id: string, reason: string, };
+join_code?: string, 
+/**
+ * Whether the device also runs reviewed community programs on the public network
+ * (spec 0012); absent means yes. Its own network's programs always run.
+ */
+community?: boolean, } | { "type": "request_work" } | { "type": "heartbeat", lease_ids: Array<string>, } | { "type": "result", lease_id: string, output: JsonValue, elapsed_ms: number, } | { "type": "failed", lease_id: string, reason: string, };

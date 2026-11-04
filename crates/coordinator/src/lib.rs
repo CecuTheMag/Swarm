@@ -4,6 +4,7 @@
 pub mod accounts;
 pub mod api;
 pub mod auth;
+pub mod catalog;
 pub mod chaos;
 pub mod db;
 pub mod hours;
@@ -15,6 +16,7 @@ pub mod ws;
 
 use axum::{
     Router,
+    extract::DefaultBodyLimit,
     routing::{get, patch, post},
 };
 use sqlx::{
@@ -75,10 +77,35 @@ pub fn router(state: AppState) -> Router {
             "/api/networks/{id}/keys/{key}",
             axum::routing::delete(networks::revoke_api_key),
         )
+        // A program job may carry 16 MiB of inputs, as base64 (spec 0012).
         .route(
             "/api/networks/{id}/jobs",
-            get(networks::jobs).post(networks::create_job),
+            get(networks::jobs)
+                .post(networks::create_job)
+                .layer(DefaultBodyLimit::max(24 << 20)),
         )
+        .route(
+            "/api/networks/{id}/jobs/{job}/outputs",
+            get(catalog::outputs),
+        )
+        // Programs (spec 0012); a module of 4 MiB, as base64.
+        .route(
+            "/api/networks/{id}/programs",
+            get(catalog::list)
+                .post(catalog::create)
+                .layer(DefaultBodyLimit::max(6 << 20)),
+        )
+        .route(
+            "/api/networks/{id}/programs/{program}/review",
+            post(catalog::ask_review),
+        )
+        .route("/api/admin/programs", get(catalog::review_queue))
+        .route(
+            "/api/admin/programs/{program}/decision",
+            post(catalog::decision),
+        )
+        .route("/api/programs/approved", get(catalog::approved))
+        .route("/api/modules/{file}", get(catalog::module_file))
         .route("/api/networks/{id}/jobs/{job}", get(networks::get_job))
         .route(
             "/api/networks/{id}/jobs/{job}/cancel",

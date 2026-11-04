@@ -251,3 +251,72 @@ pub mod nn {
         pub rows: Vec<Row>,
     }
 }
+pub mod program {
+    //! A group's own WebAssembly program (spec 0008).
+
+    use serde::{Deserialize, Serialize};
+    use ts_rs::TS;
+    use uuid::Uuid;
+
+    pub const ID: &str = "program";
+    pub const VERSION: u32 = 1;
+
+    pub const MAX_UNITS: u32 = 20_000;
+    /// Inputs of all units together, decoded.
+    pub const MAX_JOB_INPUT_BYTES: usize = 16 << 20;
+
+    /// Parameters supplied when submitting a job: either `inputs`, one per unit, or
+    /// `count` units that each receive their index (4 bytes, little-endian) followed by
+    /// `args`. Bytes are base64.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(deny_unknown_fields)]
+    #[ts(export, rename = "ProgramJobParams")]
+    pub struct JobParams {
+        pub program: Uuid,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub inputs: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub count: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub args: Option<String>,
+    }
+
+    /// What a job shows as its params: the inputs stay with the units.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(deny_unknown_fields)]
+    #[ts(export, rename = "ProgramJobInfo")]
+    pub struct JobInfo {
+        pub program: Uuid,
+        pub name: String,
+        pub units: u32,
+    }
+
+    /// One unit's input, sent to the worker.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(deny_unknown_fields)]
+    #[ts(export, rename = "ProgramUnitParams")]
+    pub struct UnitParams {
+        pub input: String,
+    }
+
+    /// What a worker returns for one unit.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(deny_unknown_fields)]
+    #[ts(export, rename = "ProgramUnitOutput")]
+    pub struct UnitOutput {
+        pub output: String,
+    }
+
+    /// Aggregated job result. The outputs themselves are downloaded from
+    /// `GET /api/jobs/{id}/outputs`.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[ts(export, rename = "ProgramResult")]
+    pub struct JobResult {
+        pub outputs: u32,
+        #[ts(type = "number")]
+        pub bytes: u64,
+    }
+}

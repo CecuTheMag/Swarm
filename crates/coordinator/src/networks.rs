@@ -4,6 +4,7 @@
 use crate::{
     api::AppError,
     auth::{self, Access, PUBLIC_NETWORK},
+    catalog,
     db::{self, DeviceRecord},
     hours,
     state::AppState,
@@ -697,13 +698,27 @@ pub async fn start_job(
         .template
         .split(&body.params)
         .map_err(AppError::BadRequest)?;
+    let placement = catalog::place(state, access, body, units.len() as u32).await?;
+    let (program, params) = match &placement.program {
+        Some((program, shown)) => (Some(program), shown),
+        None => (None, &body.params),
+    };
     let job = db::create_job(
         &state.db,
-        access.network_id,
-        template,
-        &body.params,
-        units,
-        state.config.redundancy,
+        db::NewJob {
+            kernel_sha256: program
+                .map(|p| p.sha256.clone())
+                .or_else(|| template.sha256.clone()),
+            program_id: program.map(|p| p.id),
+            owner_network_id: placement.owner_network_id,
+            ..db::NewJob::new(
+                placement.network_id,
+                template,
+                params,
+                units,
+                placement.quorum,
+            )
+        },
     )
     .await?;
     tracing::info!(job_id = %job.id, network_id = %job.network_id, template = %job.template, units = job.units_total, "job created");
@@ -726,7 +741,8 @@ pub async fn create_job(
     Ok((StatusCode::CREATED, Json(job)))
 }
 
-/// A job of `network_id`, or "not found" (also for another network's job).
+/// A job of `network_id`, or one it runs on the public network; "not found" otherwise
+/// (also for another network's job).
 pub async fn job_in(
     state: &AppState,
     network_id: Uuid,
@@ -734,7 +750,7 @@ pub async fn job_in(
 ) -> Result<JobSummary, AppError> {
     db::get_job(&state.db, job_id)
         .await?
-        .filter(|j| j.network_id == network_id)
+        .filter(|j| j.network_id == network_id || j.owner_network_id == Some(network_id))
         .ok_or(AppError::NotFound)
 }
 

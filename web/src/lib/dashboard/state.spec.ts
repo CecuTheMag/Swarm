@@ -25,6 +25,8 @@ const job = (id: string, created_at: number, units_done = 0): JobSummary => ({
 	units_total: 10,
 	units_done,
 	error: null,
+	quorum: 1,
+	owner_network_id: null,
 	result: null,
 	created_at,
 	finished_at: null

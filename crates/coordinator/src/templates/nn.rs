@@ -164,8 +164,8 @@ impl Template for Nn {
         VERSION
     }
 
-    fn kernel_source(&self) -> &'static str {
-        include_str!("../../../../templates/nn/nn.wgsl")
+    fn kernel_source(&self) -> Option<&'static str> {
+        Some(include_str!("../../../../templates/nn/nn.wgsl"))
     }
 
     /// Seed-major: every configuration's first run comes before any second run, so

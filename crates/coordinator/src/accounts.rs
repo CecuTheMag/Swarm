@@ -298,7 +298,7 @@ pub async fn accept_invite(
     Ok(response)
 }
 
-async fn require_admin(
+pub(crate) async fn require_admin(
     state: &AppState,
     method: &Method,
     headers: &HeaderMap,

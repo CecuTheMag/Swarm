@@ -52,6 +52,12 @@ struct Args {
     /// Join this network (the code from its join link) instead of the public one.
     #[arg(long)]
     join: Option<String>,
+    /// Run only Рояк's templates and the network's own programs, no community programs.
+    #[arg(long)]
+    no_community: bool,
+    /// Work budget of one program unit, roughly in instructions.
+    #[arg(long, default_value_t = sim_worker::DEFAULT_FUEL)]
+    fuel: u64,
 }
 
 #[tokio::main]
@@ -97,6 +103,8 @@ async fn main() -> anyhow::Result<()> {
         connect_to,
         deadline: args.duration.map(|s| started + Duration::from_secs_f64(s)),
         delay: Duration::from_millis(args.delay_ms),
+        community: !args.no_community,
+        fuel: args.fuel,
     };
     let handles: Vec<_> = (0..args.workers)
         .map(|i| {

@@ -297,8 +297,16 @@ impl State {
 
     /// Sends an event to a network's dashboards; having none connected is fine. Units
     /// decided before it are announced first, so a dashboard sees events in order.
+    /// A job a network runs on the public network is also announced to that network
+    /// (spec 0012).
     pub fn publish(&self, network_id: Uuid, event: DashboardEvent) {
         self.flush_progress();
+        if let DashboardEvent::JobUpdated { job } = &event
+            && let Some(owner) = job.owner_network_id
+            && owner != network_id
+        {
+            let _ = self.events.send((owner, event.clone()));
+        }
         let _ = self.events.send((network_id, event));
     }
 

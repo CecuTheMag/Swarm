@@ -4,4 +4,13 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * `POST /api/jobs` body.
  */
-export type CreateJob = { template: string, params: JsonValue, };
+export type CreateJob = { template: string, params: JsonValue, 
+/**
+ * Agreeing results each unit needs: 1, 2 or 3, in a network other than the public
+ * one (spec 0012). Public jobs use the coordinator's setting.
+ */
+quorum?: number, 
+/**
+ * Run an approved program on the public network, for this network.
+ */
+public?: boolean, };

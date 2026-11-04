@@ -5,16 +5,20 @@
 pub mod network;
 
 use anyhow::{Context, bail};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use futures_util::{SinkExt, StreamExt};
 use protocol::{
-    Backend, CoordinatorMessage, DeviceControl, DeviceInfo, PROTOCOL_VERSION, WorkerMessage,
-    templates::{nn, pi, pt},
+    Backend, CoordinatorMessage, DeviceControl, DeviceInfo, PROTOCOL_VERSION, TemplateRef,
+    WorkerMessage,
+    templates::{nn, pi, program, pt},
 };
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     future::pending,
     net::SocketAddr,
+    sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::{net::TcpStream, time::sleep_until};
@@ -47,7 +51,15 @@ pub struct Options {
     /// Extra time each unit takes, as if on a slower device. Load tests use it to act as
     /// many devices without needing their processors.
     pub delay: Duration,
+    /// Whether to run reviewed community programs on the public network (spec 0012).
+    pub community: bool,
+    /// Work budget of one program unit, roughly in instructions: the browser's time
+    /// limit in the interpreter's terms.
+    pub fuel: u64,
 }
+
+/// About two minutes of work for the interpreter.
+pub const DEFAULT_FUEL: u64 = 20_000_000_000;
 
 impl Default for Options {
     fn default() -> Self {
@@ -62,6 +74,8 @@ impl Default for Options {
             connect_to: None,
             deadline: None,
             delay: Duration::ZERO,
+            community: true,
+            fuel: DEFAULT_FUEL,
         }
     }
 }
@@ -98,6 +112,14 @@ impl Cheat {
                     fastrand::u32(0..=samples)
                 };
                 Some(json!({ "inside": inside }))
+            }
+            program::ID => {
+                let output: Vec<u8> = if constant {
+                    b"swarm".to_vec()
+                } else {
+                    (0..16).map(|_| fastrand::u8(..)).collect()
+                };
+                Some(json!({ "output": STANDARD.encode(output) }))
             }
             pt::ID => {
                 let p: pt::UnitParams = serde_json::from_value(params.clone()).ok()?;
@@ -164,6 +186,73 @@ pub fn percentile(sorted: &[u32], q: f64) -> u32 {
 
 /// Computes one unit with the reference kernel.
 pub fn compute(template_id: &str, version: u32, params: &Value) -> anyhow::Result<Value> {
+    compute_template(template_id, version, params)
+}
+
+/// Computes one program unit (spec 0012) with the interpreter.
+pub fn compute_program(module: &[u8], params: &Value, fuel: u64) -> anyhow::Result<Value> {
+    let p: program::UnitParams = serde_json::from_value(params.clone())?;
+    let input = STANDARD.decode(p.input)?;
+    let output = programs::run(module, &input, fuel)?;
+    Ok(serde_json::to_value(program::UnitOutput {
+        output: STANDARD.encode(output),
+    })?)
+}
+
+/// Modules of the programs a worker ran, by hash, fetched from the coordinator the first
+/// time a unit needs one.
+struct Modules {
+    http: reqwest::Client,
+    base: reqwest::Url,
+    cache: HashMap<String, Arc<Vec<u8>>>,
+}
+
+impl Modules {
+    fn new(opts: &Options) -> anyhow::Result<Self> {
+        let mut base = reqwest::Url::parse(&opts.url)?;
+        let scheme = match base.scheme() {
+            "ws" => "http",
+            "wss" => "https",
+            other => bail!("unsupported scheme {other}"),
+        };
+        base.set_scheme(scheme)
+            .map_err(|()| anyhow::anyhow!("cannot use {scheme} for {}", opts.url))?;
+        base.set_path("/api/modules/");
+        let mut http = reqwest::Client::builder();
+        if let (Some(addr), Some(host)) = (opts.connect_to, base.host_str()) {
+            http = http.resolve(host, addr);
+        }
+        Ok(Self {
+            http: http.build()?,
+            base,
+            cache: HashMap::new(),
+        })
+    }
+
+    /// The module the unit names, checked against its hash as the browser does.
+    async fn get(&mut self, template: &TemplateRef) -> anyhow::Result<Arc<Vec<u8>>> {
+        if let Some(module) = self.cache.get(&template.sha256) {
+            return Ok(module.clone());
+        }
+        let url = self.base.join(&format!("{}.wasm", template.sha256))?;
+        let bytes = self
+            .http
+            .get(url)
+            .send()
+            .await?
+            .error_for_status()?
+            .bytes()
+            .await?;
+        if hex::encode(Sha256::digest(&bytes)) != template.sha256 {
+            bail!("module hash mismatch; refusing to run");
+        }
+        let module = Arc::new(bytes.to_vec());
+        self.cache.insert(template.sha256.clone(), module.clone());
+        Ok(module)
+    }
+}
+
+fn compute_template(template_id: &str, version: u32, params: &Value) -> anyhow::Result<Value> {
     match (template_id, version) {
         (pi::ID, pi::VERSION) => {
             let p: pi::UnitParams = serde_json::from_value(params.clone())?;
@@ -264,6 +353,7 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
             },
             client_id: Some(opts.client_id.unwrap_or_else(Uuid::new_v4)),
             join_code: opts.join_code.clone(),
+            community: (!opts.community).then_some(false),
         },
     )
     .await?;
@@ -278,6 +368,7 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
     }
 
     let deadline = opts.deadline.map(tokio::time::Instant::from_std);
+    let mut modules = Modules::new(&opts)?;
     let mut retry_at = None;
     let mut retries = 0u32;
     let mut heartbeat = None::<tokio::time::Interval>;
@@ -343,10 +434,16 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
                 idle_answers = 0;
                 let started = Instant::now();
                 let cheat = opts.cheat;
+                let fuel = opts.fuel;
+                let module = match template.id.as_str() {
+                    program::ID => Some(modules.get(&template).await),
+                    _ => None,
+                };
                 let computed = tokio::task::spawn_blocking(move || {
-                    match cheat.falsify(&template.id, &params) {
-                        Some(fake) => Ok(fake),
-                        None => compute(&template.id, template.version, &params),
+                    match (cheat.falsify(&template.id, &params), module) {
+                        (Some(fake), _) => Ok(fake),
+                        (None, Some(module)) => compute_program(&module?, &params, fuel),
+                        (None, None) => compute(&template.id, template.version, &params),
                     }
                 })
                 .await?;

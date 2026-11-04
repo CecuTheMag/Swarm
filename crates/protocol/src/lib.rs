@@ -62,6 +62,11 @@ pub enum WorkerMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         join_code: Option<String>,
+        /// Whether the device also runs reviewed community programs on the public network
+        /// (spec 0012); absent means yes. Its own network's programs always run.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        community: Option<bool>,
     },
     RequestWork,
     Heartbeat {
@@ -180,6 +185,11 @@ pub struct JobSummary {
     pub result: Option<Value>,
     /// Why the job failed, when it did.
     pub error: Option<String>,
+    /// Agreeing results each unit needs (spec 0004).
+    pub quorum: u32,
+    /// The network that submitted it, when it runs on the public network for another
+    /// network (spec 0012).
+    pub owner_network_id: Option<Uuid>,
     #[ts(type = "number")]
     pub created_at: i64,
     #[ts(type = "number | null")]
@@ -281,6 +291,104 @@ pub struct JobProgressSummary {
 pub struct CreateJob {
     pub template: String,
     pub params: Value,
+    /// Agreeing results each unit needs: 1, 2 or 3, in a network other than the public
+    /// one (spec 0012). Public jobs use the coordinator's setting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub quorum: Option<u32>,
+    /// Run an approved program on the public network, for this network.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub public: Option<bool>,
+}
+
+/// Where a program stands in review (spec 0012).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum Review {
+    /// Runs only in its network.
+    Private,
+    /// Its network asked for review.
+    Pending,
+    /// May run on the public network.
+    Approved,
+    /// May not; the note says why.
+    Rejected,
+}
+
+impl Review {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Private => "private",
+            Self::Pending => "pending",
+            Self::Approved => "approved",
+            Self::Rejected => "rejected",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "private" => Self::Private,
+            "pending" => Self::Pending,
+            "approved" => Self::Approved,
+            "rejected" => Self::Rejected,
+            _ => return None,
+        })
+    }
+}
+
+/// `POST /api/networks/{id}/programs` body.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct UploadProgram {
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    /// Where its source can be read, for review.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub source_url: Option<String>,
+    /// The WebAssembly module, base64.
+    pub module: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ProgramSummary {
+    pub id: Uuid,
+    pub network_id: Uuid,
+    pub network_name: String,
+    pub name: String,
+    pub description: String,
+    pub source_url: Option<String>,
+    /// Hex SHA-256 of the module: what devices check before running it.
+    pub sha256: String,
+    /// Module size in bytes.
+    pub size: u32,
+    pub review: Review,
+    pub review_note: Option<String>,
+    #[ts(type = "number")]
+    pub created_at: i64,
+}
+
+/// `POST /api/admin/programs/{id}/decision` body.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct ReviewDecision {
+    pub approve: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub note: Option<String>,
+}
+
+/// A program job's outputs in unit order, base64; `null` for units not decided yet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct JobOutputs {
+    pub outputs: Vec<Option<String>>,
 }
 
 /// `POST /api/chaos/cheaters` body: simulated devices that make up every result join
