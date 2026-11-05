@@ -3,10 +3,49 @@
 What is left between today's grid and the full README vision, in build order. Each
 item gets its own spec in `docs/specs/` before work starts; this file only orders them.
 
-Status on 2026-11-03: specs 0001–0008, 0010 and 0011 implemented (π and path-tracer
+Status on 2026-11-05: specs 0001–0008 and 0010–0013 implemented (π and path-tracer
 templates, leases with expiry, quorum verification with honeypots and reputation, CPU
 fallback, load tests, contributor safety, the chaos panel, networks that clients own
-and operate from the console, neural network sweeps) and the server public at `https://swarmrelay.duckdns.org`.
+and operate from the console, neural network sweeps, a network's own programs with
+review for the public network, school timetables) and the server public at
+`https://swarmrelay.duckdns.org`.
+
+## Next up, in order (November 2026)
+
+Registration closes on 25 November. Items marked **(owner)** need the owner in person:
+accounts, devices, the school.
+
+1. **Reliable CI** — the console browser test waits 5 s for a paused device to show
+   „held“ while it finishes the unit in hand, and the chaos test waits 60 s for a job in
+   Firefox; both fail at times on the two-core CI runner. Widen those waits to what the
+   runner needs, and let `cargo test` run (each test file opens more PostgreSQL
+   connections than the server allows: fewer per test pool, or a higher limit in the
+   test database).
+2. **Timetables for a real school** (spec 0013, next spec 0014):
+   - data entry for a deputy director: teachers, classes, rooms and lessons as tables in
+     the console, import from a spreadsheet (CSV from Excel), the school's own week
+     (days, periods, shifts), unavailable slots by clicking a grid;
+   - printing: a page per class and per teacher, and the whole school on one sheet;
+   - rounds: later searches continue from the best timetables found so far;
+   - pinning lessons by hand (a fixed slot) and editing the result, with the cost
+     shown live;
+   - **(owner)** a real school's data, from the deputy director, and their feedback;
+     measurements on it and on a public benchmark (XHSTT) in `docs/measurements.md`.
+3. **Real devices (owner)** — a phone on mobile data, an iPhone (Safari's WebGPU), wake
+   lock and losing signal on a real phone, a program and a timetable job on a phone, the
+   laptop fallback (`docs/demo-day.md` Plan B); results in `docs/measurements.md`.
+4. **Registration material** — the annotation (README section 21) rewritten around what
+   Рояк is now: networks for schools, a school's own programs, timetables, with the
+   measured numbers; **(owner)** the school's written permission and a week of measuring
+   the lab's idle time.
+5. **Defense run sheet** — the 20 minutes rehearsed: the committee joins by QR, a
+   timetable for a real school is searched live on their phones, a cheater is caught,
+   a device is switched off mid-job; `docs/demo-day.md` updated and timed.
+6. **README for the jury** — written for a reader who meets the project for the first
+   time, without the catalog metadata at its top.
+7. **More example programs** — a Monte Carlo experiment a physics teacher would run in
+   class and a parameter sweep, in `examples/programs`, and a C header for programs not
+   written in Rust.
 
 ## 1. Defense readiness (before registration, ≤ 25 November 2026)
 
