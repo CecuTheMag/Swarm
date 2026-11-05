@@ -330,3 +330,47 @@ the Rust reference, its WebAssembly build in Chromium and Firefox, and the WGSL 
 Chromium's WebGPU (SwiftShader) give the same accuracy, loss curve and SHA-256 of the
 final weights for every vector. A local sweep of 48 trainings on 12 simulated devices
 finished in seconds; the best setting reached 82.8 % (1 × 128, learning rate 0.4).
+
+## School timetables (spec 0013)
+
+Example high schools from `timetable::sample` (grades 8–12, 31 hours a week per class,
+5 days × 7 periods, subject teachers with full loads, labs and gyms in proportion, one
+teacher in eight away one day a week). Dev PC (Intel i5-14600KF), one thread, release
+build; `cargo run --release -p timetable --example searches -- CLASSES ITERATIONS SEARCHES [L]`.
+
+Speed (2 000 000 iterations, one search): 0.38 s for 20 classes (620 lesson hours), 0.40 s
+for 40 (1 240), 0.41 s for 60 (1 860): an iteration costs the same whatever the size, as
+costs are updated incrementally. The WebAssembly build that browsers run (Node 24, same
+machine) takes 0.45–0.48 s for the 40-class school and gives exactly the native costs
+(60, 35, 50 for searches 0–2).
+
+History length `L` of late acceptance, 40 classes, six searches each (cost; every
+timetable valid, so costs are soft only):
+
+| L | 2 000 000 iterations | 10 000 000 iterations |
+|---|---|---|
+| 1 | 70 70 60 55 45 65 | 0 30 10 20 10 5 |
+| 10 | 60 60 45 65 60 35 | — |
+| 20 | 75 35 80 35 55 70 | 5 5 5 0 5 20 |
+| 50 | 85 50 50 75 55 60 | 0 0 5 5 5 0 |
+| 100 | 55 60 65 80 75 55 | 5 5 5 10 5 5 |
+| 200 | 70 105 105 85 100 80 | 5 10 10 0 10 0 |
+| 500 | — | 35 25 30 40 40 30 |
+
+At the budgets a unit has, lengths from 10 to 100 do best and longer ones have no time
+to settle (the first portfolio, 500–5 000, gave costs of 400–1 000 at 10 M iterations).
+Units therefore cycle through L = 10, 20, 50, 100.
+
+Best cost against the number of searches (2 000 000 iterations each, the portfolio):
+
+| Classes | 1 | 2 | 4 | 8 | 16 | 32 | Spread of the 32 |
+|---|---|---|---|---|---|---|---|
+| 20 | 10 | 5 | 0 | 0 | 0 | 0 | 0–25 |
+| 40 | 60 | 35 | 35 | 35 | 35 | 35 | 35–80 |
+| 60 | 150 | 150 | 150 | 125 | 125 | 125 | 125–240 |
+
+Every search found a valid timetable (no clashes, no unavailable slots). More searches
+give a better best timetable, with diminishing returns; the spread is what a single
+computer running one search would risk. These example schools are easier than a real
+one (no class or room preferences beyond the gym and labs): the numbers for a real
+school's data are still to be measured.

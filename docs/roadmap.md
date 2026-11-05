@@ -53,6 +53,13 @@ Templates:
   every device, with a live leaderboard. Next: MNIST and Fashion-MNIST, a convolutional
   layer, successive halving (spec 0011 phase 4).
 - N-body / cellular-automata parameter sweep.
+- ~~School timetables~~ — done (spec 0013): a school's devices search its weekly
+  timetable in parallel, every timetable re-scored by the coordinator. Next: data entry
+  for a deputy director (tables, spreadsheet import), printing per class and teacher,
+  rounds that continue from the best timetables, and measurements on a real school's
+  data and on public benchmarks (XHSTT).
+- ~~Own programs~~ — done (spec 0012): a network runs its own WebAssembly on its devices;
+  reviewed programs run on the public network with each device's consent.
 
 Product:
 - Sign-in with a school's Google or Microsoft account (OIDC), next to email and password.

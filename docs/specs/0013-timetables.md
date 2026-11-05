@@ -1,6 +1,6 @@
 # 0013 — School timetables
 
-Status: in progress
+Status: implemented (data entry, printing and real-school measurements are next)
 
 ## Problem
 
