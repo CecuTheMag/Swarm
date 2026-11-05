@@ -478,6 +478,7 @@ dependencies = [
  "sqlx",
  "thiserror",
  "time",
+ "timetable",
  "tokio",
  "tokio-tungstenite 0.30.0",
  "tracing",
@@ -1751,6 +1752,7 @@ dependencies = [
  "base64 0.22.1",
  "serde",
  "serde_json",
+ "timetable",
  "ts-rs",
  "uuid",
 ]
@@ -2337,6 +2339,7 @@ dependencies = [
  "rustls",
  "serde_json",
  "sha2 0.11.1",
+ "timetable",
  "tokio",
  "tokio-tungstenite 0.30.0",
  "tracing",

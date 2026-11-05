@@ -22,6 +22,7 @@ kernels = { version = "0.1.0", path = "../kernels" }
 png = "0.18.1"
 programs = { version = "0.1.0", path = "../programs" }
 protocol = { version = "0.1.0", path = "../protocol" }
+timetable = { version = "0.1.0", path = "../timetable" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"

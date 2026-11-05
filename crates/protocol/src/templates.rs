@@ -320,3 +320,75 @@ pub mod program {
         pub bytes: u64,
     }
 }
+
+pub mod tt {
+    //! School timetables (spec 0013).
+
+    use serde::{Deserialize, Serialize};
+    use ts_rs::TS;
+
+    pub use timetable::{Breakdown, Cost, School};
+
+    pub const ID: &str = "tt";
+    pub const VERSION: u32 = 1;
+
+    pub const MAX_SEARCHES: u32 = 500;
+    pub const MIN_ITERATIONS: u32 = 10_000;
+    pub const MAX_ITERATIONS: u32 = 20_000_000;
+
+    /// Parameters supplied when submitting a job.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(deny_unknown_fields)]
+    #[ts(export, rename = "TtJobParams")]
+    pub struct JobParams {
+        pub school: School,
+        /// Independent searches: one unit each.
+        pub searches: u32,
+        /// Steps of each search.
+        pub iterations: u32,
+        pub seed: u32,
+    }
+
+    /// One search. The school is fetched by its hash (`GET /api/blobs/{school}.json`),
+    /// once per device, instead of travelling with every unit.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(deny_unknown_fields)]
+    #[ts(export, rename = "TtUnitParams")]
+    pub struct UnitParams {
+        /// Hex SHA-256 of the school's JSON.
+        pub school: String,
+        pub index: u32,
+        pub iterations: u32,
+        pub seed: u32,
+    }
+
+    /// What a worker returns for one unit: the best timetable its search found.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(deny_unknown_fields)]
+    #[ts(export, rename = "TtUnitOutput")]
+    pub struct UnitOutput {
+        /// Base64 of one little-endian `u16` slot per lesson hour, in lesson order.
+        pub slots: String,
+        /// Its cost, as the worker computed it; the coordinator computes it again.
+        #[ts(type = "number")]
+        pub cost: u64,
+    }
+
+    /// Aggregated job result: the best timetable found by any search.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[ts(export, rename = "TtResult")]
+    pub struct JobResult {
+        /// The unit whose search found it.
+        pub best: u32,
+        pub cost: Cost,
+        pub slots: String,
+        /// Every search's cost, in unit order.
+        #[ts(type = "Array<number>")]
+        pub costs: Vec<u64>,
+    }
+
+    /// The bytes units refer to: the school's JSON, as stored and hashed.
+    pub fn school_bytes(school: &School) -> Vec<u8> {
+        serde_json::to_vec(school).expect("a school always serializes")
+    }
+}

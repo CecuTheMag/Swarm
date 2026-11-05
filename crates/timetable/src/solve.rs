@@ -22,6 +22,18 @@ pub struct Search {
     pub history: u32,
 }
 
+impl Search {
+    /// The search of unit `index` of a job with `seed`: its own random numbers, and the
+    /// portfolio's history lengths in turn. Every device derives it the same way.
+    pub fn unit(seed: u32, index: u32, iterations: u32) -> Self {
+        Search {
+            seed: u64::from(seed) << 32 | u64::from(index),
+            iterations,
+            history: HISTORY_LENGTHS[index as usize % HISTORY_LENGTHS.len()],
+        }
+    }
+}
+
 /// An hour moving to `to`, from `from` (none when it is placed for the first time).
 #[derive(Debug, Clone, Copy)]
 struct Move {

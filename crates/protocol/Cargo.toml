@@ -11,6 +11,7 @@ workspace = true
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+timetable = { version = "0.1.0", path = "../timetable", features = ["ts"] }
 base64 = "0.22.1"
 ts-rs = { version = "12.0.1", features = ["uuid-impl", "serde-json-impl"] }
 uuid = { version = "1.29.0", features = ["serde", "v4"] }

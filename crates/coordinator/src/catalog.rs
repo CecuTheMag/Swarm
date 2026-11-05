@@ -404,6 +404,29 @@ pub async fn module_file(
         .into_response())
 }
 
+/// `GET /api/blobs/{sha256}.json`: an input units refer to by its hash (spec 0013). Only
+/// devices given such a unit learn the hash.
+pub async fn blob_file(
+    State(state): State<AppState>,
+    Path(file): Path<String>,
+) -> Result<Response, AppError> {
+    let sha256 = file
+        .strip_suffix(".json")
+        .filter(|h| h.len() == 64 && h.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))
+        .ok_or(AppError::NotFound)?;
+    let bytes = db::blob(&state.db, sha256)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/json"),
+            (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
 /// `GET /api/networks/{id}/jobs/{job}/outputs` (viewers): a program job's outputs.
 pub async fn outputs(
     State(state): State<AppState>,

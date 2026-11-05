@@ -22,6 +22,7 @@ reqwest = { version = "0.13.5", default-features = false, features = ["rustls"] 
 rustls = { version = "0.23.28", default-features = false, features = ["ring", "std"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
+timetable = { version = "0.1.0", path = "../timetable" }
 tokio = { version = "1.54.1", features = ["full"] }
 tokio-tungstenite = { version = "0.30.0", features = ["rustls-tls-webpki-roots"] }
 tracing = "0.1.44"

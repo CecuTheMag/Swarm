@@ -187,6 +187,24 @@ pub async fn create_job(db: &PgPool, new: NewJob<'_>) -> sqlx::Result<JobSummary
     Ok(job.into())
 }
 
+/// Stores bytes that units refer to by their hash; storing them again changes nothing.
+pub async fn put_blob(db: &PgPool, bytes: &[u8]) -> sqlx::Result<String> {
+    let sha256 = hex::encode(<sha2::Sha256 as sha2::Digest>::digest(bytes));
+    sqlx::query("INSERT INTO blobs (sha256, bytes) VALUES ($1, $2) ON CONFLICT DO NOTHING")
+        .bind(&sha256)
+        .bind(bytes)
+        .execute(db)
+        .await?;
+    Ok(sha256)
+}
+
+pub async fn blob(db: &PgPool, sha256: &str) -> sqlx::Result<Option<Vec<u8>>> {
+    sqlx::query_scalar("SELECT bytes FROM blobs WHERE sha256 = $1")
+        .bind(sha256)
+        .fetch_optional(db)
+        .await
+}
+
 /// Jobs a network has queued or running on the public network (spec 0012).
 pub async fn public_jobs_of(db: &PgPool, network_id: Uuid) -> sqlx::Result<i64> {
     sqlx::query_scalar(
@@ -835,6 +853,7 @@ struct ActiveLease {
     unit_id: Uuid,
     job_id: Uuid,
     template: String,
+    job_params: Json<Value>,
     params: Json<Value>,
     honeypot: bool,
     solo: bool,
@@ -855,7 +874,8 @@ pub async fn complete_lease(
     let mut tx = db.begin().await?;
 
     let lease: Option<ActiveLease> = sqlx::query_as(
-        "SELECT u.id AS unit_id, u.job_id, j.template, u.params, l.honeypot, l.solo, j.quorum
+        "SELECT u.id AS unit_id, u.job_id, j.template, j.params AS job_params, u.params,
+                l.honeypot, l.solo, j.quorum
          FROM leases l
          JOIN units u ON u.id = l.unit_id
          JOIN jobs j ON j.id = u.job_id
@@ -872,6 +892,7 @@ pub async fn complete_lease(
         unit_id,
         job_id,
         template: template_id,
+        job_params: Json(job_params),
         params: Json(unit_params),
         honeypot,
         solo,
@@ -885,7 +906,10 @@ pub async fn complete_lease(
     let template = templates::get(&template_id);
     let invalid = match template {
         None => Some(format!("unknown template {template_id}")),
-        Some(t) => t.template.validate_output(&unit_params, output).err(),
+        Some(t) => t
+            .template
+            .check_output(&job_params, &unit_params, output)
+            .err(),
     };
     if let Some(reason) = invalid {
         let released = release_leases(&mut tx, &[lease_id], ReleaseReason::Invalid, cfg).await?;

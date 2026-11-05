@@ -9,6 +9,7 @@ pub mod nn;
 mod pi;
 pub mod program;
 pub mod pt;
+pub mod tt;
 
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -24,6 +25,21 @@ pub trait Template: Send + Sync {
     fn split(&self, params: &Value) -> Result<Vec<Value>, String>;
     /// Checks that `output` is well-formed and plausible for `unit_params`.
     fn validate_output(&self, unit_params: &Value, output: &Value) -> Result<(), String>;
+    /// The check applied to every result, which may also read the job's params: a
+    /// timetable is re-scored against the school (spec 0013).
+    fn check_output(
+        &self,
+        _job_params: &Value,
+        unit_params: &Value,
+        output: &Value,
+    ) -> Result<(), String> {
+        self.validate_output(unit_params, output)
+    }
+    /// Bytes the units refer to by their SHA-256 instead of carrying them, stored once and
+    /// served at `/api/blobs/{sha256}.json` (spec 0013). None for most templates.
+    fn blob(&self, _params: &Value) -> Option<Vec<u8>> {
+        None
+    }
     /// Whether two valid outputs for the same unit count as the same answer (spec 0004).
     fn agree(&self, unit_params: &Value, a: &Value, b: &Value) -> bool;
     /// Reduces unit outputs (in unit order) into the job result.
@@ -37,7 +53,7 @@ pub struct Registered {
 }
 
 static REGISTRY: LazyLock<Vec<Registered>> = LazyLock::new(|| {
-    let all: [&'static dyn Template; 4] = [&pi::Pi, &pt::Pt, &nn::Nn, &program::Program];
+    let all: [&'static dyn Template; 5] = [&pi::Pi, &pt::Pt, &nn::Nn, &program::Program, &tt::Tt];
     all.into_iter()
         .map(|template| Registered {
             template,
@@ -63,13 +79,13 @@ mod tests {
 
     #[test]
     fn registry_hashes_are_hex_sha256() {
-        for id in ["pi", "pt", "nn"] {
+        for id in ["pi", "pt", "nn", "tt"] {
             let sha256 = get(id).unwrap().sha256.clone().unwrap();
             assert_eq!(sha256.len(), 64);
             assert!(sha256.chars().all(|c| c.is_ascii_hexdigit()));
         }
         assert_eq!(get("program").unwrap().sha256, None);
-        assert_eq!(current_hashes().len(), 3);
+        assert_eq!(current_hashes().len(), 4);
     }
 
     #[test]

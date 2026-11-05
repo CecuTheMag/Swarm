@@ -709,6 +709,10 @@ pub async fn start_job(
         .split(&body.params)
         .map_err(AppError::BadRequest)?;
     let placement = catalog::place(state, access, body, units.len() as u32).await?;
+    // Inputs the units refer to by hash are stored before any device can ask for them.
+    if let Some(bytes) = template.template.blob(&body.params) {
+        db::put_blob(&state.db, &bytes).await?;
+    }
     let (program, params) = match &placement.program {
         Some((program, shown)) => (Some(program), shown),
         None => (None, &body.params),

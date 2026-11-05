@@ -10,7 +10,7 @@ use futures_util::{SinkExt, StreamExt};
 use protocol::{
     Backend, CoordinatorMessage, DeviceControl, DeviceInfo, PROTOCOL_VERSION, TemplateRef,
     WorkerMessage,
-    templates::{nn, pi, program, pt},
+    templates::{nn, pi, program, pt, tt},
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -113,6 +113,8 @@ impl Cheat {
                 };
                 Some(json!({ "inside": inside }))
             }
+            // A timetable no school has, with the best cost there is: refused on arrival.
+            tt::ID => Some(json!({ "slots": "", "cost": 0 })),
             program::ID => {
                 let output: Vec<u8> = if constant {
                     b"swarm".to_vec()
@@ -199,15 +201,15 @@ pub fn compute_program(module: &[u8], params: &Value, fuel: u64) -> anyhow::Resu
     })?)
 }
 
-/// Modules of the programs a worker ran, by hash, fetched from the coordinator the first
-/// time a unit needs one.
-struct Modules {
+/// Files units refer to by their hash (program modules, schools), fetched from the
+/// coordinator the first time a unit needs one and checked against the hash.
+struct Downloads {
     http: reqwest::Client,
     base: reqwest::Url,
     cache: HashMap<String, Arc<Vec<u8>>>,
 }
 
-impl Modules {
+impl Downloads {
     fn new(opts: &Options) -> anyhow::Result<Self> {
         let mut base = reqwest::Url::parse(&opts.url)?;
         let scheme = match base.scheme() {
@@ -217,7 +219,7 @@ impl Modules {
         };
         base.set_scheme(scheme)
             .map_err(|()| anyhow::anyhow!("cannot use {scheme} for {}", opts.url))?;
-        base.set_path("/api/modules/");
+        base.set_path("/api/");
         let mut http = reqwest::Client::builder();
         if let (Some(addr), Some(host)) = (opts.connect_to, base.host_str()) {
             http = http.resolve(host, addr);
@@ -229,12 +231,17 @@ impl Modules {
         })
     }
 
-    /// The module the unit names, checked against its hash as the browser does.
-    async fn get(&mut self, template: &TemplateRef) -> anyhow::Result<Arc<Vec<u8>>> {
-        if let Some(module) = self.cache.get(&template.sha256) {
-            return Ok(module.clone());
+    /// `/api/{dir}/{sha256}{extension}`, checked against its hash as the browser does.
+    async fn get(
+        &mut self,
+        dir: &str,
+        sha256: &str,
+        extension: &str,
+    ) -> anyhow::Result<Arc<Vec<u8>>> {
+        if let Some(bytes) = self.cache.get(sha256) {
+            return Ok(bytes.clone());
         }
-        let url = self.base.join(&format!("{}.wasm", template.sha256))?;
+        let url = self.base.join(&format!("{dir}/{sha256}{extension}"))?;
         let bytes = self
             .http
             .get(url)
@@ -243,13 +250,49 @@ impl Modules {
             .error_for_status()?
             .bytes()
             .await?;
-        if hex::encode(Sha256::digest(&bytes)) != template.sha256 {
-            bail!("module hash mismatch; refusing to run");
+        if hex::encode(Sha256::digest(&bytes)) != sha256 {
+            bail!("{dir}/{sha256} hash mismatch; refusing to run");
         }
-        let module = Arc::new(bytes.to_vec());
-        self.cache.insert(template.sha256.clone(), module.clone());
-        Ok(module)
+        let bytes = Arc::new(bytes.to_vec());
+        self.cache.insert(sha256.to_owned(), bytes.clone());
+        Ok(bytes)
     }
+
+    /// What a unit needs besides its params: a program's module, or a school.
+    async fn input(
+        &mut self,
+        template: &TemplateRef,
+        params: &Value,
+    ) -> Option<anyhow::Result<Arc<Vec<u8>>>> {
+        match template.id.as_str() {
+            program::ID => Some(self.get("modules", &template.sha256, ".wasm").await),
+            tt::ID => {
+                let school = params
+                    .get("school")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                Some(self.get("blobs", school, ".json").await)
+            }
+            _ => None,
+        }
+    }
+}
+
+/// Computes one timetable unit (spec 0013): a search over the school, from its seed.
+pub fn compute_timetable(school: &[u8], params: &Value) -> anyhow::Result<Value> {
+    let p: tt::UnitParams = serde_json::from_value(params.clone())?;
+    let school: tt::School = serde_json::from_slice(school)?;
+    let problem = timetable::Problem::new(&school).map_err(anyhow::Error::msg)?;
+    let slots = timetable::solve(
+        &problem,
+        timetable::Search::unit(p.seed, p.index, p.iterations),
+    );
+    let cost = timetable::cost(&problem, &slots).map_err(anyhow::Error::msg)?;
+    let bytes: Vec<u8> = slots.iter().flat_map(|s| s.to_le_bytes()).collect();
+    Ok(serde_json::to_value(tt::UnitOutput {
+        slots: STANDARD.encode(bytes),
+        cost: cost.total,
+    })?)
 }
 
 fn compute_template(template_id: &str, version: u32, params: &Value) -> anyhow::Result<Value> {
@@ -368,7 +411,7 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
     }
 
     let deadline = opts.deadline.map(tokio::time::Instant::from_std);
-    let mut modules = Modules::new(&opts)?;
+    let mut downloads = Downloads::new(&opts)?;
     let mut retry_at = None;
     let mut retries = 0u32;
     let mut heartbeat = None::<tokio::time::Interval>;
@@ -435,14 +478,14 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
                 let started = Instant::now();
                 let cheat = opts.cheat;
                 let fuel = opts.fuel;
-                let module = match template.id.as_str() {
-                    program::ID => Some(modules.get(&template).await),
-                    _ => None,
-                };
+                let input = downloads.input(&template, &params).await;
                 let computed = tokio::task::spawn_blocking(move || {
-                    match (cheat.falsify(&template.id, &params), module) {
+                    match (cheat.falsify(&template.id, &params), input) {
                         (Some(fake), _) => Ok(fake),
-                        (None, Some(module)) => compute_program(&module?, &params, fuel),
+                        (None, Some(input)) if template.id == tt::ID => {
+                            compute_timetable(&input?, &params)
+                        }
+                        (None, Some(input)) => compute_program(&input?, &params, fuel),
                         (None, None) => compute(&template.id, template.version, &params),
                     }
                 })
