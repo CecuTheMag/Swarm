@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Рояк System Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column for prose, figures run the full page width; tokens mirror web/src/app.css. */
+:root {
+  --brand: #f5a524; --brand-ink: #8a5300; --brand-soft: rgb(245 165 36 / 0.13);
+  --bg: #f5f5f7; --surface: #ffffff; --text: #1d1d1f; --muted: #55555c; --faint: #6e6e73;
+  --line: rgb(0 0 0 / 0.14); --line-strong: rgb(0 0 0 / 0.28);
+  --ok: #18794e; --ok-soft: rgb(24 121 78 / 0.1);
+  --bad: #c4161c; --bad-soft: rgb(196 22 28 / 0.08);
+  --info: #0062cc; --info-soft: rgb(0 98 204 / 0.08);
+  --font: "Inter", "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --brand: #ffb53c; --brand-ink: #ffc76a; --brand-soft: rgb(255 181 60 / 0.12);
+    --bg: #0b0b0d; --surface: #161618; --text: #f5f5f7; --muted: #b0b0b6; --faint: #8e8e94;
+    --line: rgb(255 255 255 / 0.16); --line-strong: rgb(255 255 255 / 0.3);
+    --ok: #3ddc84; --ok-soft: rgb(61 220 132 / 0.11);
+    --bad: #ff5b54; --bad-soft: rgb(255 91 84 / 0.12);
+    --info: #4da3ff; --info-soft: rgb(77 163 255 / 0.12);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --brand: #ffb53c; --brand-ink: #ffc76a; --brand-soft: rgb(255 181 60 / 0.12);
+  --bg: #0b0b0d; --surface: #161618; --text: #f5f5f7; --muted: #b0b0b6; --faint: #8e8e94;
+  --line: rgb(255 255 255 / 0.16); --line-strong: rgb(255 255 255 / 0.3);
+  --ok: #3ddc84; --ok-soft: rgb(61 220 132 / 0.11);
+  --bad: #ff5b54; --bad-soft: rgb(255 91 84 / 0.12);
+  --info: #4da3ff; --info-soft: rgb(77 163 255 / 0.12);
+  color-scheme: dark;
+}
+
+body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 16px; line-height: 1.55; }
+.page { max-width: 1240px; margin: 0 auto; padding-block: 40px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 56px; }
+header { display: grid; gap: 14px; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--brand-ink); }
+h1 { margin: 0; font-size: clamp(2rem, 1.2rem + 3vw, 3.2rem); line-height: 1.05; letter-spacing: -0.03em; font-weight: 700; text-wrap: balance; }
+h2 { margin: 0; font-size: 1.5rem; letter-spacing: -0.02em; line-height: 1.2; text-wrap: balance; }
+.lead { margin: 0; max-width: 68ch; color: var(--muted); font-size: 1.0625rem; }
+.meta { font-family: var(--mono); font-size: 12.5px; color: var(--faint); }
+nav { display: flex; flex-wrap: wrap; gap: 8px; }
+nav a { font-size: 14px; color: var(--text); text-decoration: none; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+nav a:hover { border-color: var(--brand); }
+nav a:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+section { display: grid; gap: 16px; scroll-margin-top: 16px; }
+section > p { margin: 0; max-width: 70ch; color: var(--muted); }
+figure { margin: 0; display: grid; gap: 12px; }
+.scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px; }
+.scroll svg { display: block; width: 100%; height: auto; min-width: 920px; }
+figcaption { font-size: 14px; color: var(--faint); max-width: 80ch; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 28px; margin: 0; padding: 0; list-style: none; }
+.notes li { min-width: 0; font-size: 14.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+.notes b { color: var(--text); font-weight: 600; }
+code { font-family: var(--mono); font-size: 0.86em; }
+
+/* SVG vocabulary */
+svg text { font-family: var(--font); }
+.tt { font-size: 14px; font-weight: 600; fill: var(--text); }
+.tH { font-size: 16px; font-weight: 700; fill: var(--text); }
+.tb { font-size: 12.5px; fill: var(--muted); }
+.tm { font-family: var(--mono) !important; font-size: 11.5px; fill: var(--text); }
+.tl { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; fill: var(--faint); }
+.te { font-size: 11.5px; fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }
+.ts { font-size: 11px; fill: var(--muted); paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }
+.tc { text-anchor: middle; }
+.tr { text-anchor: end; }
+.b { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
+.b-host { fill: none; stroke: var(--line-strong); stroke-width: 1.2; stroke-dasharray: 7 5; }
+.b-core { fill: var(--brand-soft); stroke: var(--brand); stroke-width: 1.6; }
+.b-opt { fill: var(--surface); stroke: var(--line-strong); stroke-dasharray: 5 4; }
+.b-hex { fill: var(--brand-soft); stroke: var(--brand); stroke-width: 1.3; }
+.b-ok { fill: var(--ok-soft); stroke: var(--ok); stroke-width: 1.3; }
+.b-bad { fill: var(--bad-soft); stroke: var(--bad); stroke-width: 1.3; }
+.b-info { fill: var(--info-soft); stroke: var(--info); stroke-width: 1.2; }
+.b-chip { fill: var(--surface); stroke: var(--brand); stroke-width: 1; }
+.w { fill: none; stroke-width: 1.6; }
+.w-ws { stroke: var(--brand-ink); }
+.w-http { stroke: var(--info); }
+.w-n { stroke: var(--muted); }
+.w-ok { stroke: var(--ok); }
+.w-bad { stroke: var(--bad); }
+.w-dash { stroke-dasharray: 5 4; }
+.mk-ws { fill: var(--brand-ink); }
+.mk-http { fill: var(--info); }
+.mk-n { fill: var(--muted); }
+.mk-ok { fill: var(--ok); }
+.mk-bad { fill: var(--bad); }
+.lifeline { stroke: var(--line-strong); stroke-dasharray: 3 5; stroke-width: 1.2; }
+.frame { fill: none; stroke: var(--line-strong); stroke-width: 1; }
+.rule { stroke: var(--line); stroke-width: 1; }
+.act { fill: var(--brand); }
+.okt { fill: var(--ok); }
+.badt { fill: var(--bad); }
+</style>
+</head>
+<body>
+<main class="page">
+<header>
+  <div class="eyebrow">Рояк · Swarm · architecture</div>
+  <h1>Рояк System Map</h1>
+  <p class="lead">How a browser tab becomes a compute node: the machines and processes, the worker protocol, how a unit is verified against cheaters, and which code is shared between the coordinator and the browser. Drawn from the source, not the plan in the README.</p>
+  <div class="meta">main @ 6dfbc08 · 5 Nov 2026 · Rust coordinator · SvelteKit web · PostgreSQL 18</div>
+  <nav aria-label="Figures">
+    <a href="#overview">1 · Deployment</a>
+    <a href="#session">2 · Worker session</a>
+    <a href="#verification">3 · Verification</a>
+    <a href="#states">4 · State machines</a>
+    <a href="#device">5 · Inside a device</a>
+    <a href="#sources">6 · Shared sources</a>
+  </nav>
+</header>
+
+<!-- ============ 1 · OVERVIEW ============ -->
+<section id="overview">
+  <h2>Deployment and processes</h2>
+  <p>Every device reaches the system through one public HTTPS name, because browsers allow WebGPU only on secure pages. Only the swarm proxy publishes a port on magserver. There is no separate queue service: the work queue is the <code>units</code> table, claimed inside PostgreSQL transactions.</p>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1280 880" role="img" aria-label="Deployment: devices connect over the internet to Kant's Caddy at swarmrelay.duckdns.org, which forwards to the swarm proxy on magserver port 7780. The proxy routes /api, /ws and /healthz to the Rust coordinator and everything else to the SvelteKit web server. The coordinator stores jobs, units, leases, clients and accounts in PostgreSQL.">
+      <defs>
+        <marker id="a-ws" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-ws"/></marker>
+        <marker id="a-http" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-http"/></marker>
+        <marker id="a-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-n"/></marker>
+      </defs>
+
+      <!-- network boundary -->
+      <line x1="275" y1="18" x2="275" y2="862" class="lifeline"/>
+      <text x="264" y="30" class="tl tr">PUBLIC INTERNET</text>
+      <text x="286" y="30" class="tl">HOME LAN 192.168.88.0/24</text>
+
+      <!-- devices -->
+      <text x="16" y="56" class="tl">WHO CONNECTS</text>
+      <rect x="16" y="70" width="230" height="88" rx="10" class="b"/>
+      <text x="30" y="94" class="tt">Contributor devices</text>
+      <text x="30" y="114" class="tb">phones, laptops · /join/{code}</text>
+      <text x="30" y="134" class="tm">wss   /ws/worker</text>
+
+      <rect x="16" y="178" width="230" height="88" rx="10" class="b"/>
+      <text x="30" y="202" class="tt">School lab PCs</text>
+      <text x="30" y="222" class="tb">13 × Win10 · CPU path only</text>
+      <text x="30" y="242" class="tm">wss   /ws/worker</text>
+
+      <rect x="16" y="286" width="230" height="88" rx="10" class="b"/>
+      <text x="30" y="310" class="tt">Network console</text>
+      <text x="30" y="330" class="tb">owners, members · /app/n/{id}</text>
+      <text x="30" y="348" class="tm">https /api/networks/{id}/…</text>
+      <text x="30" y="364" class="tm">wss   /ws/networks/…/live</text>
+
+      <rect x="16" y="394" width="230" height="88" rx="10" class="b"/>
+      <text x="30" y="418" class="tt">Projector &amp; home page</text>
+      <text x="30" y="438" class="tb">public network, live</text>
+      <text x="30" y="456" class="tm">wss   /ws/dashboard</text>
+      <text x="30" y="472" class="tm">https …/jobs/{id}/image.png</text>
+
+      <rect x="16" y="502" width="230" height="88" rx="10" class="b"/>
+      <text x="30" y="526" class="tt">Submitter script</text>
+      <text x="30" y="546" class="tb">API key or submit token</text>
+      <text x="30" y="566" class="tm">https POST /api/…/jobs</text>
+
+      <path d="M246 114 C282 114 282 256 314 256" class="w w-ws" marker-end="url(#a-ws)"/>
+      <path d="M246 222 C282 222 282 280 314 280" class="w w-ws" marker-end="url(#a-ws)"/>
+      <path d="M246 326 C282 326 282 304 314 304" class="w w-http" marker-end="url(#a-http)"/>
+      <path d="M246 334 C282 334 282 312 314 312" class="w w-ws" marker-end="url(#a-ws)"/>
+      <path d="M246 434 C282 434 282 334 314 334" class="w w-ws" marker-end="url(#a-ws)"/>
+      <path d="M246 442 C282 442 282 342 314 342" class="w w-http" marker-end="url(#a-http)"/>
+      <path d="M246 546 C282 546 282 364 314 364" class="w w-http" marker-end="url(#a-http)"/>
+
+      <!-- legend -->
+      <text x="16" y="640" class="tl">LEGEND</text>
+      <line x1="16" y1="662" x2="56" y2="662" class="w w-ws"/><text x="66" y="666" class="tb">WebSocket, JSON messages</text>
+      <line x1="16" y1="686" x2="56" y2="686" class="w w-http"/><text x="66" y="690" class="tb">HTTPS, REST + JSON</text>
+      <line x1="16" y1="710" x2="56" y2="710" class="w w-n"/><text x="66" y="714" class="tb">proxied traffic or SQL</text>
+      <rect x="16" y="726" width="40" height="18" rx="4" class="b-opt"/><text x="66" y="740" class="tb">optional compose profile</text>
+      <text x="16" y="784" class="tb">Browsers allow WebGPU only on</text>
+      <text x="16" y="802" class="tb">HTTPS pages, so every device,</text>
+      <text x="16" y="820" class="tb">lab PCs included, comes in through</text>
+      <text x="16" y="838" class="tb">the public name.</text>
+
+      <!-- Kant's host -->
+      <rect x="300" y="200" width="170" height="226" rx="12" class="b-host"/>
+      <text x="312" y="222" class="tl">KANT'S SERVER</text>
+      <rect x="316" y="240" width="138" height="140" rx="10" class="b"/>
+      <text x="328" y="264" class="tt">Caddy</text>
+      <text x="328" y="284" class="tb">public HTTPS</text>
+      <text x="328" y="304" class="tm">swarmrelay.</text>
+      <text x="328" y="320" class="tm">duckdns.org</text>
+      <text x="328" y="342" class="tb">Let's Encrypt</text>
+      <text x="328" y="360" class="tb">no buffering</text>
+      <text x="316" y="408" class="tm">ports 80 / 443</text>
+
+      <path d="M454 310 H514" class="w w-n" marker-end="url(#a-n)"/>
+      <text x="483" y="302" class="ts tc">http</text>
+
+      <!-- magserver -->
+      <rect x="496" y="40" width="768" height="820" rx="14" class="b-host"/>
+      <text x="512" y="62" class="tl">MAGSERVER · 192.168.88.220 · DOCKER COMPOSE “SWARM”</text>
+
+      <rect x="516" y="160" width="160" height="64" rx="10" class="b-opt"/>
+      <text x="530" y="184" class="tt">tailscale</text>
+      <text x="530" y="204" class="tb">optional Funnel</text>
+      <path d="M596 224 V242" class="w w-n w-dash" marker-end="url(#a-n)"/>
+
+      <rect x="516" y="244" width="160" height="140" rx="10" class="b"/>
+      <text x="530" y="268" class="tt">proxy</text>
+      <text x="530" y="288" class="tb">Caddy, port 7780</text>
+      <text x="530" y="312" class="tm">/api /ws /healthz</text>
+      <text x="530" y="330" class="tb">→ coordinator</text>
+      <text x="530" y="352" class="tm">everything else</text>
+      <text x="530" y="370" class="tb">→ web</text>
+
+      <rect x="516" y="404" width="160" height="80" rx="10" class="b-opt"/>
+      <text x="530" y="428" class="tt">sim-worker × N</text>
+      <text x="530" y="448" class="tb">profile fleet</text>
+      <text x="530" y="466" class="tb">ws direct to :7700</text>
+
+      <path d="M676 262 H694 V108 H710" class="w w-n" marker-end="url(#a-n)"/>
+      <path d="M676 290 H710" class="w w-n" marker-end="url(#a-n)"/>
+      <path d="M676 444 H690 V336 H710" class="w w-ws w-dash" marker-end="url(#a-ws)"/>
+
+      <rect x="712" y="66" width="300" height="84" rx="10" class="b"/>
+      <text x="726" y="90" class="tt">web · :3000</text>
+      <text x="726" y="110" class="tb">SvelteKit on Node: every page</text>
+      <text x="726" y="128" class="tb">ships WGSL kernels and kernels.wasm</text>
+      <text x="726" y="144" class="tm">node build · adapter-node</text>
+
+      <!-- coordinator -->
+      <rect x="712" y="180" width="374" height="650" rx="14" class="b-core"/>
+      <text x="728" y="206" class="tH">coordinator · :7700</text>
+      <text x="1070" y="206" class="tm tr">Rust · axum · tokio</text>
+
+      <rect x="728" y="222" width="342" height="132" rx="10" class="b"/>
+      <text x="740" y="240" class="tl">ROUTER</text>
+      <rect x="740" y="250" width="158" height="96" rx="8" class="b-info"/>
+      <text x="752" y="270" class="tt">REST</text>
+      <text x="752" y="288" class="tm">api.rs  jobs</text>
+      <text x="752" y="304" class="tm">networks.rs</text>
+      <text x="752" y="320" class="tm">accounts.rs</text>
+      <text x="752" y="336" class="tm">chaos.rs · auth.rs</text>
+      <rect x="906" y="250" width="156" height="96" rx="8" class="b-hex"/>
+      <text x="918" y="270" class="tt">WebSocket</text>
+      <text x="918" y="288" class="tm">/ws/worker</text>
+      <text x="918" y="304" class="tm">/ws/dashboard</text>
+      <text x="918" y="320" class="tm">/ws/networks/…/live</text>
+      <text x="918" y="336" class="tm">/ws/join/…/summary</text>
+
+      <rect x="728" y="366" width="342" height="104" rx="10" class="b"/>
+      <text x="740" y="384" class="tl">STATE · IN MEMORY</text>
+      <text x="740" y="404" class="tb">connected workers, banned clients</text>
+      <text x="740" y="422" class="tb">event broadcast per network</text>
+      <text x="740" y="440" class="tb">session commands: chaos kill / cut, refresh</text>
+      <text x="740" y="458" class="tb">renders: a live PNG per path-tracer job</text>
+
+      <rect x="728" y="482" width="342" height="112" rx="10" class="b"/>
+      <text x="740" y="500" class="tl">TEMPLATE REGISTRY</text>
+      <rect x="740" y="510" width="104" height="32" rx="16" class="b-chip"/><text x="792" y="531" class="tb tc">π Monte Carlo</text>
+      <rect x="852" y="510" width="98" height="32" rx="16" class="b-chip"/><text x="901" y="531" class="tb tc">path tracer</text>
+      <rect x="958" y="510" width="104" height="32" rx="16" class="b-chip"/><text x="1010" y="531" class="tb tc">MNIST sweep</text>
+      <text x="740" y="564" class="tb">split · validate · agree · aggregate</text>
+      <text x="740" y="582" class="tm">sha256(WGSL) pinned in every assign</text>
+
+      <rect x="728" y="606" width="342" height="104" rx="10" class="b"/>
+      <text x="740" y="624" class="tl">DB.RS · SQLX</text>
+      <text x="740" y="646" class="tm">claim_unit · heartbeat</text>
+      <text x="740" y="664" class="tm">complete_lease · release_lease</text>
+      <text x="740" y="682" class="tm">reap_expired · create_job</text>
+      <text x="740" y="700" class="tb">transactions retried on conflict</text>
+
+      <rect x="728" y="722" width="342" height="92" rx="10" class="b"/>
+      <text x="740" y="740" class="tl">BACKGROUND LOOPS</text>
+      <text x="740" y="760" class="tb">reaper, every 5 s: expired leases → queue</text>
+      <text x="740" y="778" class="tb">progress flush: batched events → dashboards</text>
+      <text x="740" y="796" class="tb">device unit counts, every 5 s</text>
+
+      <path d="M1070 656 H1110" class="w w-n" marker-end="url(#a-n)"/>
+      <path d="M1070 768 H1110" class="w w-n" marker-end="url(#a-n)"/>
+
+      <!-- postgres -->
+      <path d="M1112 380 a68 12 0 0 1 136 0 v420 a68 12 0 0 1 -136 0 z" class="b"/>
+      <path d="M1112 380 a68 12 0 0 0 136 0" class="b" fill="none"/>
+      <text x="1124" y="416" class="tt">postgres:18</text>
+      <text x="1124" y="434" class="tb">volume pgdata</text>
+      <text x="1124" y="464" class="tl">WORK</text>
+      <text x="1124" y="482" class="tm">jobs</text>
+      <text x="1124" y="498" class="tm">units</text>
+      <text x="1124" y="514" class="tm">leases</text>
+      <text x="1124" y="544" class="tl">TRUST</text>
+      <text x="1124" y="562" class="tm">workers</text>
+      <text x="1124" y="578" class="tm">clients</text>
+      <text x="1124" y="608" class="tl">PEOPLE</text>
+      <text x="1124" y="626" class="tm">accounts</text>
+      <text x="1124" y="642" class="tm">sessions</text>
+      <text x="1124" y="658" class="tm">networks</text>
+      <text x="1124" y="674" class="tm">memberships</text>
+      <text x="1124" y="690" class="tm">invites</text>
+      <text x="1124" y="706" class="tm">devices</text>
+      <text x="1124" y="722" class="tm">api_keys</text>
+      <text x="1124" y="756" class="tb">5 migrations</text>
+      <text x="1124" y="774" class="tb">async commit</text>
+    </svg>
+    </div>
+    <figcaption>Figure 1. Two Caddy hops in front of two containers. The coordinator is one Rust process; its layers stack top to bottom, from what the network sees to what touches the disk.</figcaption>
+  </figure>
+  <ul class="notes">
+    <li><b>Why two proxies.</b> Kant's Caddy already owns ports 80 and 443 and holds the certificate. The swarm proxy keeps the site and the API on one origin, exactly as Vite does in development.</li>
+    <li><b>Simulated workers are real clients.</b> <code>sim-worker</code> speaks the same protocol as a browser, with the Rust reference kernels. The chaos panel's cheaters connect the same way.</li>
+    <li><b>Commits skip the disk wait.</b> A PostgreSQL crash can lose the last fraction of a second of results. Their leases then expire and the units are computed again.</li>
+  </ul>
+</section>
+
+<!-- ============ 2 · SESSION ============ -->
+<section id="session">
+  <h2>One worker session, message by message</h2>
+  <p>A device holds one WebSocket. Every message is JSON, typed in <code>crates/protocol</code>. The coordinator replies to each request at once, and that lets the browser treat a long silence as a dead connection.</p>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1100 790" role="img" aria-label="Sequence: the device sends hello; the coordinator registers it in PostgreSQL and replies welcome and control. In a loop of up to eight leases, the device requests work, the coordinator claims a unit and assigns it with a pinned kernel hash, the device verifies the hash and computes, sends heartbeats and a result, and the coordinator completes the lease in one transaction, acknowledges, and broadcasts progress to dashboards. When the socket closes, its leases go back to the queue.">
+      <defs>
+        <marker id="b-ws" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-ws"/></marker>
+        <marker id="b-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-n"/></marker>
+      </defs>
+      <!-- heads -->
+      <rect x="30" y="20" width="220" height="56" rx="10" class="b"/>
+      <text x="140" y="44" class="tt tc">Device</text><text x="140" y="63" class="tm tc">session.svelte.ts</text>
+      <rect x="390" y="20" width="220" height="56" rx="10" class="b-core"/>
+      <text x="500" y="44" class="tt tc">Coordinator</text><text x="500" y="63" class="tm tc">ws.rs · worker_session</text>
+      <rect x="700" y="20" width="200" height="56" rx="10" class="b"/>
+      <text x="800" y="44" class="tt tc">PostgreSQL</text><text x="800" y="63" class="tm tc">db.rs transactions</text>
+      <rect x="930" y="20" width="160" height="56" rx="10" class="b"/>
+      <text x="1010" y="44" class="tt tc">Dashboards</text><text x="1010" y="63" class="tm tc">console · projector</text>
+      <line x1="140" y1="76" x2="140" y2="776" class="lifeline"/>
+      <line x1="500" y1="76" x2="500" y2="776" class="lifeline"/>
+      <line x1="800" y1="76" x2="800" y2="776" class="lifeline"/>
+      <line x1="1010" y1="76" x2="1010" y2="776" class="lifeline"/>
+
+      <!-- handshake -->
+      <path d="M142 112 H498" class="w w-ws" marker-end="url(#b-ws)"/>
+      <text x="320" y="105" class="tm tc">hello</text>
+      <text x="320" y="127" class="ts tc">protocol 1 · device info · client_id · join code</text>
+
+      <path d="M502 152 H798" class="w w-n" marker-end="url(#b-n)"/>
+      <text x="650" y="145" class="tm tc">find network · insert_worker</text>
+      <text x="650" y="167" class="ts tc">banned → error · approval → wait for owner</text>
+
+      <path d="M498 192 H142" class="w w-ws" marker-end="url(#b-ws)"/>
+      <text x="320" y="185" class="tm tc">welcome</text>
+      <text x="320" y="207" class="ts tc">worker_id · heartbeat every 10 s</text>
+
+      <path d="M498 232 H142" class="w w-ws" marker-end="url(#b-ws)"/>
+      <text x="320" y="225" class="tm tc">control</text>
+      <text x="320" y="247" class="ts tc">running · paused · outside hours · awaiting approval</text>
+
+      <!-- loop -->
+      <rect x="20" y="262" width="1070" height="456" rx="10" class="frame"/>
+      <path d="M20 272 a10 10 0 0 1 10 -10 H262 V280 L252 290 H20 z" class="b-hex"/>
+      <text x="32" y="281" class="tl">LOOP · UP TO 8 LEASES IN FLIGHT</text>
+
+      <path d="M142 316 H498" class="w w-ws" marker-end="url(#b-ws)"/>
+      <text x="320" y="309" class="tm tc">request_work</text>
+      <text x="320" y="331" class="ts tc">whenever it has room for another unit</text>
+
+      <path d="M502 352 H798" class="w w-n" marker-end="url(#b-n)"/>
+      <text x="650" y="345" class="tm tc">claim_unit</text>
+      <text x="650" y="367" class="ts tc">honeypot roll · own network, else public</text>
+
+      <path d="M498 390 H142" class="w w-ws" marker-end="url(#b-ws)"/>
+      <text x="320" y="383" class="tm tc">assign</text>
+      <text x="320" y="405" class="ts tc">lease_id · template + sha256 · params · expiry</text>
+
+      <path d="M498 428 H142" class="w w-ws w-dash" marker-end="url(#b-ws)"/>
+      <text x="320" y="421" class="tm tc">no_work</text>
+      <text x="320" y="443" class="ts tc">queue empty · retry after 2 s</text>
+
+      <rect x="134" y="452" width="12" height="160" rx="3" class="act"/>
+      <rect x="160" y="458" width="300" height="52" rx="8" class="b"/>
+      <text x="174" y="479" class="tb">check sha256(bundled kernel) = pinned</text>
+      <text x="174" y="498" class="tb">run on WebGPU, else WASM threads</text>
+
+      <path d="M146 530 H498" class="w w-ws" marker-end="url(#b-ws)"/>
+      <text x="320" y="523" class="tm tc">heartbeat</text>
+      <text x="320" y="545" class="ts tc">lease_ids · every 10 s while computing</text>
+
+      <path d="M502 566 H798" class="w w-n" marker-end="url(#b-n)"/>
+      <text x="650" y="559" class="tm tc">extend leases</text>
+      <text x="650" y="581" class="ts tc">TTL 60 s · never past 10 min</text>
+
+      <path d="M146 604 H498" class="w w-ws" marker-end="url(#b-ws)"/>
+      <text x="320" y="597" class="tm tc">result</text>
+      <text x="320" y="619" class="ts tc">lease_id · output · elapsed_ms</text>
+
+      <path d="M502 642 H798" class="w w-n" marker-end="url(#b-n)"/>
+      <text x="650" y="635" class="tm tc">complete_lease</text>
+      <text x="650" y="657" class="ts tc">validate · agree · decide, one transaction</text>
+
+      <path d="M502 676 H1008" class="w w-ws" marker-end="url(#b-ws)"/>
+      <text x="905" y="669" class="tm tc">units_completed</text>
+      <text x="905" y="691" class="ts tc">job_updated, batched</text>
+
+      <path d="M498 700 H142" class="w w-ws" marker-end="url(#b-ws)"/>
+      <text x="320" y="693" class="tm tc">ack</text>
+
+      <!-- teardown -->
+      <rect x="390" y="732" width="520" height="40" rx="8" class="b-bad"/>
+      <text x="650" y="757" class="tb tc">socket closes → release_worker_leases → its units go back to the queue</text>
+    </svg>
+    </div>
+    <figcaption>Figure 2. The orange bar is the unit being computed. A device prefetches up to eight units so network round trips overlap the work, which matters for a fast GPU on a slow phone link.</figcaption>
+  </figure>
+  <ul class="notes">
+    <li><b>The coordinator can push at any time.</b> A new <code>control</code> arrives when the owner pauses the network or its working hours close. The chaos panel can also kill a session or cut it off silently.</li>
+    <li><b>Pings don't count as life.</b> Only protocol messages reset the 30 s idle timer, since a proxy may keep pinging long after the worker is gone.</li>
+    <li><b>The browser gives up after 20 s with no reply.</b> A phone that slept with the page frozen may never see the socket close, so it reconnects with back-off of up to 15 s.</li>
+  </ul>
+</section>
+
+<!-- ============ 3 · VERIFICATION ============ -->
+<section id="verification">
+  <h2>How a unit is verified</h2>
+  <p>Anyone can join, so any result may be wrong on purpose. Both decisions happen inside a single database transaction. On the left, <code>claim_unit</code> chooses what a device gets. On the right, <code>complete_lease</code> decides what its answer is worth.</p>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1200 740" role="img" aria-label="Verification flow. Handing out: banned clients get nothing; a honeypot roll of 5 percent for trusted and 20 percent for new clients hands out a copy of an already verified unit; otherwise the next pending unit, solo for trusted clients 90 percent of the time, otherwise replicated so two clients must agree. Taking in: malformed output is invalid; honeypot answers are compared to the known answer; results wait until the target count is reached; if a quorum agrees the unit is decided, otherwise it is disputed and asks another client, and after three extra results the job fails. Trust is the Beta posterior mean per client.">
+      <defs>
+        <marker id="c-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-n"/></marker>
+        <marker id="c-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-ok"/></marker>
+        <marker id="c-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-bad"/></marker>
+      </defs>
+      <line x1="600" y1="14" x2="600" y2="580" class="rule"/>
+      <text x="20" y="30" class="tl">HANDING A UNIT OUT · claim_unit</text>
+      <text x="620" y="30" class="tl">TAKING A RESULT IN · complete_lease</text>
+
+      <!-- left lane -->
+      <rect x="110" y="50" width="180" height="36" rx="18" class="b"/><text x="200" y="73" class="tm tc">request_work</text>
+      <path d="M200 86 V114" class="w w-n" marker-end="url(#c-n)"/>
+
+      <polygon points="114,116 286,116 300,141 286,166 114,166 100,141" class="b-hex"/>
+      <text x="200" y="146" class="tt tc">client banned?</text>
+      <path d="M300 141 H328" class="w w-bad" marker-end="url(#c-bad)"/><text x="314" y="134" class="ts tc">yes</text>
+      <rect x="330" y="116" width="210" height="50" rx="10" class="b-bad"/>
+      <text x="344" y="137" class="tt">no_work</text><text x="344" y="155" class="tb">banned clients get nothing</text>
+      <path d="M200 166 V194" class="w w-n" marker-end="url(#c-n)"/><text x="210" y="184" class="ts">no</text>
+
+      <polygon points="114,196 286,196 300,221 286,246 114,246 100,221" class="b-hex"/>
+      <text x="200" y="218" class="tt tc">honeypot roll?</text>
+      <text x="200" y="235" class="tb tc">5 % trusted · 20 % new</text>
+      <path d="M300 221 H328" class="w w-n" marker-end="url(#c-n)"/><text x="314" y="214" class="ts tc">yes</text>
+      <rect x="330" y="196" width="210" height="50" rx="10" class="b"/>
+      <text x="344" y="217" class="tt">honeypot lease</text><text x="344" y="235" class="tb">its answer is already known</text>
+      <path d="M200 246 V274" class="w w-n" marker-end="url(#c-n)"/><text x="210" y="264" class="ts">no</text>
+
+      <rect x="100" y="276" width="200" height="50" rx="10" class="b"/>
+      <text x="200" y="297" class="tt tc">next pending unit</text>
+      <text x="200" y="315" class="tb tc">own network, then public</text>
+      <path d="M200 326 V354" class="w w-n" marker-end="url(#c-n)"/>
+
+      <polygon points="114,356 286,356 300,381 286,406 114,406 100,381" class="b-hex"/>
+      <text x="200" y="378" class="tt tc">trusted, no spot check?</text>
+      <text x="200" y="395" class="tb tc">90 % of trusted units</text>
+      <path d="M300 381 H328" class="w w-n" marker-end="url(#c-n)"/><text x="314" y="374" class="ts tc">yes</text>
+      <rect x="330" y="356" width="210" height="50" rx="10" class="b"/>
+      <text x="344" y="377" class="tt">solo lease</text><text x="344" y="395" class="tb">one result decides the unit</text>
+      <path d="M200 406 V434" class="w w-n" marker-end="url(#c-n)"/><text x="210" y="424" class="ts">no</text>
+
+      <rect x="100" y="436" width="200" height="50" rx="10" class="b"/>
+      <text x="200" y="457" class="tt tc">replicated lease</text>
+      <text x="200" y="475" class="tb tc">2 different clients must agree</text>
+      <path d="M200 486 V514" class="w w-n" marker-end="url(#c-n)"/>
+
+      <rect x="110" y="516" width="180" height="36" rx="18" class="b-core"/><text x="200" y="539" class="tm tc">assign</text>
+      <path d="M540 221 H566 V534 H292" class="w w-n" marker-end="url(#c-n)"/>
+      <path d="M540 381 H566" class="w w-n"/>
+
+      <!-- right lane -->
+      <rect x="710" y="50" width="180" height="36" rx="18" class="b"/><text x="800" y="73" class="tm tc">result</text>
+      <path d="M800 86 V114" class="w w-n" marker-end="url(#c-n)"/>
+
+      <polygon points="714,116 886,116 900,141 886,166 714,166 700,141" class="b-hex"/>
+      <text x="800" y="138" class="tt tc">well-formed?</text>
+      <text x="800" y="155" class="tb tc">template.validate_output</text>
+      <path d="M900 141 H928" class="w w-bad" marker-end="url(#c-bad)"/><text x="914" y="134" class="ts tc">no</text>
+      <rect x="930" y="116" width="250" height="50" rx="10" class="b-bad"/>
+      <text x="944" y="137" class="tt">invalid</text><text x="944" y="155" class="tb">lease released · incorrect +1</text>
+      <path d="M800 166 V194" class="w w-n" marker-end="url(#c-n)"/><text x="810" y="184" class="ts">yes</text>
+
+      <polygon points="714,196 886,196 900,221 886,246 714,246 700,221" class="b-hex"/>
+      <text x="800" y="226" class="tt tc">honeypot lease?</text>
+      <path d="M900 221 H928" class="w w-n" marker-end="url(#c-n)"/><text x="914" y="214" class="ts tc">yes</text>
+      <rect x="930" y="196" width="250" height="50" rx="10" class="b"/>
+      <text x="944" y="217" class="tt">compare to the known answer</text><text x="944" y="235" class="tb">wrong → honeypot failure +1</text>
+      <path d="M800 246 V274" class="w w-n" marker-end="url(#c-n)"/><text x="810" y="264" class="ts">no</text>
+
+      <polygon points="714,276 886,276 900,301 886,326 714,326 700,301" class="b-hex"/>
+      <text x="800" y="298" class="tt tc">target reached?</text>
+      <text x="800" y="315" class="tb tc">enough results for the unit</text>
+      <path d="M900 301 H928" class="w w-n" marker-end="url(#c-n)"/><text x="914" y="294" class="ts tc">no</text>
+      <rect x="930" y="276" width="250" height="50" rx="10" class="b"/>
+      <text x="944" y="297" class="tt">recorded</text><text x="944" y="315" class="tb">waits for the other copy</text>
+      <path d="M800 326 V354" class="w w-n" marker-end="url(#c-n)"/><text x="810" y="344" class="ts">yes</text>
+
+      <polygon points="714,356 886,356 900,381 886,406 714,406 700,381" class="b-hex"/>
+      <text x="800" y="378" class="tt tc">a quorum agrees?</text>
+      <text x="800" y="395" class="tb tc">agree(), per template</text>
+      <path d="M900 381 H928" class="w w-ok" marker-end="url(#c-ok)"/><text x="914" y="374" class="ts tc">yes</text>
+      <rect x="930" y="356" width="250" height="50" rx="10" class="b-ok"/>
+      <text x="944" y="377" class="tt">decided</text><text x="944" y="395" class="tb">tile drawn · last unit aggregates</text>
+      <path d="M800 406 V434" class="w w-n" marker-end="url(#c-n)"/><text x="810" y="424" class="ts">no</text>
+
+      <rect x="700" y="436" width="200" height="50" rx="10" class="b"/>
+      <text x="800" y="457" class="tt tc">disputed</text>
+      <text x="800" y="475" class="tb tc">target +1, back to the queue</text>
+      <path d="M800 486 V514" class="w w-bad" marker-end="url(#c-bad)"/><text x="810" y="504" class="ts">after 3 extra results</text>
+
+      <rect x="700" y="516" width="200" height="50" rx="10" class="b-bad"/>
+      <text x="800" y="537" class="tt tc">unit fails its job</text>
+      <text x="800" y="555" class="tb tc">job status → failed</text>
+
+      <text x="944" y="440" class="tl">AGREE() BY TEMPLATE</text>
+      <text x="944" y="460" class="tb">π: counts equal exactly</text>
+      <text x="944" y="478" class="tb">path tracer: bit for bit on CPU,</text>
+      <text x="944" y="494" class="tb">within a tolerance across GPUs</text>
+
+      <!-- trust strip -->
+      <rect x="20" y="600" width="1160" height="124" rx="12" class="b"/>
+      <line x1="410" y1="616" x2="410" y2="708" class="rule"/>
+      <line x1="790" y1="616" x2="790" y2="708" class="rule"/>
+      <text x="40" y="628" class="tl">TRUST PER CLIENT</text>
+      <text x="40" y="654" class="tm">(correct + 1) / (correct + incorrect + 2)</text>
+      <text x="40" y="676" class="tb">mean of a Beta posterior over its results</text>
+      <text x="40" y="698" class="tb">a client is one browser profile (client_id)</text>
+      <text x="430" y="628" class="tl okt">TRUSTED</text>
+      <text x="430" y="654" class="tb">at least 20 correct and trust ≥ 0.95</text>
+      <text x="430" y="676" class="tb">honeypots drop from 20 % to 5 %</text>
+      <text x="430" y="698" class="tb">90 % of its units run solo</text>
+      <text x="810" y="628" class="tl badt">BANNED</text>
+      <text x="810" y="654" class="tb">2 wrong honeypots, whatever the trust,</text>
+      <text x="810" y="676" class="tb">or ≥ 3 incorrect with trust below 0.5</text>
+      <text x="810" y="698" class="tb">units it helped decide reopen</text>
+    </svg>
+    </div>
+    <figcaption>Figure 3. Hexagons are decisions. Colluding cheaters can agree with each other, but they can't match a known answer, so two honeypot failures ban a client whatever its trust.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ 4 · STATES ============ -->
+<section id="states">
+  <h2>Unit, lease and job states</h2>
+  <p>These are the exact values allowed by the <code>CHECK</code> constraints in the migrations. A unit stays <code>pending</code> until enough copies of it are leased out, so a replicated unit can be handed to a second client while the first is still computing.</p>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1100 500" role="img" aria-label="State machines. Unit: pending to leased when enough copies are out, leased to done when a quorum agrees, leased back to pending when a lease is released, and to failed after eight releases or three extra results still disagreeing. Lease: active, extended by heartbeats, ends completed when a result arrives or released as expired, disconnected, failed or invalid. Job: queued to running when the first unit is assigned, to done when the last unit is decided, or failed.">
+      <defs>
+        <marker id="d-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-n"/></marker>
+        <marker id="d-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-ok"/></marker>
+        <marker id="d-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-bad"/></marker>
+      </defs>
+      <!-- unit -->
+      <text x="20" y="44" class="tl">UNIT · units.status</text>
+      <rect x="60" y="60" width="140" height="40" rx="20" class="b"/><text x="130" y="85" class="tm tc">pending</text>
+      <rect x="360" y="60" width="140" height="40" rx="20" class="b-hex"/><text x="430" y="85" class="tm tc">leased</text>
+      <rect x="660" y="60" width="140" height="40" rx="20" class="b-ok"/><text x="730" y="85" class="tm tc">done</text>
+      <rect x="900" y="60" width="160" height="40" rx="20" class="b-bad"/><text x="980" y="85" class="tm tc">failed</text>
+      <path d="M200 80 H358" class="w w-n" marker-end="url(#d-n)"/><text x="279" y="72" class="te tc">enough copies leased</text>
+      <path d="M500 80 H658" class="w w-ok" marker-end="url(#d-ok)"/><text x="579" y="72" class="te tc">a quorum agrees</text>
+      <path d="M430 100 C430 156 130 156 130 102" class="w w-n" marker-end="url(#d-n)"/><text x="280" y="150" class="te tc">a lease is released · releases +1</text>
+      <path d="M430 60 C430 12 980 12 980 58" class="w w-bad" marker-end="url(#d-bad)"/><text x="705" y="28" class="te tc">8 releases, or 3 extra results still split</text>
+      <text x="730" y="120" class="tb tc">may come back as a honeypot</text>
+
+      <!-- lease -->
+      <text x="20" y="200" class="tl">LEASE · leases row</text>
+      <rect x="60" y="230" width="140" height="40" rx="20" class="b-hex"/><text x="130" y="255" class="tm tc">active</text>
+      <path d="M96 230 C96 188 164 188 164 228" class="w w-n" marker-end="url(#d-n)"/><text x="130" y="186" class="te tc">heartbeat extends</text>
+      <rect x="400" y="210" width="150" height="40" rx="20" class="b-ok"/><text x="475" y="235" class="tm tc">completed</text>
+      <rect x="400" y="290" width="150" height="40" rx="20" class="b-bad"/><text x="475" y="315" class="tm tc">released</text>
+      <path d="M200 244 C300 244 300 230 398 230" class="w w-ok" marker-end="url(#d-ok)"/><text x="300" y="228" class="te tc">result arrives</text>
+      <path d="M200 256 C300 256 300 310 398 310" class="w w-bad" marker-end="url(#d-bad)"/><text x="300" y="296" class="te tc">ends early</text>
+      <text x="590" y="286" class="tl">RELEASE_REASON</text>
+      <text x="590" y="308" class="tm">expired</text><text x="700" y="308" class="tb">no heartbeat for 60 s, or held over 10 min</text>
+      <text x="590" y="328" class="tm">disconnected</text><text x="700" y="328" class="tb">the socket closed</text>
+      <text x="590" y="348" class="tm">failed</text><text x="700" y="348" class="tb">the device reported an error</text>
+      <text x="590" y="368" class="tm">invalid</text><text x="700" y="368" class="tb">the output failed validation</text>
+
+      <!-- job -->
+      <text x="20" y="404" class="tl">JOB · jobs.status</text>
+      <rect x="60" y="420" width="140" height="40" rx="20" class="b"/><text x="130" y="445" class="tm tc">queued</text>
+      <rect x="360" y="420" width="140" height="40" rx="20" class="b-hex"/><text x="430" y="445" class="tm tc">running</text>
+      <rect x="660" y="420" width="140" height="40" rx="20" class="b-ok"/><text x="730" y="445" class="tm tc">done</text>
+      <rect x="900" y="420" width="160" height="40" rx="20" class="b-bad"/><text x="980" y="445" class="tm tc">failed</text>
+      <path d="M200 440 H358" class="w w-n" marker-end="url(#d-n)"/><text x="279" y="432" class="te tc">first unit assigned</text>
+      <path d="M500 440 H658" class="w w-ok" marker-end="url(#d-ok)"/><text x="579" y="432" class="te tc">last unit decided</text>
+      <path d="M430 460 C430 494 980 494 980 462" class="w w-bad" marker-end="url(#d-bad)"/><text x="705" y="488" class="te tc">a unit failed, or cancelled</text>
+    </svg>
+    </div>
+    <figcaption>Figure 4. A release never loses work: the unit goes back to <code>pending</code> and another device picks it up. Only a unit that keeps getting released, or keeps getting conflicting answers, fails its job.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ 5 · DEVICE ============ -->
+<section id="device">
+  <h2>Inside one browser tab</h2>
+  <p>The page thread manages the connection and decides when to compute. Kernels run in a Web Worker, and only kernels shipped with the site can run. A job carries parameters and never code, so the grid can't be turned into a botnet.</p>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1100 440" role="img" aria-label="Inside a browser tab: the main thread runs the session, pacing, battery and visibility conditions and a wake lock. It posts units to a compute Web Worker, which checks that the bundled kernel's SHA-256 matches the pinned hash, then runs it as a WGSL compute shader on WebGPU, or on a pool of CPU Web Workers running the Rust kernels compiled to WebAssembly. MNIST is downloaded once per device.">
+      <defs>
+        <marker id="e-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-n"/></marker>
+        <marker id="e-ws" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-ws"/></marker>
+      </defs>
+      <rect x="10" y="10" width="1080" height="420" rx="14" class="b-host"/>
+      <text x="26" y="34" class="tl">ONE BROWSER TAB · /worker or /join/{code}</text>
+
+      <rect x="30" y="50" width="330" height="360" rx="12" class="b"/>
+      <text x="46" y="72" class="tl">MAIN THREAD</text>
+      <text x="46" y="94" class="tt">session.svelte.ts</text>
+      <text x="46" y="116" class="tb">one WebSocket to /ws/worker</text>
+      <text x="46" y="134" class="tb">reconnect, back-off up to 15 s</text>
+      <text x="46" y="152" class="tb">no reply in 20 s → treat as dead</text>
+      <rect x="46" y="170" width="298" height="64" rx="8" class="b-hex"/>
+      <text x="60" y="192" class="tt">pacing.ts</text>
+      <text x="60" y="212" class="tb">power 25 / 50 / 75 / 100 %</text>
+      <text x="60" y="226" class="tb">rests after each unit to match it</text>
+      <rect x="46" y="244" width="298" height="72" rx="8" class="b-hex"/>
+      <text x="60" y="266" class="tt">conditions.svelte.ts</text>
+      <text x="60" y="286" class="tb">pauses when the tab is hidden,</text>
+      <text x="60" y="303" class="tb">or battery &lt; 30 % and not charging</text>
+      <rect x="46" y="326" width="298" height="68" rx="8" class="b-hex"/>
+      <text x="60" y="348" class="tt">wake-lock.svelte.ts</text>
+      <text x="60" y="368" class="tb">keeps a phone's screen awake</text>
+      <text x="60" y="384" class="tb">while it takes part</text>
+
+      <path d="M360 116 H418" class="w w-n" marker-end="url(#e-n)"/><text x="389" y="108" class="te tc">unit</text>
+      <path d="M418 140 H362" class="w w-n" marker-end="url(#e-n)"/><text x="389" y="158" class="te tc">output</text>
+
+      <rect x="420" y="50" width="300" height="360" rx="12" class="b-core"/>
+      <text x="436" y="72" class="tl">WEB WORKER</text>
+      <text x="436" y="94" class="tt">compute.worker.ts</text>
+      <text x="436" y="116" class="tb">only kernels bundled with the site</text>
+      <polygon points="454,136 686,136 700,164 686,192 454,192 440,164" class="b"/>
+      <text x="570" y="160" class="tt tc">sha256(source) = pinned?</text>
+      <text x="570" y="178" class="tb tc">otherwise it refuses to run</text>
+      <path d="M520 192 V214" class="w w-n" marker-end="url(#e-n)"/><text x="528" y="207" class="ts">GPU</text>
+      <path d="M440 164 H430 V352 H438" class="w w-n" marker-end="url(#e-n)"/><text x="424" y="300" class="ts tr">no GPU</text>
+      <rect x="440" y="216" width="250" height="80" rx="8" class="b"/>
+      <text x="454" y="238" class="tt">WebGPU</text>
+      <text x="454" y="258" class="tb">WGSL compute shader</text>
+      <text x="454" y="278" class="tm">pi · pt · nn .wgsl</text>
+      <rect x="440" y="310" width="250" height="84" rx="8" class="b"/>
+      <text x="454" y="332" class="tt">CPU fallback</text>
+      <text x="454" y="352" class="tb">pool of (cores − 1) Web Workers,</text>
+      <text x="454" y="370" class="tb">each runs kernels_wasm.wasm</text>
+
+      <path d="M690 256 H748" class="w w-n" marker-end="url(#e-n)"/>
+      <path d="M690 380 H748" class="w w-n" marker-end="url(#e-n)"/>
+
+      <rect x="750" y="50" width="320" height="120" rx="12" class="b"/>
+      <text x="766" y="74" class="tt">MNIST, 14 × 14</text>
+      <text x="766" y="94" class="tm">templates/nn/mnist14.bin</text>
+      <text x="766" y="116" class="tb">downloaded once per device and</text>
+      <text x="766" y="134" class="tb">shared by all of its CPU threads</text>
+      <text x="766" y="154" class="tb">(for neural-network units only)</text>
+      <path d="M750 110 H722" class="w w-n w-dash" marker-end="url(#e-n)"/>
+
+      <rect x="750" y="216" width="320" height="80" rx="12" class="b"/>
+      <text x="766" y="240" class="tt">GPU</text>
+      <text x="766" y="260" class="tb">phone, laptop or desktop graphics</text>
+      <text x="766" y="280" class="tb">through the browser's WebGPU sandbox</text>
+
+      <rect x="750" y="310" width="320" height="100" rx="12" class="b"/>
+      <text x="766" y="334" class="tt">CPU threads</text>
+      <rect x="766" y="346" width="52" height="26" rx="6" class="b-chip"/><text x="792" y="364" class="tm tc">1</text>
+      <rect x="826" y="346" width="52" height="26" rx="6" class="b-chip"/><text x="852" y="364" class="tm tc">2</text>
+      <rect x="886" y="346" width="52" height="26" rx="6" class="b-chip"/><text x="912" y="364" class="tm tc">3</text>
+      <rect x="946" y="346" width="52" height="26" rx="6" class="b-opt"/><text x="972" y="364" class="tm tc">…</text>
+      <text x="766" y="394" class="tb">one network per thread on nn sweeps</text>
+    </svg>
+    </div>
+    <figcaption>Figure 5. One core is always left free so the device stays usable. Lab PCs have no usable WebGPU, so they always take the WASM path on the right.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ 6 · SOURCES ============ -->
+<section id="sources">
+  <h2>One source of truth for both sides</h2>
+  <p>The coordinator and the browser have to compute the same answers, and they have to agree on every message. Four source trees feed both sides. CI fails if a generated file drifts from its source.</p>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1100 450" role="img" aria-label="Shared sources: the WGSL kernels are bundled into the browser GPU path and hashed by the coordinator registry; test vectors check both the WGSL and Rust kernels; the Rust reference kernels compile to WebAssembly for the browser CPU path and link into sim-worker and the coordinator; the protocol crate generates TypeScript types with ts-rs.">
+      <defs>
+        <marker id="f-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-n"/></marker>
+      </defs>
+      <text x="20" y="26" class="tl">SOURCE</text>
+      <text x="700" y="26" class="tl">WHERE IT ENDS UP</text>
+
+      <rect x="20" y="40" width="300" height="70" rx="10" class="b-hex"/>
+      <text x="36" y="66" class="tm">templates/*/*.wgsl</text>
+      <text x="36" y="88" class="tb">the GPU kernels: π, path tracer, nn</text>
+      <rect x="20" y="140" width="300" height="70" rx="10" class="b-hex"/>
+      <text x="36" y="166" class="tm">templates/*/vectors.json</text>
+      <text x="36" y="188" class="tb">known inputs and expected outputs</text>
+      <rect x="20" y="240" width="300" height="70" rx="10" class="b-hex"/>
+      <text x="36" y="266" class="tm">crates/kernels</text>
+      <text x="36" y="288" class="tb">Rust reference of every kernel</text>
+      <rect x="20" y="340" width="300" height="70" rx="10" class="b-hex"/>
+      <text x="36" y="366" class="tm">crates/protocol</text>
+      <text x="36" y="388" class="tb">every message and API type</text>
+
+      <rect x="700" y="20" width="380" height="56" rx="10" class="b"/>
+      <text x="716" y="43" class="tt">browser GPU path</text><text x="716" y="63" class="tb">imported as raw text by Vite</text>
+      <rect x="700" y="90" width="380" height="56" rx="10" class="b-core"/>
+      <text x="716" y="113" class="tt">coordinator template registry</text><text x="716" y="133" class="tb">hash pinned in every assign</text>
+      <rect x="700" y="160" width="380" height="56" rx="10" class="b"/>
+      <text x="716" y="183" class="tt">self-test page and cargo tests</text><text x="716" y="203" class="tb">WGSL on real GPUs and Rust must both match</text>
+      <rect x="700" y="230" width="380" height="56" rx="10" class="b"/>
+      <text x="716" y="253" class="tt">kernels-wasm → browser CPU path</text><text x="716" y="273" class="tb">wasm32, no imports, no heap</text>
+      <rect x="700" y="300" width="380" height="56" rx="10" class="b"/>
+      <text x="716" y="323" class="tt">sim-worker and coordinator</text><text x="716" y="343" class="tb">native Rust, the same kernels</text>
+      <rect x="700" y="370" width="380" height="56" rx="10" class="b"/>
+      <text x="716" y="393" class="tm">web/src/lib/protocol/*.ts</text><text x="716" y="413" class="tb">CI: git diff --exit-code fails on drift</text>
+
+      <path d="M320 66 C510 66 510 48 698 48" class="w w-n" marker-end="url(#f-n)"/>
+      <path d="M320 84 C510 84 510 118 698 118" class="w w-n" marker-end="url(#f-n)"/>
+      <path d="M320 175 C510 175 510 188 698 188" class="w w-n" marker-end="url(#f-n)"/>
+      <path d="M320 268 C510 268 510 258 698 258" class="w w-n" marker-end="url(#f-n)"/>
+      <path d="M320 284 C510 284 510 322 698 322" class="w w-n" marker-end="url(#f-n)"/>
+      <path d="M320 366 C510 366 510 334 698 334" class="w w-n" marker-end="url(#f-n)"/>
+      <path d="M320 384 C510 384 510 398 698 398" class="w w-n" marker-end="url(#f-n)"/>
+
+      <text x="510" y="54" class="te tc">?raw import</text>
+      <text x="510" y="104" class="te tc">include_str! → SHA-256</text>
+      <text x="510" y="179" class="te tc">checked by both</text>
+      <text x="510" y="261" class="te tc">cargo build --target wasm32</text>
+      <text x="510" y="306" class="te tc">path dependency</text>
+      <text x="510" y="394" class="te tc">ts-rs, cargo test -p protocol</text>
+    </svg>
+    </div>
+    <figcaption>Figure 6. The pinned hash is computed from the same file the site bundles, so a mismatch means stale code on the device and never a kernel from somewhere else.</figcaption>
+  </figure>
+</section>
+</main>
+</body>
+</html>

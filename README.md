@@ -87,6 +87,10 @@ Bulgarian schools have **thousands of computers idle most of the day and all nig
 
 ## 6. Architecture
 
+The sketch below is the original plan. The system as built (deployment, worker protocol,
+verification, state machines, browser runtime) is drawn from the code in
+[docs/architecture.html](docs/architecture.html); open it in a browser.
+
 ```
   Browsers (lab PCs, laptops, phones)
   ┌─────────────────────────────────────────────────────────────────────┐
