@@ -1371,10 +1371,19 @@ async fn a_ban_reopens_a_finished_job_and_withdraws_its_poisoned_known_answers(d
         .await
         .unwrap();
     set_standing(&db, m1, 0, 2).await;
-    let exposed = db::claim_unit(&db, m1, PUBLIC_NETWORK, false, &traps)
-        .await
-        .unwrap()
-        .unwrap();
+    // A known answer is drawn from a random finished job, a few times: drawing only the
+    // job m1 already answered leaves it without one this time, and it asks again, as a
+    // device does (one try in sixteen).
+    let mut exposed = None;
+    for _ in 0..64 {
+        exposed = db::claim_unit(&db, m1, PUBLIC_NETWORK, false, &traps)
+            .await
+            .unwrap();
+        if exposed.is_some() {
+            break;
+        }
+    }
+    let exposed = exposed.expect("a known answer within 64 requests");
     let caught = complete(&db, m1, &exposed, &wrong(&exposed), &traps).await;
     assert!(standing(&db, m1).await.2, "the colluder is banned");
     assert_eq!(caught.reopened(), &[job_id]);
