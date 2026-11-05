@@ -96,9 +96,19 @@ bench-report:
 # Everything CI checks, except browser tests.
 check:
     cargo fmt --all --check
-    cargo clippy --workspace --all-targets -- -D warnings
-    cargo test --workspace
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
+    cargo nextest run --workspace --all-features
     cd web && pnpm check && pnpm lint && pnpm test:unit --run
+
+# Build the example programs (spec 0012) and check each as an upload would.
+programs:
+    cd examples/programs && cargo build --release
+    for module in examples/programs/target/wasm32-unknown-unknown/release/*.wasm; do \
+      cargo run -q -p programs --features cli -- check "$module"; done
+
+# Check a program and run one unit of it, e.g. `just run-program primes.wasm --index 3`.
+run-program module *args:
+    cargo run -q --release -p programs --features cli -- run {{module}} {{args}}
 
 # Browser tests against the real coordinator: Chromium with WebGPU (SwiftShader) and
 # without, and Firefox. WebKit needs Ubuntu's libraries: see `e2e-webkit`.

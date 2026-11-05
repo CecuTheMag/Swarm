@@ -667,3 +667,65 @@ async fn a_lent_device_runs_community_programs_only_with_consent(db: PgPool) {
     let done = finish(&admin, science.id, job.id, Some(&school.join_code), 3).await;
     assert_eq!(done.status, JobStatus::Done);
 }
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn deleting_a_network_takes_its_programs_and_stops_its_public_jobs(db: PgPool) {
+    let addr = serve(db.clone(), config()).await;
+    let admin = Browser::admin(&addr).await;
+    let lab = admin.create_network("За изтриване").await;
+    let p = admin.program(lab.id, &fnv()).await;
+    let mut private = program_job(p.id, json!({ "count": 2 }));
+    private["quorum"] = json!(1);
+    let finished: JobSummary = admin.submit(lab.id, private).await.json().await.unwrap();
+    finish(&admin, lab.id, finished.id, Some(&lab.join_code), 1).await;
+    admin
+        .post(
+            &format!("/api/networks/{}/programs/{}/review", lab.id, p.id),
+            json!({}),
+        )
+        .await;
+    admin
+        .post(
+            &format!("/api/admin/programs/{}/decision", p.id),
+            json!({ "approve": true }),
+        )
+        .await;
+    let mut public = program_job(p.id, json!({ "count": 3 }));
+    public["public"] = json!(true);
+    let running: JobSummary = admin.submit(lab.id, public).await.json().await.unwrap();
+
+    let res = admin
+        .http
+        .delete(admin.url(&format!("/api/networks/{}", lab.id)))
+        .header("origin", format!("http://{addr}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    let programs: i64 = sqlx::query_scalar("SELECT count(*) FROM programs")
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(programs, 0);
+    let (status, error): (String, Option<String>) =
+        sqlx::query_as("SELECT status, error FROM jobs WHERE id = $1")
+            .bind(running.id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert_eq!(
+        (status.as_str(), error.as_deref()),
+        ("failed", Some("cancelled"))
+    );
+    // Nothing of it is handed out any more.
+    let stats = sim_worker::run(sim(&addr, None)).await.unwrap();
+    assert_eq!(stats.completed, 0);
+    let approved: Vec<ProgramSummary> = Browser::new(&addr)
+        .get("/api/programs/approved")
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert!(approved.is_empty());
+}

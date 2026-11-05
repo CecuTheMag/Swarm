@@ -34,11 +34,22 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo clippy -p kernels-wasm --target wasm32-unknown-unknown -- -D warnings
-      - run: cargo nextest run --workspace
-      - name: TypeScript bindings are up to date
-        run: git diff --exit-code web/src/lib/protocol
+      - run: cargo nextest run --workspace --all-features
+      - name: TypeScript bindings and browser test programs are up to date
+        run: git diff --exit-code web/src/lib/protocol web/src/lib/program/fixtures
+      # Example programs build with the SDK and pass the checks of an upload (spec 0012).
+      - name: Example programs
+        working-directory: examples/programs
+        run: |
+          cargo fmt --all --check
+          cargo clippy --target x86_64-unknown-linux-gnu --all-targets -- -D warnings
+          cargo test --target x86_64-unknown-linux-gnu
+          cargo build --release
+          for module in target/wasm32-unknown-unknown/release/*.wasm; do
+            cargo run -q --manifest-path ../../Cargo.toml -p programs --features cli -- check "$module"
+          done
 
   web:
     runs-on: ubuntu-latest

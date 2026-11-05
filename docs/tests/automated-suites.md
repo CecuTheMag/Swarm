@@ -4,7 +4,7 @@ They run on every change (`just check`, `just e2e`, `just e2e-webkit`; CI runs t
 
 ## Rust (`cargo test --workspace`)
 
-About 110 tests across the crates, many against a real PostgreSQL (`sqlx::test`).
+About 210 tests across the crates, many against a real PostgreSQL (`sqlx::test`).
 
 | Area | What they prove |
 |---|---|
@@ -12,6 +12,8 @@ About 110 tests across the crates, many against a real PostgreSQL (`sqlx::test`)
 | Templates (`crates/coordinator/src/templates`) | Jobs split as specified, bad parameters are refused, outputs are validated, agreement and aggregation are right; the shared test vectors equal the reference (`UPDATE_VECTORS=1` rewrites them) |
 | Verification (spec 0004) | Two honest devices agree, a cheater is caught by disagreement or a known-answer check, banned, and its results redone, also in finished jobs |
 | Accounts and networks (spec 0010) | Passwords, sessions, invites, roles on every route, isolation (a device never gets another network's unit), pause, working hours, removal |
+| Programs checker (`crates/programs`, spec 0012) | Every upload rule refuses what breaks it with a message saying what to change (imports, memory without a maximum or above 256 MiB, threads, relaxed SIMD, 64-bit memory, tail calls, mistyped exports, size); the interpreter runs a program, stops an endless loop, reports traps and out-of-bounds pointers |
+| Programs (`tests/programs.rs`) | Upload rules and roles, a program job on simulated devices of its network at quorum 1, 2 and 3 with outputs equal to the reference, a cheating member banned, workers run exactly the named module, an endless program fails its job, review for the public network, devices that refuse community programs (also when lent) never get them, deleting a network stops its public jobs |
 | End to end (`tests/e2e.rs`) | Simulated devices run real jobs through a real coordinator: π exact, a rendered picture, a neural network sweep with a cheater among the devices (banned; every score equals the reference; the downloaded model has the accuracy the devices reported) |
 
 ## Browser unit tests (`pnpm test`, Vitest)
@@ -22,6 +24,8 @@ About 110 tests across the crates, many against a real PostgreSQL (`sqlx::test`)
 | `console/digit.spec.ts` | A drawn digit is redrawn like the dataset's; the page reads all 1 024 validation digits exactly as the devices scored the network |
 | `worker/session.spec.ts` | The worker session against a scripted coordinator: lost connections at the worst moment, back-off, pause and resume, power levels, the owner's controls, one network per CPU thread |
 | `worker/pacing.spec.ts`, `dashboard/state.spec.ts` | Power pacing; the live view's state |
+| `program/abi.spec.ts`, `program/runner.spec.ts` | A program runs on a fresh instance per unit; a module whose hash differs or that has imports is refused; a unit past the time limit, or stopped, ends its thread; units run side by side |
+| `bytes.spec.ts`, `console/programs.spec.ts` | Base64, hex and SHA-256 as the coordinator computes them; job inputs from a file or a count |
 
 ## Browser tests (`just e2e`, Playwright)
 
@@ -40,5 +44,6 @@ path), Firefox, and WebKit (Safari's engine) with `just e2e-webkit`.
 | `console.e2e.ts` | Sign in, create a network, a device joins by link, jobs, pause and approval (spec 0010) |
 | `sweep.e2e.ts` | A neural network sweep from the form to the leaderboard, the model download, and a digit drawn on the page read by the network |
 | `look.e2e.ts` | The glass surfaces really blur in the production build |
+| `programs.e2e.ts` | A network uploads its own program, a device computes it, the outputs download exactly; an endless program leaves the page usable and stops when asked; review opens the public network; a contributor's choice about community programs is kept (spec 0012) |
 
 Latest full run: see the bottom of `docs/measurements.md` (Browser engines).

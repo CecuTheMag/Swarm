@@ -92,6 +92,11 @@ export class WorkerSession {
 	power = $state<number>(DEFAULT_POWER);
 	/** Why the device is paused, or null. */
 	pausedFor = $state<PauseReason | null>(null);
+	/**
+	 * Whether this device also runs reviewed community programs on the public network
+	 * (spec 0012). Read when connecting: a change applies from the next start.
+	 */
+	community = true;
 	/** What the network's owner allows this device (spec 0010). */
 	control = $state<DeviceControl>({ state: 'running' });
 	/** The network's power limit, in percent. */
@@ -149,6 +154,8 @@ export class WorkerSession {
 
 	/** Units of `unit`'s template this device computes at once. */
 	private lanesFor(unit: Assignment): number {
+		// A program runs on the processor on every device, one unit per thread (spec 0012).
+		if (unit.template.id === 'program') return cpuThreads();
 		const cpu = this.device?.backend === 'wasm' && ONE_THREAD.has(unit.template.id);
 		return cpu ? cpuThreads() : 1;
 	}
@@ -227,7 +234,8 @@ export class WorkerSession {
 				client_version: CLIENT_VERSION,
 				device: this.device!,
 				client_id: clientId(),
-				join_code: this.joinCode
+				join_code: this.joinCode,
+				community: this.community ? undefined : false
 			});
 		};
 		ws.onmessage = (event) => this.onMessage(JSON.parse(event.data) as CoordinatorMessage);

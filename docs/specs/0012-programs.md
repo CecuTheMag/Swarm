@@ -1,6 +1,6 @@
 # 0012 — Programs: a network's own code
 
-Status: in progress
+Status: implemented (a run on a real phone is still to be recorded)
 
 ## Goal
 

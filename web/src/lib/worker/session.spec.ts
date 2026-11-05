@@ -115,6 +115,21 @@ describe('WorkerSession', () => {
 		session.destroy();
 	});
 
+	it('tells the coordinator whether the device runs community programs', async () => {
+		const hello = async (community: boolean) => {
+			const session = new WorkerSession('ws://test/ws/worker', undefined, 'ABCD-EFGH');
+			session.community = community;
+			await session.start();
+			const ws = FakeSocket.all.at(-1)!;
+			ws.onopen?.();
+			session.destroy();
+			return ws.sent.find((m) => m.type === 'hello');
+		};
+		// Allowed is the default, so it is left out; refusing is said.
+		expect(await hello(true)).not.toHaveProperty('community');
+		expect(await hello(false)).toMatchObject({ community: false, join_code: 'ABCD-EFGH' });
+	});
+
 	it('reconnects with growing back-off while the coordinator is unreachable', async () => {
 		const session = new WorkerSession('ws://test/ws/worker');
 		await session.start();

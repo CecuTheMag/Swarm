@@ -33,6 +33,7 @@
 			{ href: resolve('/app/n/[id]', { id }), label: 'Обзор', show: true },
 			{ href: resolve('/app/n/[id]/devices', { id }), label: 'Устройства', show: true },
 			{ href: resolve('/app/n/[id]/jobs', { id }), label: 'Задачи', show: true },
+			{ href: resolve('/app/n/[id]/programs', { id }), label: 'Програми', show: true },
 			{ href: resolve('/app/n/[id]/rules', { id }), label: 'Правила', show: true },
 			{ href: resolve('/app/n/[id]/members', { id }), label: 'Членове', show: true },
 			{ href: resolve('/app/n/[id]/api', { id }), label: 'API', show: can(role, 'admin') },

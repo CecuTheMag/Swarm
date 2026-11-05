@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, untrack } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { WorkerSession, type SessionStatus } from '#lib/worker/session.svelte.ts';
@@ -14,11 +14,13 @@
 		type PauseReason,
 		type Power
 	} from '#lib/worker/pacing.ts';
+	import { loadCommunity, saveCommunity } from '#lib/worker/consent.ts';
 	import { wsUrl } from '#lib/net.ts';
 	import Icon from '#lib/ui/Icon.svelte';
 	import NetworkCard from '#lib/worker/NetworkCard.svelte';
 	import type { Backend } from '#lib/protocol/Backend.ts';
 	import type { DeviceControl } from '#lib/protocol/DeviceControl.ts';
+	import type { ProgramSummary } from '#lib/protocol/ProgramSummary.ts';
 
 	// The page a device joins from (spec 0010): `joinCode` names the network of the link;
 	// without one the device joins the public network.
@@ -44,6 +46,20 @@
 		session.power = power;
 		savePower(power);
 	}
+
+	// Reviewed programs of other networks (spec 0012): the contributor's choice.
+	let community = $state(loadCommunity());
+	session.community = untrack(() => community);
+	function chooseCommunity(allowed: boolean) {
+		community = allowed;
+		session.community = allowed;
+		saveCommunity(allowed);
+	}
+	let approved = $state<ProgramSummary[]>([]);
+	onMount(async () => {
+		const res = await fetch('/api/programs/approved').catch(() => null);
+		if (res?.ok) approved = (await res.json()) as ProgramSummary[];
+	});
 
 	// `?background` keeps computing while the page is hidden: the presenting laptop's
 	// worker tab behind the projector, later lab PCs. The battery still pauses.
@@ -234,6 +250,44 @@
 		</p>
 	</section>
 
+	<section class="card consent-card" aria-labelledby="consent-label">
+		<label class="consent">
+			<input
+				type="checkbox"
+				checked={community}
+				disabled={active}
+				data-testid="community"
+				onchange={(e) => chooseCommunity(e.currentTarget.checked)}
+			/>
+			<span>
+				<strong id="consent-label">Програми от общността</strong>
+				<span class="muted">
+					Изчислявай и програми на други хора, одобрени след преглед{active
+						? '. Спрете, за да промените'
+						: ''}. Никоя програма няма достъп до нищо извън паметта си: нито до мрежата, нито до
+					файловете ви. Програмите на мрежата, в която сте се включили, се изпълняват винаги.
+				</span>
+			</span>
+		</label>
+		{#if approved.length > 0}
+			<details class="approved">
+				<summary>Одобрени програми ({approved.length})</summary>
+				<ul>
+					{#each approved as p (p.id)}
+						<li>
+							<strong>{p.name}</strong> · {p.network_name}{p.description
+								? ` — ${p.description}`
+								: ''}
+							{#if p.source_url}
+								<a href={p.source_url} rel="external noopener noreferrer">код</a>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			</details>
+		{/if}
+	</section>
+
 	<NetworkCard code={joinCode ?? 'public'} mine={session.unitsAccepted} />
 	{#if !joinCode}
 		<p class="muted hint other">
@@ -284,6 +338,38 @@
 		display: grid;
 		gap: var(--s-4);
 		padding-top: var(--s-6);
+	}
+
+	/* ---------- Community programs ---------- */
+	.consent {
+		display: flex;
+		gap: var(--s-3);
+		align-items: flex-start;
+		cursor: pointer;
+	}
+	.consent input {
+		width: 20px;
+		height: 20px;
+		margin-top: 2px;
+		flex: none;
+		accent-color: var(--brand);
+	}
+	.consent > span {
+		display: grid;
+		gap: 4px;
+	}
+	.approved {
+		margin-top: var(--s-3);
+	}
+	.approved summary {
+		cursor: pointer;
+		color: var(--muted);
+	}
+	.approved ul {
+		margin: var(--s-2) 0 0;
+		padding-left: var(--s-5);
+		display: grid;
+		gap: 4px;
 	}
 
 	/* ---------- The console: button, ring, status ---------- */

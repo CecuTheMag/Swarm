@@ -18,6 +18,8 @@ import { runCpuPi } from '#lib/cpu/pi.ts';
 import { renderCpuPt } from '#lib/cpu/pt.ts';
 import { trainCpuNn } from '#lib/cpu/nn.ts';
 import { encodeRgb } from '#lib/pt.ts';
+import { fromBase64, toBase64 } from '#lib/bytes.ts';
+import { ProgramRunner } from '#lib/program/runner.ts';
 import { nnShader, piShader, ptShader } from '#lib/templates.ts';
 import type { ComputeRequest, ComputeResponse } from './compute-messages.ts';
 import type { Backend } from '#lib/protocol/Backend.ts';
@@ -26,6 +28,8 @@ import type { JsonValue } from '#lib/protocol/serde_json/JsonValue.ts';
 import type { PiUnitParams } from '#lib/protocol/PiUnitParams.ts';
 import type { PtUnitParams } from '#lib/protocol/PtUnitParams.ts';
 import type { NnUnitParams } from '#lib/protocol/NnUnitParams.ts';
+import type { ProgramUnitParams } from '#lib/protocol/ProgramUnitParams.ts';
+import type { TemplateRef } from '#lib/protocol/TemplateRef.ts';
 
 interface Kernel {
 	sha256: string;
@@ -35,6 +39,10 @@ interface Kernel {
 let kernels: Map<string, Kernel> | undefined;
 // Units computing now; a CPU device trains several networks at once.
 const current = new Set<AbortController>();
+
+// A network's own programs (spec 0012), checked against their pinned hash and run
+// without imports in a thread of their own.
+const programs = new ProgramRunner();
 
 const post = (msg: ComputeResponse) => self.postMessage(msg);
 
@@ -102,6 +110,25 @@ function initCpu(hashes: Hashes): DeviceInfo {
 	return { backend: 'wasm', vendor: 'cpu', architecture: `${pool.threads} threads` };
 }
 
+/** What computes a unit of `template`, or why nothing may. */
+function runner(template: TemplateRef): Run {
+	if (template.id === 'program' && template.version === 1) {
+		return async (params, signal) => {
+			const { input } = params as ProgramUnitParams;
+			const output = await programs.run(template.sha256, fromBase64(input), signal);
+			return { output: toBase64(output) };
+		};
+	}
+	const kernel = kernels?.get(`${template.id}@${template.version}`);
+	if (!kernel) {
+		throw new Error(`template ${template.id} v${template.version} is not available`);
+	}
+	if (kernel.sha256 !== template.sha256) {
+		throw new Error(`template ${template.id} hash mismatch; refusing to run`);
+	}
+	return kernel.run;
+}
+
 self.onmessage = async (event: MessageEvent<ComputeRequest>) => {
 	const req = event.data;
 	let run: AbortController | undefined;
@@ -114,18 +141,12 @@ self.onmessage = async (event: MessageEvent<ComputeRequest>) => {
 			post({ kind: 'reply', id: req.id, ok: true, value: await init(req.backend) });
 			return;
 		}
-		const kernel = kernels?.get(`${req.template.id}@${req.template.version}`);
-		if (!kernel) {
-			throw new Error(`template ${req.template.id} v${req.template.version} is not available`);
-		}
-		if (kernel.sha256 !== req.template.sha256) {
-			throw new Error(`template ${req.template.id} hash mismatch; refusing to run`);
-		}
+		const compute = runner(req.template);
 		const controller = new AbortController();
 		current.add(controller);
 		run = controller;
 		const started = performance.now();
-		const output = await kernel.run(req.params, controller.signal);
+		const output = await compute(req.params, controller.signal);
 		post({
 			kind: 'reply',
 			id: req.id,

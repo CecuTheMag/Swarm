@@ -330,6 +330,16 @@ pub async fn delete(
             "the public network cannot be deleted".into(),
         ));
     }
+    // Its jobs on the public network (spec 0012) would otherwise run on for nobody.
+    let public_jobs: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM jobs WHERE owner_network_id = $1 AND status IN ('queued', 'running')",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await?;
+    for job in public_jobs {
+        crate::api::cancel(&state, job).await?;
+    }
     sqlx::query("DELETE FROM networks WHERE id = $1")
         .bind(id)
         .execute(&state.db)

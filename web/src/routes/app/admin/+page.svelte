@@ -6,6 +6,7 @@
 	import CopyField from '#lib/ui/CopyField.svelte';
 	import type { AccountView } from '#lib/protocol/AccountView.ts';
 	import type { CreatedInvite } from '#lib/protocol/CreatedInvite.ts';
+	import type { ProgramSummary } from '#lib/protocol/ProgramSummary.ts';
 
 	// The platform admin: who has an account, and invitations for new ones (spec 0010).
 	let accounts = $state<AccountView[]>([]);
@@ -13,9 +14,28 @@
 	let link = $state<string | null>(null);
 	let error = $state<string | null>(null);
 
+	// Programs waiting for review before they may run on the public network (spec 0012).
+	let pending = $state<ProgramSummary[]>([]);
+	let notes = $state<Record<string, string>>({});
+
 	async function load() {
 		try {
-			accounts = await api<AccountView[]>('/api/admin/accounts');
+			[accounts, pending] = await Promise.all([
+				api<AccountView[]>('/api/admin/accounts'),
+				api<ProgramSummary[]>('/api/admin/programs')
+			]);
+		} catch (e) {
+			error = failureText(e);
+		}
+	}
+
+	async function decide(program: string, approve: boolean) {
+		error = null;
+		try {
+			await api(`/api/admin/programs/${program}/decision`, {
+				body: { approve, note: notes[program] || undefined }
+			});
+			await load();
 		} catch (e) {
 			error = failureText(e);
 		}
@@ -61,6 +81,44 @@
 		{#if link}<CopyField value={link} label="Връзка за покана" testid="admin-invite-link" />{/if}
 	</section>
 
+	<section class="card" data-testid="review-queue">
+		<h2>Програми за преглед ({pending.length})</h2>
+		<p class="muted">
+			Одобрена програма може да се изчислява на устройството на всеки доброволец, който е позволил
+			програми от общността. Сървърът вече е проверил, че модулът няма достъп до нищо извън паметта
+			си; прегледът решава дали програмата прави това, което описанието ѝ казва. Одобрението важи
+			само за този модул: променена програма е нова програма.
+		</p>
+		{#if pending.length === 0}
+			<p class="muted">Няма програми, които чакат.</p>
+		{/if}
+		{#each pending as p (p.id)}
+			<article class="pending" data-testid="pending" data-id={p.id}>
+				<div>
+					<strong>{p.name}</strong>
+					<span class="muted"> · мрежа „{p.network_name}“ · {(p.size / 1024).toFixed(1)} KiB</span>
+				</div>
+				{#if p.description}<p>{p.description}</p>{/if}
+				<p class="small">
+					{#if p.source_url}
+						Изходен код: <a href={p.source_url} rel="external noopener noreferrer">{p.source_url}</a
+						>
+					{:else}
+						<span class="bad">Без връзка към изходния код.</span>
+					{/if}
+				</p>
+				<p class="muted small hash">SHA-256: <code>{p.sha256}</code></p>
+				<input bind:value={notes[p.id]} maxlength="2000" placeholder="Бележка към мрежата" />
+				<div class="decide">
+					<button data-testid="approve" onclick={() => decide(p.id, true)}>Одобри</button>
+					<button class="secondary" data-testid="reject" onclick={() => decide(p.id, false)}
+						>Откажи</button
+					>
+				</div>
+			</article>
+		{/each}
+	</section>
+
 	<section class="card">
 		<h2>Всички профили ({accounts.length})</h2>
 		<div class="table-wrap">
@@ -94,6 +152,25 @@
 		display: flex;
 		gap: var(--s-3);
 		margin-bottom: var(--s-3);
+	}
+	.pending {
+		display: grid;
+		gap: var(--s-2);
+		padding: var(--s-3) 0;
+		border-top: 1px solid var(--border);
+	}
+	.pending p {
+		margin: 0;
+	}
+	.decide {
+		display: flex;
+		gap: var(--s-3);
+	}
+	.small {
+		font-size: var(--text-sm);
+	}
+	.hash {
+		word-break: break-all;
 	}
 	@media (max-width: 560px) {
 		.invite {

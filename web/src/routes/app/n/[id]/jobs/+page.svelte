@@ -12,6 +12,9 @@
 	import type { PiResult } from '#lib/protocol/PiResult.ts';
 	import type { PtResult } from '#lib/protocol/PtResult.ts';
 	import type { NnResult } from '#lib/protocol/NnResult.ts';
+	import type { ProgramJobInfo } from '#lib/protocol/ProgramJobInfo.ts';
+	import type { ProgramSummary } from '#lib/protocol/ProgramSummary.ts';
+	import { downloadOutputs, encodeArgs, parseInputs } from '#lib/console/programs.ts';
 
 	const network = useNetwork();
 	const id = $derived(page.params.id!);
@@ -27,7 +30,7 @@
 	const jobs = $derived(live ? sortedJobs(live.state) : []);
 
 	// What to compute, in plain terms; the technical fields stay one click away.
-	let template = $state<'pt' | 'nn' | 'pi'>('pt');
+	let template = $state<'pt' | 'nn' | 'pi' | 'program'>('pt');
 	let quality = $state<'fast' | 'normal' | 'high'>('normal');
 	const QUALITY = {
 		fast: { width: 960, height: 540, spp: 64, passes: 4 },
@@ -133,6 +136,40 @@
 		list(nnHidden).length * list(nnLayers).length * list(nnLr).length * list(nnBatch).length
 	);
 
+	// The network's own program (spec 0012).
+	let programs = $state<ProgramSummary[]>([]);
+	$effect(() => {
+		api<ProgramSummary[]>(`/api/networks/${id}/programs`).then(
+			(p) => (programs = p),
+			() => (programs = [])
+		);
+	});
+	let programId = $state('');
+	const program = $derived(programs.find((p) => p.id === programId) ?? programs[0]);
+	let inputMode = $state<'count' | 'file'>('count');
+	let count = $state(100);
+	let args = $state('');
+	let argsHex = $state(false);
+	let inputsFile = $state<File | null>(null);
+	let quorum = $state(2);
+	let onPublic = $state(false);
+	const canGoPublic = $derived(program?.review === 'approved' && !network.view?.public);
+
+	/** The body of a program job, from the form. */
+	async function programJob() {
+		if (!program) throw new Error('Първо качете програма в раздел „Програми“.');
+		const params =
+			inputMode === 'count'
+				? { program: program.id, count, args: encodeArgs(args, argsHex) }
+				: { program: program.id, inputs: parseInputs((await inputsFile?.text()) ?? '') };
+		const publicJob = canGoPublic && onPublic;
+		return {
+			template: 'program',
+			params,
+			...(publicJob ? { public: true } : network.view?.public ? {} : { quorum })
+		};
+	}
+
 	let error = $state<string | null>(null);
 	let busy = $state(false);
 
@@ -143,23 +180,25 @@
 		try {
 			await api<JobSummary>(`/api/networks/${id}/jobs`, {
 				body:
-					template === 'pi'
-						? { template, params: { units, samples_per_unit: samples, seed } }
-						: template === 'nn'
-							? {
-									template,
-									params: {
-										dataset,
-										steps: nnSteps,
-										hidden: list(nnHidden),
-										layers: list(nnLayers),
-										learning_rate: list(nnLr),
-										batch: list(nnBatch),
-										seeds: nnSeeds,
-										seed
+					template === 'program'
+						? await programJob()
+						: template === 'pi'
+							? { template, params: { units, samples_per_unit: samples, seed } }
+							: template === 'nn'
+								? {
+										template,
+										params: {
+											dataset,
+											steps: nnSteps,
+											hidden: list(nnHidden),
+											layers: list(nnLayers),
+											learning_rate: list(nnLr),
+											batch: list(nnBatch),
+											seeds: nnSeeds,
+											seed
+										}
 									}
-								}
-							: { template, params: { width, height, tile, spp, passes, seed } }
+								: { template, params: { width, height, tile, spp, passes, seed } }
 			});
 		} catch (e) {
 			error = failureText(e);
@@ -191,7 +230,21 @@
 		nn: 'Невронна мрежа',
 		pi: 'Числото π'
 	};
-	const kindIcon = { pt: 'image', nn: 'network', pi: 'atom' } as const;
+	const kindIcon = { pt: 'image', nn: 'network', pi: 'atom', program: 'code' } as const;
+	/** A program job shows its program's name. */
+	const jobName = (job: JobSummary) =>
+		job.template === 'program'
+			? (job.params as unknown as ProgramJobInfo).name
+			: (kindName[job.template] ?? job.template);
+
+	async function download(job: string) {
+		error = null;
+		try {
+			await downloadOutputs(id, job);
+		} catch (e) {
+			error = failureText(e);
+		}
+	}
 </script>
 
 <svelte:head>
@@ -216,6 +269,14 @@
 				</button>
 				<button type="button" aria-pressed={template === 'pi'} onclick={() => (template = 'pi')}>
 					<Icon name="atom" size={16} /> Числото π
+				</button>
+				<button
+					type="button"
+					aria-pressed={template === 'program'}
+					onclick={() => (template = 'program')}
+					data-testid="kind-program"
+				>
+					<Icon name="code" size={16} /> Своя програма
 				</button>
 			</div>
 
@@ -276,11 +337,101 @@
 					{configs} настройки × {nnSeeds}
 					{nnSeeds === 1 ? 'обучение' : 'обучения'} = {configs * nnSeeds} части
 				</p>
+			{:else if template === 'program'}
+				{#if programs.length === 0}
+					<p class="muted">
+						Първо качете програма в раздел <a href={resolve('/app/n/[id]/programs', { id })}
+							>„Програми“</a
+						>.
+					</p>
+				{:else}
+					<p class="muted">
+						Вашата програма изчислява всяка част на отделно устройство; резултатите се теглят като
+						файл.
+					</p>
+					<div class="fields">
+						<label
+							>Програма
+							<select bind:value={programId} data-testid="job-program">
+								{#each programs as p (p.id)}
+									<option value={p.id}>{p.name}</option>
+								{/each}
+							</select></label
+						>
+						{#if !(canGoPublic && onPublic) && !network.view?.public}
+							<label
+								>Проверка
+								<select bind:value={quorum} data-testid="job-quorum">
+									<option value={1}>1 резултат (вярвам на устройствата)</option>
+									<option value={2}>2 съвпадащи резултата</option>
+									<option value={3}>3 съвпадащи резултата</option>
+								</select></label
+							>
+						{/if}
+					</div>
+					<div class="segmented stack-sm" role="group" aria-label="Входове">
+						<button
+							type="button"
+							aria-pressed={inputMode === 'count'}
+							onclick={() => (inputMode = 'count')}>Брой части</button
+						>
+						<button
+							type="button"
+							aria-pressed={inputMode === 'file'}
+							onclick={() => (inputMode = 'file')}
+							data-testid="inputs-file-mode">Входове от файл</button
+						>
+					</div>
+					{#if inputMode === 'count'}
+						<p class="muted small">
+							Част <em>i</em> получава числото <em>i</em> (4 байта) и общите аргументи.
+						</p>
+						<div class="fields">
+							<label
+								>Части <input
+									type="number"
+									min="1"
+									max="20000"
+									bind:value={count}
+									data-testid="job-count"
+								/></label
+							>
+							<label
+								>Общи аргументи <input
+									bind:value={args}
+									placeholder={argsHex ? '40420f0000000000' : 'текст'}
+								/></label
+							>
+							<label class="check"
+								><input type="checkbox" bind:checked={argsHex} /> шестнадесетично</label
+							>
+						</div>
+					{:else}
+						<p class="muted small">
+							По един вход на ред (текст) или JSON масив от низове в base64.
+						</p>
+						<label
+							>Файл с входове
+							<input
+								type="file"
+								required
+								data-testid="job-inputs"
+								onchange={(e) => (inputsFile = e.currentTarget.files?.[0] ?? null)}
+							/></label
+						>
+					{/if}
+					{#if canGoPublic}
+						<label class="check"
+							><input type="checkbox" bind:checked={onPublic} data-testid="job-public" />
+							На общата мрежа: програмата е одобрена и може да се изчислява от всички доброволци</label
+						>
+					{/if}
+				{/if}
 			{:else}
 				<p class="muted">Числото π по метода Монте Карло: точен, проверим резултат.</p>
 			{/if}
 
-			<details bind:open={advanced}>
+			<details bind:open={advanced} hidden={template === 'program'}>
 				<summary>Подробни настройки</summary>
 				<div class="fields">
 					{#if template === 'nn'}
@@ -336,8 +487,9 @@
 					<div class="main">
 						<span class="kind">
 							<Icon name={kindIcon[job.template as keyof typeof kindIcon] ?? 'atom'} size={18} />
-							{kindName[job.template] ?? job.template}
+							{jobName(job)}
 						</span>
+						{#if job.owner_network_id}<span class="badge">на общата мрежа</span>{/if}
 						<span
 							class="badge"
 							class:ok={job.status === 'done'}
@@ -368,6 +520,12 @@
 							{#if job.result && nnResult(job.result).rows.length > 0}
 								<span class="muted"
 									>най-добра: {(nnResult(job.result).rows[0].accuracy * 100).toFixed(1)} %</span
+								>
+							{/if}
+						{:else if job.template === 'program'}
+							{#if job.status === 'done'}
+								<button class="secondary sm" data-testid="download" onclick={() => download(job.id)}
+									>Изтегли резултатите</button
 								>
 							{/if}
 						{:else if job.result}
@@ -413,6 +571,14 @@
 		cursor: pointer;
 		font-weight: 600;
 		font-size: var(--text-sm);
+	}
+	.check {
+		display: flex;
+		gap: var(--s-2);
+		align-items: center;
+	}
+	.check input {
+		width: auto;
 	}
 	.fields {
 		display: grid;
