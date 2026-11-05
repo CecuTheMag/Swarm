@@ -47,8 +47,12 @@ jobs:
           cargo clippy --target x86_64-unknown-linux-gnu --all-targets -- -D warnings
           cargo test --target x86_64-unknown-linux-gnu
           cargo build --release
-          for module in target/wasm32-unknown-unknown/release/*.wasm; do
-            cargo run -q --manifest-path ../../Cargo.toml -p programs --features cli -- check "$module"
+      # From the workspace root: the examples' cargo config builds for WebAssembly, which
+      # would make the checker itself a WebAssembly file.
+      - name: Example programs pass the upload checks
+        run: |
+          for module in examples/programs/target/wasm32-unknown-unknown/release/*.wasm; do
+            cargo run -q -p programs --features cli -- check "$module"
           done
 
   web:
