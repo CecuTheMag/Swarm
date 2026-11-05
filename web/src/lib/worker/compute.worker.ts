@@ -17,10 +17,11 @@ import { cpuThreads, createCpuPool } from '#lib/cpu/pool.ts';
 import { runCpuPi } from '#lib/cpu/pi.ts';
 import { renderCpuPt } from '#lib/cpu/pt.ts';
 import { trainCpuNn } from '#lib/cpu/nn.ts';
+import { solveCpuTt } from '#lib/cpu/tt.ts';
 import { encodeRgb } from '#lib/pt.ts';
 import { fromBase64, toBase64 } from '#lib/bytes.ts';
 import { ProgramRunner } from '#lib/program/runner.ts';
-import { nnShader, piShader, ptShader } from '#lib/templates.ts';
+import { nnShader, piShader, ptShader, ttVectorsText } from '#lib/templates.ts';
 import type { ComputeRequest, ComputeResponse } from './compute-messages.ts';
 import type { Backend } from '#lib/protocol/Backend.ts';
 import type { DeviceInfo } from '#lib/protocol/DeviceInfo.ts';
@@ -30,6 +31,7 @@ import type { PtUnitParams } from '#lib/protocol/PtUnitParams.ts';
 import type { NnUnitParams } from '#lib/protocol/NnUnitParams.ts';
 import type { ProgramUnitParams } from '#lib/protocol/ProgramUnitParams.ts';
 import type { TemplateRef } from '#lib/protocol/TemplateRef.ts';
+import type { TtUnitParams } from '#lib/protocol/TtUnitParams.ts';
 
 interface Kernel {
 	sha256: string;
@@ -47,14 +49,15 @@ const programs = new ProgramRunner();
 const post = (msg: ComputeResponse) => self.postMessage(msg);
 
 type Run = (params: JsonValue, signal: AbortSignal) => Promise<JsonValue>;
-type Hashes = { pi: string; pt: string; nn: string };
+type Hashes = { pi: string; pt: string; nn: string; tt: string };
 
 /** Sets up the kernels on the GPU, or on the CPU if there is none or `backend` asks for it. */
 async function init(backend?: Backend): Promise<DeviceInfo> {
 	const hashes = {
 		pi: await sha256Hex(piShader),
 		pt: await sha256Hex(ptShader),
-		nn: await sha256Hex(nnShader)
+		nn: await sha256Hex(nnShader),
+		tt: await sha256Hex(ttVectorsText)
 	};
 	if (backend !== 'wasm') {
 		try {
@@ -66,11 +69,28 @@ async function init(backend?: Backend): Promise<DeviceInfo> {
 	return initCpu(hashes);
 }
 
-function register(hashes: Hashes, pi: Run, pt: Run, nn: Run) {
+/**
+ * Timetables run on the CPU on every device (spec 0013); a device with a GPU makes its
+ * CPU threads only once a timetable unit arrives.
+ */
+let cpuForTimetables: ReturnType<typeof createCpuPool> | undefined;
+
+function register(
+	hashes: Hashes,
+	pi: Run,
+	pt: Run,
+	nn: Run,
+	pool?: ReturnType<typeof createCpuPool>
+) {
+	const tt: Run = async (params, signal) => {
+		const threads = (pool ??= cpuForTimetables ??= createCpuPool(cpuThreads()));
+		return { ...(await solveCpuTt(threads, params as TtUnitParams, signal)) };
+	};
 	kernels = new Map([
 		['pi@1', { sha256: hashes.pi, run: pi }],
 		['pt@1', { sha256: hashes.pt, run: pt }],
-		['nn@1', { sha256: hashes.nn, run: nn }]
+		['nn@1', { sha256: hashes.nn, run: nn }],
+		['tt@1', { sha256: hashes.tt, run: tt }]
 	]);
 }
 
@@ -105,7 +125,8 @@ function initCpu(hashes: Hashes): DeviceInfo {
 		async (params, signal) => ({
 			rgb: encodeRgb(await renderCpuPt(pool, params as PtUnitParams, signal))
 		}),
-		async (params, signal) => ({ ...(await trainCpuNn(pool, params as NnUnitParams, signal)) })
+		async (params, signal) => ({ ...(await trainCpuNn(pool, params as NnUnitParams, signal)) }),
+		pool
 	);
 	return { backend: 'wasm', vendor: 'cpu', architecture: `${pool.threads} threads` };
 }

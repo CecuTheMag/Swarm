@@ -1399,6 +1399,8 @@ name = "kernels-wasm"
 version = "0.1.0"
 dependencies = [
  "kernels",
+ "serde_json",
+ "timetable",
 ]
 
 [[package]]

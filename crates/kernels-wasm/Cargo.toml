@@ -20,3 +20,5 @@ all = { level = "warn", priority = -1 }
 
 [dependencies]
 kernels = { path = "../kernels" }
+serde_json = "1.0.154"
+timetable = { path = "../timetable" }

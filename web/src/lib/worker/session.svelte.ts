@@ -66,6 +66,9 @@ const MAX_HELD = 8;
 // Templates whose CPU kernel uses a single thread: a CPU device computes one such unit
 // per thread at once. The others use every thread, one unit at a time.
 const ONE_THREAD = new Set(['nn']);
+// Templates that run on the CPU on every device, one unit per thread: a network's own
+// programs (spec 0012) and timetables (spec 0013).
+const CPU_EVERYWHERE = new Set(['program', 'tt']);
 
 type Assignment = Extract<CoordinatorMessage, { type: 'assign' }>;
 
@@ -154,8 +157,7 @@ export class WorkerSession {
 
 	/** Units of `unit`'s template this device computes at once. */
 	private lanesFor(unit: Assignment): number {
-		// A program runs on the processor on every device, one unit per thread (spec 0012).
-		if (unit.template.id === 'program') return cpuThreads();
+		if (CPU_EVERYWHERE.has(unit.template.id)) return cpuThreads();
 		const cpu = this.device?.backend === 'wasm' && ONE_THREAD.has(unit.template.id);
 		return cpu ? cpuThreads() : 1;
 	}

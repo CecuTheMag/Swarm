@@ -15,6 +15,8 @@
 	import type { NnResult } from '#lib/protocol/NnResult.ts';
 	import type { ProgramJobInfo } from '#lib/protocol/ProgramJobInfo.ts';
 	import type { ProgramSummary } from '#lib/protocol/ProgramSummary.ts';
+	import type { TtResult } from '#lib/protocol/TtResult.ts';
+	import type { TtSchool } from '#lib/protocol/TtSchool.ts';
 	import { downloadOutputs, encodeArgs, parseInputs } from '#lib/console/programs.ts';
 
 	const network = useNetwork();
@@ -31,7 +33,7 @@
 	const jobs = $derived(live ? sortedJobs(live.state) : []);
 
 	// What to compute, in plain terms; the technical fields stay one click away.
-	let template = $state<'pt' | 'nn' | 'pi' | 'program'>('pt');
+	let template = $state<'pt' | 'nn' | 'pi' | 'program' | 'tt'>('pt');
 	let quality = $state<'fast' | 'normal' | 'high'>('normal');
 	const QUALITY = {
 		fast: { width: 960, height: 540, spp: 64, passes: 4 },
@@ -175,6 +177,28 @@
 		};
 	}
 
+	// A school timetable (spec 0013): many searches, the best one wins.
+	let ttSource = $state<'example' | 'file'>('example');
+	let ttClasses = $state(20);
+	let ttFile = $state<File | null>(null);
+	let ttEffort = $state<'quick' | 'normal' | 'deep'>('normal');
+	let ttSearches = $state(32);
+	const TT_ITERATIONS = { quick: 500_000, normal: 2_000_000, deep: 8_000_000 };
+
+	/** The body of a timetable job, from the form. */
+	async function timetableJob() {
+		const school: TtSchool =
+			ttSource === 'example'
+				? await api<TtSchool>(`/api/timetables/example?classes=${ttClasses}&seed=${seed}`)
+				: (JSON.parse((await ttFile?.text()) ?? 'null') as TtSchool);
+		if (!school) throw new Error('Изберете файл с данните на училището.');
+		return {
+			template: 'tt',
+			params: { school, searches: ttSearches, iterations: TT_ITERATIONS[ttEffort], seed },
+			...(network.view?.public ? {} : { quorum })
+		};
+	}
+
 	let error = $state<string | null>(null);
 	let busy = $state(false);
 
@@ -187,23 +211,25 @@
 				body:
 					template === 'program'
 						? await programJob()
-						: template === 'pi'
-							? { template, params: { units, samples_per_unit: samples, seed } }
-							: template === 'nn'
-								? {
-										template,
-										params: {
-											dataset,
-											steps: nnSteps,
-											hidden: list(nnHidden),
-											layers: list(nnLayers),
-											learning_rate: list(nnLr),
-											batch: list(nnBatch),
-											seeds: nnSeeds,
-											seed
+						: template === 'tt'
+							? await timetableJob()
+							: template === 'pi'
+								? { template, params: { units, samples_per_unit: samples, seed } }
+								: template === 'nn'
+									? {
+											template,
+											params: {
+												dataset,
+												steps: nnSteps,
+												hidden: list(nnHidden),
+												layers: list(nnLayers),
+												learning_rate: list(nnLr),
+												batch: list(nnBatch),
+												seeds: nnSeeds,
+												seed
+											}
 										}
-									}
-								: { template, params: { width, height, tile, spp, passes, seed } }
+									: { template, params: { width, height, tile, spp, passes, seed } }
 			});
 		} catch (e) {
 			error = failureText(e);
@@ -233,9 +259,17 @@
 	const kindName: Record<string, string> = {
 		pt: 'Изображение',
 		nn: 'Невронна мрежа',
-		pi: 'Числото π'
+		pi: 'Числото π',
+		tt: 'Разписание'
 	};
-	const kindIcon = { pt: 'image', nn: 'network', pi: 'atom', program: 'code' } as const;
+	const kindIcon = {
+		pt: 'image',
+		nn: 'network',
+		pi: 'atom',
+		program: 'code',
+		tt: 'school'
+	} as const;
+	const ttResult = (r: unknown) => r as TtResult;
 	/** A program job shows its program's name. */
 	const jobName = (job: JobSummary) =>
 		job.template === 'program'
@@ -274,6 +308,14 @@
 				</button>
 				<button type="button" aria-pressed={template === 'pi'} onclick={() => (template = 'pi')}>
 					<Icon name="atom" size={16} /> Числото π
+				</button>
+				<button
+					type="button"
+					aria-pressed={template === 'tt'}
+					onclick={() => (template = 'tt')}
+					data-testid="kind-tt"
+				>
+					<Icon name="school" size={16} /> Разписание
 				</button>
 				<button
 					type="button"
@@ -342,6 +384,85 @@
 					{configs} настройки × {nnSeeds}
 					{nnSeeds === 1 ? 'обучение' : 'обучения'} = {configs * nnSeeds} части
 				</p>
+			{:else if template === 'tt'}
+				<p class="muted">
+					Седмичното разписание на училище: без застъпвания и прозорци за учениците, с възможно
+					най-малко прозорци за учителите. Всяко устройство търси от различно начало; печели
+					най-доброто, а сървърът проверява оценката на всяко.
+				</p>
+				<div class="segmented stack-sm" role="group" aria-label="Данни">
+					<button
+						type="button"
+						aria-pressed={ttSource === 'example'}
+						onclick={() => (ttSource = 'example')}>Примерно училище</button
+					>
+					<button
+						type="button"
+						aria-pressed={ttSource === 'file'}
+						onclick={() => (ttSource = 'file')}
+						data-testid="tt-file-mode">Данни от файл</button
+					>
+				</div>
+				{#if ttSource === 'example'}
+					<label
+						>Паралелки
+						<select bind:value={ttClasses} data-testid="tt-classes">
+							{#each [5, 10, 20, 30, 40, 60] as n (n)}
+								<option value={n}>{n} (гимназия, 8.–12. клас)</option>
+							{/each}
+						</select></label
+					>
+				{:else}
+					<label
+						>Файл с училището (JSON)
+						<input
+							type="file"
+							accept=".json,application/json"
+							required
+							data-testid="tt-file"
+							onchange={(e) => (ttFile = e.currentTarget.files?.[0] ?? null)}
+						/></label
+					>
+				{/if}
+				<div class="segmented stack-sm" role="group" aria-label="Колко да се търси">
+					<button
+						type="button"
+						aria-pressed={ttEffort === 'quick'}
+						onclick={() => (ttEffort = 'quick')}
+						data-testid="tt-quick">Бързо</button
+					>
+					<button
+						type="button"
+						aria-pressed={ttEffort === 'normal'}
+						onclick={() => (ttEffort = 'normal')}>Нормално</button
+					>
+					<button
+						type="button"
+						aria-pressed={ttEffort === 'deep'}
+						onclick={() => (ttEffort = 'deep')}>Задълбочено</button
+					>
+				</div>
+				<div class="fields">
+					<label
+						>Търсения <input
+							type="number"
+							min="1"
+							max="500"
+							bind:value={ttSearches}
+							data-testid="tt-searches"
+						/></label
+					>
+					{#if !network.view?.public}
+						<label
+							>Проверка
+							<select bind:value={quorum} data-testid="tt-quorum">
+								<option value={1}>1 резултат (вярвам на устройствата)</option>
+								<option value={2}>2 съвпадащи резултата</option>
+								<option value={3}>3 съвпадащи резултата</option>
+							</select></label
+						>
+					{/if}
+				</div>
 			{:else if template === 'program'}
 				{#if programs.length === 0}
 					<p class="muted">
@@ -436,7 +557,7 @@
 				<p class="muted">Числото π по метода Монте Карло: точен, проверим резултат.</p>
 			{/if}
 
-			<details bind:open={advanced} hidden={template === 'program'}>
+			<details bind:open={advanced} hidden={template === 'program' || template === 'tt'}>
 				<summary>Подробни настройки</summary>
 				<div class="fields">
 					{#if template === 'nn'}
@@ -525,6 +646,18 @@
 							{#if job.result && nnResult(job.result).rows.length > 0}
 								<span class="muted"
 									>най-добра: {(nnResult(job.result).rows[0].accuracy * 100).toFixed(1)} %</span
+								>
+							{/if}
+						{:else if job.template === 'tt'}
+							<a
+								href={resolve('/app/n/[id]/jobs/[job]/timetable', { id, job: job.id })}
+								data-testid="timetable-link">Разписание</a
+							>
+							{#if job.result}
+								<span class="muted"
+									>{ttResult(job.result).cost.hard === 0 ? 'валидно' : 'с нарушения'} · оценка {ttResult(
+										job.result
+									).cost.total}</span
 								>
 							{/if}
 						{:else if job.template === 'program'}

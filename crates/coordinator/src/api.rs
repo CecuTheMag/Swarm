@@ -134,6 +134,27 @@ pub async fn list_jobs(State(state): State<AppState>) -> Result<Json<Vec<JobSumm
     Ok(Json(db::recent_jobs(&state.db, PUBLIC_NETWORK, 50).await?))
 }
 
+/// `GET /api/timetables/example?classes=N&seed=S`: an example school to try timetables
+/// with, generated (spec 0013).
+#[derive(serde::Deserialize)]
+pub struct ExampleSchool {
+    classes: usize,
+    #[serde(default)]
+    seed: u64,
+}
+
+pub async fn example_school(
+    axum::extract::Query(q): axum::extract::Query<ExampleSchool>,
+) -> Result<Json<timetable::School>, AppError> {
+    if !(1..=timetable::LIMITS.classes).contains(&q.classes) {
+        return Err(AppError::BadRequest(format!(
+            "classes must be between 1 and {}",
+            timetable::LIMITS.classes
+        )));
+    }
+    Ok(Json(timetable::sample::school(q.seed, q.classes)))
+}
+
 pub async fn healthz(State(state): State<AppState>) -> StatusCode {
     match sqlx::query("SELECT 1").execute(&state.db).await {
         Ok(_) => StatusCode::OK,

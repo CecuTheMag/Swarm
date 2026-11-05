@@ -331,3 +331,25 @@ async fn a_lazy_device_is_outvoted_by_honest_ones(db: PgPool) {
     let result: JobResult = serde_json::from_value(done.result.unwrap()).unwrap();
     assert_eq!(result.cost.total, honest["cost"].as_u64().unwrap());
 }
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn example_schools_are_served_for_trying_the_app(db: PgPool) {
+    let addr = serve(db, config()).await;
+    let get = |query: &str| reqwest::get(format!("http://{addr}/api/timetables/example?{query}"));
+    let school: tt::School = get("classes=12&seed=4")
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(school, sample::school(4, 12));
+    let default_seed: tt::School = get("classes=3").await.unwrap().json().await.unwrap();
+    assert_eq!(default_seed, sample::school(0, 3));
+    for bad in ["classes=0", "classes=101", "classes=x", ""] {
+        assert_eq!(
+            get(bad).await.unwrap().status(),
+            StatusCode::BAD_REQUEST,
+            "{bad}"
+        );
+    }
+}

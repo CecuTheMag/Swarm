@@ -107,6 +107,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/programs/approved", get(catalog::approved))
         .route("/api/modules/{file}", get(catalog::module_file))
         .route("/api/blobs/{file}", get(catalog::blob_file))
+        .route("/api/timetables/example", get(api::example_school))
         .route("/api/networks/{id}/jobs/{job}", get(networks::get_job))
         .route(
             "/api/networks/{id}/jobs/{job}/cancel",

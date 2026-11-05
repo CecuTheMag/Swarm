@@ -4,6 +4,7 @@
 
 import { kernelsWasmUrl } from '#lib/templates.ts';
 import { loadNnReference, type NnReference } from '#lib/nn.ts';
+import { solveTimetable, type TtExports } from '#lib/tt.ts';
 import type { NnUnitParams } from '#lib/protocol/NnUnitParams.ts';
 
 export type CpuTask =
@@ -22,15 +23,17 @@ export type CpuTask =
 			row_start: number;
 			row_end: number;
 	  }
-	| ({ template: 'nn' } & NnUnitParams);
+	| ({ template: 'nn' } & NnUnitParams)
+	| { template: 'tt'; school: Uint8Array; seed: number; index: number; iterations: number };
 
 export type CpuResult =
 	| { ok: true; inside: number }
 	| { ok: true; rgb: Float32Array }
 	| { ok: true; correct: number; curve: number[]; weights: Uint32Array }
+	| { ok: true; slots: Uint8Array; cost: number }
 	| { ok: false; error: string };
 
-interface KernelExports {
+interface KernelExports extends TtExports {
 	memory: WebAssembly.Memory;
 	pi_count_inside_range(seed: number, unitIndex: number, start: number, end: number): number;
 	pt_render_rows(...args: number[]): number;
@@ -56,6 +59,11 @@ self.onmessage = async (event: MessageEvent<CpuTask>) => {
 			return;
 		}
 		const k = await kernels;
+		if (t.template === 'tt') {
+			const { slots, cost } = solveTimetable(k, t.school, t.seed, t.index, t.iterations);
+			self.postMessage({ ok: true, slots, cost } satisfies CpuResult, [slots.buffer]);
+			return;
+		}
 		if (t.template === 'pi') {
 			// WebAssembly returns the u32 count as a signed i32 with the same bits.
 			const inside = k.pi_count_inside_range(t.seed, t.unit_index, t.start, t.end) >>> 0;

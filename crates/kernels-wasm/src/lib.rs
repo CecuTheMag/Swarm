@@ -210,3 +210,61 @@ pub extern "C" fn nn_train(
         out.as_ptr()
     })
 }
+
+thread_local! {
+    /// The school of the next timetable search, as JSON (spec 0013).
+    static TT_SCHOOL: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// The last search's timetable (little-endian `u16` slots) and its cost.
+    static TT_SLOTS: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
+    static TT_COST: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// Room for a school of `len` bytes of JSON; JavaScript writes it there before
+/// [`tt_solve`].
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn tt_school(len: u32) -> *mut u8 {
+    TT_SCHOOL.with_borrow_mut(|school| {
+        school.clear();
+        school.resize(len as usize, 0);
+        school.as_mut_ptr()
+    })
+}
+
+/// Runs search `index` of a job with `seed` (see [`timetable::Search::unit`]) over the
+/// school written at [`tt_school`]. Returns the timetable's length in bytes, read at
+/// [`tt_slots`], or −1 if the school is not valid.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn tt_solve(seed: u32, index: u32, iterations: u32) -> i32 {
+    let Some(problem) = TT_SCHOOL.with_borrow(|bytes| {
+        serde_json::from_slice::<timetable::School>(bytes)
+            .ok()
+            .and_then(|school| timetable::Problem::new(&school).ok())
+    }) else {
+        return -1;
+    };
+    let slots = timetable::solve(&problem, timetable::Search::unit(seed, index, iterations));
+    let cost = timetable::cost(&problem, &slots).map_or(u64::MAX, |c| c.total);
+    TT_COST.set(cost);
+    TT_SLOTS.with_borrow_mut(|out| {
+        out.clear();
+        out.extend(slots.iter().flat_map(|s| s.to_le_bytes()));
+        out.len() as i32
+    })
+}
+
+/// The last search's timetable; valid until the next search.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn tt_slots() -> *const u8 {
+    TT_SLOTS.with_borrow(|out| out.as_ptr())
+}
+
+/// The last search's cost. A float, so JavaScript reads it as a number: costs stay far
+/// below 2⁵³, where every integer is exact.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn tt_cost() -> f64 {
+    TT_COST.get() as f64
+}
