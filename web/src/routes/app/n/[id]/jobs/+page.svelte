@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { LiveDashboard } from '#lib/dashboard/live.svelte.ts';
@@ -140,7 +141,11 @@
 	let programs = $state<ProgramSummary[]>([]);
 	$effect(() => {
 		api<ProgramSummary[]>(`/api/networks/${id}/programs`).then(
-			(p) => (programs = p),
+			(p) => {
+				programs = p;
+				// The choice shown is the one used: the newest program until another is picked.
+				if (!p.some((x) => x.id === untrack(() => programId))) programId = p[0]?.id ?? '';
+			},
 			() => (programs = [])
 		);
 	});
