@@ -19,5 +19,13 @@ all = { level = "warn", priority = -1 }
 [profile.dev.package.kernels]
 opt-level = 3
 
+# Password hashing is seconds per sign-in unoptimised, enough to time out the browser
+# tests on a slow runner; optimised it takes as long as in production.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
+
 [profile.release]
 lto = "thin"
