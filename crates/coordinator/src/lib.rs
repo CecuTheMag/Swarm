@@ -10,6 +10,7 @@ pub mod db;
 pub mod hours;
 pub mod networks;
 pub mod render;
+pub mod schools;
 pub mod state;
 pub mod templates;
 pub mod ws;
@@ -107,6 +108,20 @@ pub fn router(state: AppState) -> Router {
         .route("/api/programs/approved", get(catalog::approved))
         .route("/api/modules/{file}", get(catalog::module_file))
         .route("/api/blobs/{file}", get(catalog::blob_file))
+        // Schools for timetables (spec 0014), of at most 2 MiB as JSON.
+        .route(
+            "/api/networks/{id}/schools",
+            get(schools::list)
+                .post(schools::create)
+                .layer(DefaultBodyLimit::max(3 << 20)),
+        )
+        .route(
+            "/api/networks/{id}/schools/{school}",
+            get(schools::get)
+                .put(schools::save)
+                .delete(schools::delete)
+                .layer(DefaultBodyLimit::max(3 << 20)),
+        )
         .route("/api/timetables/example", get(api::example_school))
         .route("/api/networks/{id}/jobs/{job}", get(networks::get_job))
         .route(

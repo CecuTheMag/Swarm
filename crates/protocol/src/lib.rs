@@ -357,6 +357,44 @@ pub struct UploadProgram {
     pub module: String,
 }
 
+/// A school a network keeps (spec 0014), without its data.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SchoolSummary {
+    pub id: Uuid,
+    pub name: String,
+    /// Grows with every save.
+    pub version: u32,
+    pub classes: u32,
+    pub teachers: u32,
+    /// Lesson hours a week.
+    pub hours: u32,
+    #[ts(type = "number")]
+    pub updated_at: i64,
+    /// The account that saved it last, if it still exists.
+    pub updated_by: Option<String>,
+}
+
+/// A school with its data.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SchoolRecord {
+    pub summary: SchoolSummary,
+    pub school: templates::tt::School,
+}
+
+/// Creates a school, or saves one edited from `version`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct SaveSchool {
+    pub school: templates::tt::School,
+    /// The version the edit started from; none when creating.
+    #[serde(default)]
+    #[ts(optional)]
+    pub version: Option<u32>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct ProgramSummary {
