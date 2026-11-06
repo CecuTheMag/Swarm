@@ -20,6 +20,9 @@ export interface Placed {
 	subject: string;
 	class: string;
 	teacher: string;
+	/** Indices into the school's lists: names are for reading, not for telling apart. */
+	classIndex: number;
+	teacherIndex: number;
 	room: string | null;
 	day: number;
 	period: number;
@@ -43,6 +46,8 @@ export function placeAll(school: TtSchool, slots: number[]): Placed[] {
 				subject: l.subject,
 				class: school.classes[l.class].name,
 				teacher: school.teachers[l.teacher].name,
+				classIndex: l.class,
+				teacherIndex: l.teacher,
 				room: l.room == null ? null : school.rooms[l.room].name,
 				day: Math.floor(slot / school.periods),
 				period: slot % school.periods
@@ -57,13 +62,13 @@ export type View = { kind: 'class' | 'teacher'; index: number };
 
 /** The grid of one class or teacher: `grid[period][day]`, the hours placed there. */
 export function grid(school: TtSchool, placed: Placed[], view: View): Placed[][][] {
-	const name =
-		view.kind === 'class' ? school.classes[view.index].name : school.teachers[view.index].name;
 	const cells: Placed[][][] = Array.from({ length: school.periods }, () =>
 		Array.from({ length: school.days }, () => [])
 	);
 	for (const p of placed) {
-		if ((view.kind === 'class' ? p.class : p.teacher) === name) cells[p.period][p.day].push(p);
+		if ((view.kind === 'class' ? p.classIndex : p.teacherIndex) === view.index) {
+			cells[p.period][p.day].push(p);
+		}
 	}
 	return cells;
 }
@@ -74,7 +79,12 @@ const csvField = (v: string) => (/[",\n;]/.test(v) ? `"${v.replaceAll('"', '""')
 export function csv(school: TtSchool, placed: Placed[]): string {
 	const head = ['Ден', 'Час', 'Паралелка', 'Предмет', 'Учител', 'Стая'];
 	const rows = [...placed]
-		.sort((a, b) => a.class.localeCompare(b.class, 'bg') || a.day - b.day || a.period - b.period)
+		.sort(
+			(a, b) =>
+				a.class.localeCompare(b.class, 'bg', { numeric: true }) ||
+				a.day - b.day ||
+				a.period - b.period
+		)
 		.map((p) => [
 			DAY_NAMES[p.day] ?? String(p.day + 1),
 			String(p.period + 1),

@@ -38,34 +38,69 @@ enum RoomKind {
     Gym,
 }
 
-const FIRST_NAMES: [&str; 12] = [
-    "Мария",
-    "Иван",
-    "Елена",
-    "Георги",
-    "Десислава",
-    "Николай",
-    "Петя",
-    "Димитър",
-    "Радослава",
-    "Стефан",
-    "Цветелина",
-    "Христо",
+/// Women's and men's first names, and surnames in their men's form (a woman's adds „а“).
+const FIRST_NAMES: [[&str; 12]; 2] = [
+    [
+        "Мария",
+        "Елена",
+        "Десислава",
+        "Петя",
+        "Радослава",
+        "Цветелина",
+        "Анна",
+        "Галина",
+        "Виолета",
+        "Силвия",
+        "Надежда",
+        "Боряна",
+    ],
+    [
+        "Иван",
+        "Георги",
+        "Николай",
+        "Димитър",
+        "Стефан",
+        "Христо",
+        "Петър",
+        "Александър",
+        "Красимир",
+        "Владимир",
+        "Тодор",
+        "Емил",
+    ],
 ];
-const LAST_NAMES: [&str; 12] = [
-    "Петрова",
+const SURNAMES: [&str; 12] = [
+    "Петров",
     "Иванов",
-    "Георгиева",
+    "Георгиев",
     "Димитров",
-    "Николова",
+    "Николов",
     "Стоянов",
-    "Христова",
+    "Христов",
     "Тодоров",
-    "Василева",
+    "Василев",
     "Атанасов",
-    "Колева",
+    "Колев",
     "Маринов",
 ];
+
+/// The `n`th teacher's name: every one different, for as many teachers as a school has.
+fn teacher_name(n: usize) -> String {
+    let (woman, k) = (n.is_multiple_of(2), n / 2);
+    let (first, surname) = (k % 12, (k % 12 + k / 12) % 12);
+    let (first, surname) = (FIRST_NAMES[usize::from(!woman)][first], SURNAMES[surname]);
+    // Past 288 names, a number keeps them apart; no school has that many teachers.
+    let number = if k < 144 {
+        String::new()
+    } else {
+        format!(" {}", k / 144 + 1)
+    };
+    if woman {
+        format!("{first} {surname}а{number}")
+    } else {
+        format!("{first} {surname}{number}")
+    }
+}
 
 /// Most hours a week a teacher is given, as a full-time Bulgarian teacher's norm allows.
 const TEACHER_LOAD: u32 = 21;
@@ -127,11 +162,7 @@ pub fn school(seed: u64, classes: usize) -> School {
                 _ => {
                     let n = teachers.len();
                     teachers.push(Teacher {
-                        name: format!(
-                            "{} {}",
-                            FIRST_NAMES[(n * 5 + 3) % FIRST_NAMES.len()],
-                            LAST_NAMES[n % LAST_NAMES.len()]
-                        ),
+                        name: teacher_name(n),
                         unavailable: vec![],
                         max_per_day: Some(6),
                     });
@@ -203,7 +234,18 @@ mod tests {
             }));
         }
         assert_eq!(school(7, 20), school(7, 20));
+        // The largest school is valid too: every teacher has a name of their own.
+        assert!(Problem::new(&school(7, 100)).is_ok());
         assert_ne!(school(7, 20), school(8, 20));
+    }
+
+    #[test]
+    fn teachers_have_names_of_their_own() {
+        let names: Vec<String> = (0..1000).map(teacher_name).collect();
+        let unique: std::collections::HashSet<_> = names.iter().collect();
+        assert_eq!(unique.len(), names.len());
+        assert_eq!(names[0], "Мария Петрова");
+        assert_eq!(names[1], "Иван Петров");
     }
 
     #[test]

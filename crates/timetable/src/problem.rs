@@ -71,6 +71,18 @@ fn check_name(what: &str, name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Refuses two entries of one list with the same name, ignoring case and surrounding
+/// spaces: a printed timetable that says „Иванова“ must mean one person.
+fn check_unique<'a>(list: &str, names: impl Iterator<Item = &'a str>) -> Result<(), String> {
+    let mut seen = std::collections::HashMap::new();
+    for (i, name) in names.enumerate() {
+        if let Some(first) = seen.insert(name.trim().to_lowercase(), i) {
+            return Err(format!("{list} {first} and {i} have the same name: {name}"));
+        }
+    }
+    Ok(())
+}
+
 impl Problem {
     pub fn slots(&self) -> usize {
         self.days * self.periods
@@ -140,6 +152,9 @@ impl Problem {
         for (i, r) in school.rooms.iter().enumerate() {
             check_name(&format!("room {i}"), &r.name)?;
         }
+        check_unique("teachers", school.teachers.iter().map(|t| t.name.as_str()))?;
+        check_unique("classes", school.classes.iter().map(|c| c.name.as_str()))?;
+        check_unique("rooms", school.rooms.iter().map(|r| r.name.as_str()))?;
 
         let mut hours = Vec::new();
         let mut class_hours = vec![Vec::new(); school.classes.len()];
@@ -244,6 +259,20 @@ mod tests {
             ),
             ("name", Box::new(|s| s.teachers[1].name = " ".into())),
             ("name", Box::new(|s| s.name = "x".repeat(81))),
+            (
+                "teachers 0 and 1 have the same name",
+                Box::new(|s| {
+                    s.teachers[1].name = format!(" {} ", s.teachers[0].name.to_uppercase())
+                }),
+            ),
+            (
+                "classes 0 and 1 have the same name",
+                Box::new(|s| s.classes[1].name = s.classes[0].name.clone()),
+            ),
+            (
+                "rooms 0 and 1 have the same name",
+                Box::new(|s| s.rooms.push(s.rooms[0].clone())),
+            ),
             ("at least one lesson", Box::new(|s| s.lessons.clear())),
             (
                 "hours",

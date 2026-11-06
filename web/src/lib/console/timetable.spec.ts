@@ -52,6 +52,31 @@ describe('timetables', () => {
 		expect(ivanov[1][0].map((p) => p.class)).toEqual(['8Б']);
 	});
 
+	it('tells apart a class and a teacher by their place in the list', () => {
+		// Two teachers of one name (an older school file): each sees only their own hours.
+		const namesakes: TtSchool = {
+			...school,
+			teachers: [school.teachers[0], { ...school.teachers[0] }]
+		};
+		const placed = placeAll(namesakes, [0, 4, 1]);
+		const first = grid(namesakes, placed, { kind: 'teacher', index: 0 });
+		const second = grid(namesakes, placed, { kind: 'teacher', index: 1 });
+		expect(first.flat(2).map((p) => p.subject)).toEqual(['Математика', 'Математика']);
+		expect(second.flat(2).map((p) => p.subject)).toEqual(['Физическо']);
+	});
+
+	it('orders classes as a school does: 8А before 10А', () => {
+		const grades: TtSchool = {
+			...school,
+			classes: [
+				{ name: '10А', unavailable: [] },
+				{ name: '8А', unavailable: [] }
+			]
+		};
+		const rows = csv(grades, placeAll(grades, [0, 4, 1])).split('\n');
+		expect(rows.slice(1, 4).map((r) => r.split(',')[2])).toEqual(['8А', '10А', '10А']);
+	});
+
 	it('writes CSV a spreadsheet reads', () => {
 		const text = csv(school, placeAll(school, [0, 4, 1]));
 		expect(text.split('\n')).toEqual([
