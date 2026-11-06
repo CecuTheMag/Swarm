@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
+import { UNIT_TIMEOUT } from './submit.ts';
 
 // Spec 0007: the owner picks how hard the device works, and a hidden page pauses.
 test('the power level is remembered, and hiding the page pauses the device', async ({ page }) => {
+	test.setTimeout(UNIT_TIMEOUT + 60_000);
 	await page.goto('/worker');
 	await expect(page.getByTestId('power-75')).toHaveAttribute('aria-pressed', 'true');
 	await page.getByTestId('power-50').click();
@@ -24,8 +26,12 @@ test('the power level is remembered, and hiding the page pauses the device', asy
 		}, hidden);
 
 	await setHidden(true);
-	await expect(page.getByTestId('status')).toHaveAttribute('data-status', 'paused');
+	// The unit in hand is finished and sent first, so the pause waits for it: on a slow
+	// runner with a software GPU, as long as a unit takes.
 	await expect(page.getByTestId('paused')).toHaveAttribute('data-reason', 'hidden');
+	await expect(page.getByTestId('status')).toHaveAttribute('data-status', 'paused', {
+		timeout: UNIT_TIMEOUT
+	});
 
 	await setHidden(false);
 	await expect(page.getByTestId('status')).toHaveAttribute('data-status', /waiting|computing/);

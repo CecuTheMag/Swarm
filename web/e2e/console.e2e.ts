@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test, type Page } from '@playwright/test';
-import { signIn } from './submit.ts';
+import { signIn, UNIT_TIMEOUT } from './submit.ts';
 
 // Spec 0010 in the browser: a client creates a network, adds devices with its link,
 // sees them live and operates them.
@@ -20,7 +20,7 @@ test('a client creates a network, adds a device by its link and operates it', as
 	page,
 	browser
 }, testInfo) => {
-	test.setTimeout(120_000);
+	test.setTimeout(UNIT_TIMEOUT + 120_000);
 	await signIn(page);
 	await page.getByTestId('new-network-name').fill('Кабинет 12');
 	await page.getByRole('button', { name: 'Създай' }).click();
@@ -56,7 +56,8 @@ test('a client creates a network, adds a device by its link and operates it', as
 		'data-control',
 		'paused_by_owner'
 	);
-	await expect(status(device)).toHaveAttribute('data-status', 'held');
+	// It finishes the unit in hand first.
+	await expect(status(device)).toHaveAttribute('data-status', 'held', { timeout: UNIT_TIMEOUT });
 	await row.getByTestId('toggle-device').click();
 	await expect(device.getByTestId('owner-notice')).toHaveCount(0);
 

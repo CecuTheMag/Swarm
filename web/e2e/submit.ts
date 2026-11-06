@@ -8,6 +8,12 @@ export const ADMIN = { email: 'e2e-admin@swarm.test', password: 'e2e admin passw
 /** The public network, created by migration 0005. */
 export const PUBLIC_NETWORK = '00000000-0000-0000-0000-000000000001';
 
+/**
+ * How long a device may take to finish the unit in hand before it pauses or stops: a
+ * unit is sized for a phone, and the runner's software GPU is slower than most phones.
+ */
+export const UNIT_TIMEOUT = 60_000;
+
 /** Signs in on the login page and waits for the console. */
 export async function signIn(page: import('@playwright/test').Page, who = ADMIN) {
 	await page.goto('/login');

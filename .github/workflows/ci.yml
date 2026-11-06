@@ -109,10 +109,27 @@ jobs:
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
         working-directory: web
-      - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      # A stalled package mirror once held this job for 35 minutes: fail over quickly.
+      - name: Short apt timeouts
+        run: |
+          printf 'Acquire::Retries "5";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' \
+            | sudo tee /etc/apt/apt.conf.d/80-short-timeouts
+      - id: playwright
+        run: echo "version=$(pnpm exec playwright --version | cut -d" " -f2)" >> "$GITHUB_OUTPUT"
         working-directory: web
-      # Decodes the render page's QR code in the dashboard test.
-      - run: sudo apt-get install -y zbar-tools
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - run: pnpm exec playwright install chromium firefox webkit
+        working-directory: web
+      # The browsers' system libraries, and zbar to decode the join QR code (console test).
+      - name: System libraries
+        timeout-minutes: 15
+        run: |
+          pnpm exec playwright install-deps chromium firefox webkit
+          sudo apt-get install -y --no-install-recommends zbar-tools
+        working-directory: web
       - run: cargo build -p coordinator
       - run: pnpm exec playwright test
         working-directory: web
@@ -121,6 +138,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
-          path: web/playwright-report
+          name: playwright-results
+          path: web/test-results
           retention-days: 7

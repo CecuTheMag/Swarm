@@ -11,7 +11,8 @@ export default defineConfig({
 	timeout: 60_000,
 	// One coordinator serves every test, and the worker test counts connected workers.
 	workers: 1,
-	use: { baseURL: 'http://localhost:7702' },
+	// A failure on CI keeps its trace (CI uploads test-results).
+	use: { baseURL: 'http://localhost:7702', trace: 'retain-on-failure' },
 	projects: [
 		{
 			name: 'webgpu',
