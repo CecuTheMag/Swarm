@@ -13,6 +13,10 @@ clashes: number,
  */
 unavailable: number, 
 /**
+ * Pinned hours away from their pin (spec 0015). Absent from results of before.
+ */
+pins_moved: number, 
+/**
  * Empty periods inside a class's day.
  */
 class_gaps: number, 

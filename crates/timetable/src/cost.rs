@@ -23,6 +23,9 @@ pub struct Breakdown {
     pub clashes: u32,
     /// Lessons at a slot their teacher or class is unavailable.
     pub unavailable: u32,
+    /// Pinned hours away from their pin (spec 0015). Absent from results of before.
+    #[serde(default)]
+    pub pins_moved: u32,
     /// Empty periods inside a class's day.
     pub class_gaps: u32,
     /// Empty periods before a class's first lesson of the day.
@@ -39,7 +42,7 @@ pub struct Breakdown {
 
 impl Breakdown {
     pub fn hard(&self) -> u32 {
-        self.clashes + self.unavailable
+        self.clashes + self.unavailable + self.pins_moved
     }
 
     pub fn soft(&self) -> u64 {
@@ -222,6 +225,7 @@ impl Tally {
             let (hour, s) = (p.hours[h], usize::from(s));
             b.unavailable += u32::from(p.teacher_off[usize::from(hour.teacher) * self.slots + s])
                 + u32::from(p.class_off[usize::from(hour.class) * self.slots + s]);
+            b.pins_moved += u32::from(hour.pin.is_some_and(|pin| usize::from(pin) != s));
         }
         for d in 0..p.days {
             for c in 0..p.classes {
@@ -300,6 +304,27 @@ mod tests {
         assert_eq!(c.breakdown.teacher_gaps, 1);
         assert_eq!(c.hard, 0);
         assert_eq!(c.soft, 100 + 5);
+    }
+
+    #[test]
+    fn a_pinned_hour_away_from_its_pin_is_a_hard_violation() {
+        let mut school = tiny();
+        school.lessons[1].pinned = vec![crate::Slot { day: 1, period: 0 }];
+        let p = Problem::new(&school).unwrap();
+        // The clean timetable has 8Б's first PE hour at day 0 period 0, not its pin.
+        let slots = [at(0, 0), at(0, 1), at(1, 0), at(0, 0), at(1, 0)];
+        let c = cost(&p, &slots).unwrap();
+        assert_eq!(
+            c.breakdown,
+            Breakdown {
+                pins_moved: 1,
+                ..Breakdown::default()
+            }
+        );
+        assert_eq!((c.hard, c.total), (1, HARD_WEIGHT));
+        // The PE hours trade places: the pinned one is home, the timetable is clean.
+        let home = [at(0, 0), at(0, 1), at(1, 0), at(1, 0), at(0, 0)];
+        assert_eq!(cost(&p, &home).unwrap().total, 0);
     }
 
     #[test]

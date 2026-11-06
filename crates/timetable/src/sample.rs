@@ -187,6 +187,7 @@ pub fn school(seed: u64, classes: usize) -> School {
                 per_week,
                 room,
                 max_per_day,
+                pinned: vec![],
             });
         }
     }

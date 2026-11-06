@@ -143,12 +143,14 @@ impl<'a> State<'a> {
             .sum()
     }
 
-    /// The hard cost of hour `h` at `slot` being unavailable for its teacher or class.
-    fn unavailable(&self, h: usize, slot: usize) -> u64 {
+    /// The hard cost of hour `h` at `slot` itself: its teacher or class unavailable
+    /// there, or the hour away from its pin.
+    fn placement(&self, h: usize, slot: usize) -> u64 {
         let (p, hour) = (self.p, self.p.hours[h]);
         let s = p.slots();
         (u64::from(p.teacher_off[usize::from(hour.teacher) * s + slot])
-            + u64::from(p.class_off[usize::from(hour.class) * s + slot]))
+            + u64::from(p.class_off[usize::from(hour.class) * s + slot])
+            + u64::from(hour.pin.is_some_and(|pin| usize::from(pin) != slot)))
             * HARD_WEIGHT
     }
 
@@ -181,13 +183,13 @@ impl<'a> State<'a> {
         let mut before = self.local();
         for m in moves {
             if let Some(from) = m.from {
-                before += self.unavailable(m.hour, from);
+                before += self.placement(m.hour, from);
             }
         }
         self.apply(moves);
         let mut after = self.local();
         for m in moves {
-            after += self.unavailable(m.hour, m.to);
+            after += self.placement(m.hour, m.to);
         }
         after as i64 - before as i64
     }
@@ -209,10 +211,16 @@ impl<'a> State<'a> {
         self.commit(delta);
     }
 
-    /// Places every hour in turn at the slot where it costs least, in a random order;
-    /// ties go to the first slot from a random starting point.
+    /// Places pinned hours at their pins, then every other hour in turn at the slot
+    /// where it costs least, in a random order; ties go to the first slot from a random
+    /// starting point.
     fn greedy(&mut self, rng: &mut Rng) {
-        let mut order: Vec<usize> = (0..self.p.hours.len()).collect();
+        for (h, hour) in self.p.hours.iter().enumerate() {
+            if let Some(pin) = hour.pin {
+                self.place(h, usize::from(pin));
+            }
+        }
+        let mut order: Vec<usize> = self.p.free.iter().map(|&h| h as usize).collect();
         for i in (1..order.len()).rev() {
             order.swap(i, rng.below(i + 1));
         }
@@ -245,7 +253,9 @@ pub fn solve(problem: &Problem, search: Search) -> Vec<u16> {
     let mut state = State::new(problem);
     state.greedy(&mut rng);
 
-    let hours = problem.hours.len();
+    // Only free hours move; with no pins they are every hour, in order, so a school
+    // without pins draws the same random numbers as before pins existed.
+    let free = &problem.free;
     let slots = problem.slots();
     let history_len = search.history.max(1) as usize;
     let mut history = vec![state.cost; history_len];
@@ -256,11 +266,11 @@ pub fn solve(problem: &Problem, search: Search) -> Vec<u16> {
     let mut at_best = true;
 
     for i in 0..search.iterations as usize {
-        if best_cost == 0 {
+        if best_cost == 0 || free.is_empty() {
             break;
         }
         // Either one hour moves to another slot, or two hours of one class trade slots.
-        let h1 = rng.below(hours);
+        let h1 = free[rng.below(free.len())] as usize;
         let s1 = usize::from(state.slots[h1]);
         let class = &problem.class_hours[usize::from(problem.hours[h1].class)];
         let mut buf = [Move {
@@ -370,17 +380,85 @@ mod tests {
         assert!(costs.windows(2).all(|w| w[1] <= w[0]), "{costs:?}");
     }
 
+    /// An example school with some hours pinned at random slots: about one lesson in
+    /// `one_in`, one or two hours each. Pins may clash or fall where a teacher is away.
+    fn pinned_school(seed: u64, classes: usize, one_in: usize) -> crate::School {
+        let mut school = sample::school(seed, classes);
+        let mut rng = crate::rng::Rng::new(seed ^ 0x5eed);
+        let (days, periods) = (usize::from(school.days), usize::from(school.periods));
+        for l in &mut school.lessons {
+            if rng.below(one_in) != 0 {
+                continue;
+            }
+            for _ in 0..(1 + rng.below(2)).min(usize::from(l.per_week)) {
+                let slot = crate::Slot {
+                    day: rng.below(days) as u8,
+                    period: rng.below(periods) as u8,
+                };
+                if !l.pinned.contains(&slot) {
+                    l.pinned.push(slot);
+                }
+            }
+        }
+        school
+    }
+
+    #[test]
+    fn a_school_with_every_hour_pinned_is_returned_as_pinned() {
+        let mut school = tiny();
+        school.lessons[0].pinned = vec![
+            crate::Slot { day: 0, period: 0 },
+            crate::Slot { day: 0, period: 1 },
+            crate::Slot { day: 1, period: 0 },
+        ];
+        school.lessons[1].pinned = vec![
+            crate::Slot { day: 1, period: 1 },
+            crate::Slot { day: 0, period: 2 },
+        ];
+        let p = Problem::new(&school).unwrap();
+        assert!(p.free.is_empty());
+        let search = Search {
+            seed: 3,
+            iterations: 1_000,
+            history: 10,
+        };
+        assert_eq!(solve(&p, search), vec![0, 1, 3, 4, 2]);
+    }
+
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(64))]
 
-        /// The cost kept up to date move by move equals the cost from scratch.
+        /// No search moves a pinned hour, whatever the pins, and a search with pins is
+        /// still a pure function of its inputs.
+        #[test]
+        fn pinned_hours_stay_where_they_are_pinned(
+            seed in any::<u64>(),
+            classes in 1usize..6,
+            one_in in 1usize..6,
+            iterations in 0u32..5_000,
+        ) {
+            let p = Problem::new(&pinned_school(seed, classes, one_in)).unwrap();
+            let search = Search { seed, iterations, history: 20 };
+            let slots = solve(&p, search);
+            for (h, hour) in p.hours.iter().enumerate() {
+                if let Some(pin) = hour.pin {
+                    prop_assert_eq!(slots[h], pin);
+                }
+            }
+            prop_assert_eq!(cost(&p, &slots).unwrap().breakdown.pins_moved, 0);
+            prop_assert_eq!(solve(&p, search), slots);
+        }
+
+        /// The cost kept up to date move by move equals the cost from scratch, also when
+        /// pinned hours are moved off their pins (as a person editing may).
         #[test]
         fn incremental_cost_equals_cost_from_scratch(
             seed in any::<u64>(),
             classes in 1usize..8,
+            one_in in 1usize..8,
             moves in proptest::collection::vec((any::<u32>(), any::<u32>(), any::<bool>()), 1..200),
         ) {
-            let p = Problem::new(&sample::school(seed, classes)).unwrap();
+            let p = Problem::new(&pinned_school(seed, classes, one_in)).unwrap();
             let mut state = State::new(&p);
             state.greedy(&mut crate::rng::Rng::new(seed));
             prop_assert_eq!(state.cost, cost(&p, &state.slots).unwrap().total);
@@ -388,7 +466,7 @@ mod tests {
                 let h1 = a as usize % p.hours.len();
                 let s1 = usize::from(state.slots[h1]);
                 let class = &p.class_hours[usize::from(p.hours[h1].class)];
-                let ms: Vec<Move> = if swap {
+                let ms: Vec<Move> = if swap && !class.is_empty() {
                     let h2 = class[b as usize % class.len()] as usize;
                     let s2 = usize::from(state.slots[h2]);
                     vec![

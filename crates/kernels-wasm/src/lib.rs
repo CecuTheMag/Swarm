@@ -268,3 +268,74 @@ pub extern "C" fn tt_slots() -> *const u8 {
 pub extern "C" fn tt_cost() -> f64 {
     TT_COST.get() as f64
 }
+
+thread_local! {
+    /// The school a person is editing a timetable of, checked (spec 0015).
+    static TT_PROBLEM: std::cell::RefCell<Option<timetable::Problem>> = const { std::cell::RefCell::new(None) };
+    /// The timetable to score, little-endian `u16` slots, and the score as JSON.
+    static TT_TIMETABLE: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
+    static TT_OUT: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Checks the school written at [`tt_school`] and keeps it for [`tt_score`]. Returns
+/// its number of lesson hours, or −1 if it is not valid.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn tt_prepare() -> i32 {
+    let problem = TT_SCHOOL.with_borrow(|bytes| {
+        serde_json::from_slice::<timetable::School>(bytes)
+            .ok()
+            .and_then(|school| timetable::Problem::new(&school).ok())
+    });
+    let hours = problem.as_ref().map_or(-1, |p| p.hours.len() as i32);
+    TT_PROBLEM.set(problem);
+    hours
+}
+
+/// Room for a timetable of `hours` slots; JavaScript writes it there before
+/// [`tt_score`].
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn tt_timetable(hours: u32) -> *mut u8 {
+    TT_TIMETABLE.with_borrow_mut(|slots| {
+        slots.clear();
+        slots.resize(hours as usize * 2, 0);
+        slots.as_mut_ptr()
+    })
+}
+
+/// Scores the timetable written at [`tt_timetable`] for the school of [`tt_prepare`],
+/// exactly as the coordinator does: writes `{"cost": …}` or `{"error": "…"}` as JSON,
+/// read at [`tt_out`], and returns its length.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn tt_score() -> i32 {
+    let score = TT_PROBLEM.with_borrow(|problem| {
+        let Some(problem) = problem else {
+            return Err("no school is prepared".to_string());
+        };
+        let slots: Vec<u16> = TT_TIMETABLE.with_borrow(|bytes| {
+            bytes
+                .chunks_exact(2)
+                .map(|b| u16::from_le_bytes([b[0], b[1]]))
+                .collect()
+        });
+        timetable::cost(problem, &slots)
+    });
+    let json = match score {
+        Ok(cost) => serde_json::json!({ "cost": cost }),
+        Err(error) => serde_json::json!({ "error": error }),
+    };
+    TT_OUT.with_borrow_mut(|out| {
+        out.clear();
+        serde_json::to_writer(&mut *out, &json).expect("JSON of plain values");
+        out.len() as i32
+    })
+}
+
+/// The last score; valid until the next one.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn tt_out() -> *const u8 {
+    TT_OUT.with_borrow(|out| out.as_ptr())
+}

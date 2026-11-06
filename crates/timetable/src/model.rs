@@ -68,6 +68,11 @@ pub struct Lesson {
     /// Most hours of it a class should have in one day.
     #[serde(default = "one")]
     pub max_per_day: u8,
+    /// Slots fixed by hand (spec 0015): the lesson's first `pinned.len()` hours, in
+    /// order, are at these slots, and no search moves them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<Slot>>", optional))]
+    pub pinned: Vec<Slot>,
 }
 
 fn one() -> u8 {

@@ -270,6 +270,35 @@ mod tests {
     }
 
     #[test]
+    fn a_device_that_moves_a_pinned_hour_cannot_win() {
+        let mut params = job(2, 2);
+        params["school"]["lessons"][0]["pinned"] = json!([{ "day": 4, "period": 6 }]);
+        let units = Tt.split(&params).unwrap();
+        let good = honest(&params, &units[0]);
+        let mut slots = decode_slots(good["slots"].as_str().unwrap()).unwrap();
+        assert_eq!(slots[0], 4 * 7 + 6, "the solver keeps the pin");
+        // The pinned hour moved: a forged cost is refused, the true one is a hard
+        // violation, worse than any honest timetable without one.
+        slots[0] = 0;
+        let p: JobParams = serde_json::from_value(params.clone()).unwrap();
+        let moved = timetable::cost(&Problem::new(&p.school).unwrap(), &slots).unwrap();
+        assert_eq!(moved.breakdown.pins_moved, 1);
+        let forged = json!({ "slots": encode_slots(&slots), "cost": good["cost"] });
+        if moved.total != good["cost"].as_u64().unwrap() {
+            assert!(Tt.check_output(&params, &units[0], &forged).is_err());
+        }
+        let truthful = json!({ "slots": encode_slots(&slots), "cost": moved.total });
+        assert!(Tt.check_output(&params, &units[0], &truthful).is_ok());
+        let result: JobResult = serde_json::from_value(
+            Tt.aggregate(&params, &[truthful, honest(&params, &units[1])])
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(result.best, 1);
+        assert_eq!(result.cost.breakdown.pins_moved, 0);
+    }
+
+    #[test]
     fn agreement_is_equality() {
         let params = job(2, 2);
         let units = Tt.split(&params).unwrap();
@@ -335,16 +364,32 @@ mod vectors {
         "/../../templates/tt/vectors.json"
     );
 
+    /// An example school with the first hour of every third lesson pinned where a
+    /// search put it, as a deputy director would fix a found timetable (spec 0015).
+    fn pinned(school_seed: u64, classes: usize) -> School {
+        let mut school = sample::school(school_seed, classes);
+        let problem = Problem::new(&school).unwrap();
+        let slots = solve(&problem, Search::unit(1, 0, 20_000));
+        let mut first = 0;
+        for (i, l) in school.lessons.iter_mut().enumerate() {
+            if i % 3 == 0 {
+                l.pinned = vec![problem.slot_of(usize::from(slots[first]))];
+            }
+            first += usize::from(l.per_week);
+        }
+        school
+    }
+
     fn computed() -> Vec<Vector> {
         [
-            (1, 1, 7, 0, 20_000),
-            (2, 3, 7, 1, 50_000),
-            (3, 6, 2026, 2, 30_000),
-            (4, 6, 2026, 3, 30_000),
+            (sample::school(1, 1), 7, 0, 20_000),
+            (sample::school(2, 3), 7, 1, 50_000),
+            (sample::school(3, 6), 2026, 2, 30_000),
+            (sample::school(4, 6), 2026, 3, 30_000),
+            (pinned(5, 4), 2026, 1, 30_000),
         ]
         .into_iter()
-        .map(|(school_seed, classes, seed, index, iterations)| {
-            let school = sample::school(school_seed, classes);
+        .map(|(school, seed, index, iterations)| {
             let problem = Problem::new(&school).unwrap();
             let slots = solve(&problem, Search::unit(seed, index, iterations));
             let bytes: Vec<u8> = slots.iter().flat_map(|s| s.to_le_bytes()).collect();

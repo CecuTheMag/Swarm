@@ -34,6 +34,8 @@ pub struct Hour {
     pub class: u16,
     pub teacher: u16,
     pub room: Option<u16>,
+    /// The slot it is pinned at (spec 0015), if it is.
+    pub pin: Option<u16>,
 }
 
 /// A school, checked, with its hours in lesson order.
@@ -45,7 +47,9 @@ pub struct Problem {
     pub classes: usize,
     pub rooms: usize,
     pub hours: Vec<Hour>,
-    /// Hours of each class, for moves that swap two of them.
+    /// Hours that are not pinned: the ones a search moves.
+    pub free: Vec<u32>,
+    /// Free hours of each class, for moves that swap two of them.
     pub class_hours: Vec<Vec<u32>>,
     /// `max_per_day` of each lesson.
     pub lesson_max: Vec<u8>,
@@ -157,7 +161,9 @@ impl Problem {
         check_unique("rooms", school.rooms.iter().map(|r| r.name.as_str()))?;
 
         let mut hours = Vec::new();
+        let mut free = Vec::new();
         let mut class_hours = vec![Vec::new(); school.classes.len()];
+        let mut class_total = vec![0usize; school.classes.len()];
         let mut lesson_max = Vec::with_capacity(school.lessons.len());
         for (i, l) in school.lessons.iter().enumerate() {
             check_name(&format!("lesson {i}"), &l.subject)?;
@@ -178,23 +184,53 @@ impl Problem {
             if l.max_per_day == 0 {
                 return Err(format!("lesson {i}: max_per_day must be at least 1"));
             }
+            if l.pinned.len() > usize::from(l.per_week) {
+                return Err(format!(
+                    "lesson {i}: {} hours pinned but {} a week",
+                    l.pinned.len(),
+                    l.per_week
+                ));
+            }
+            let mut pins = Vec::with_capacity(l.pinned.len());
+            for s in &l.pinned {
+                if s.day >= school.days || s.period >= school.periods {
+                    return Err(format!(
+                        "lesson {i}: pinned slot day {} period {} is outside the week",
+                        s.day, s.period
+                    ));
+                }
+                let slot = (usize::from(s.day) * periods + usize::from(s.period)) as u16;
+                if pins.contains(&slot) {
+                    return Err(format!(
+                        "lesson {i}: slot day {} period {} is pinned twice",
+                        s.day, s.period
+                    ));
+                }
+                pins.push(slot);
+            }
             lesson_max.push(l.max_per_day);
-            for _ in 0..l.per_week {
+            for k in 0..usize::from(l.per_week) {
                 if hours.len() == LIMITS.hours {
                     return Err(format!("at most {} lesson hours a week", LIMITS.hours));
                 }
-                class_hours[usize::from(l.class)].push(hours.len() as u32);
+                let pin = pins.get(k).copied();
+                if pin.is_none() {
+                    free.push(hours.len() as u32);
+                    class_hours[usize::from(l.class)].push(hours.len() as u32);
+                }
+                class_total[usize::from(l.class)] += 1;
                 hours.push(Hour {
                     lesson: i as u16,
                     class: l.class,
                     teacher: l.teacher,
                     room: l.room,
+                    pin,
                 });
             }
         }
-        let class_cap = class_hours
+        let class_cap = class_total
             .iter()
-            .map(|h| (h.len().div_ceil(days) + 1).min(periods) as u8)
+            .map(|&n| (n.div_ceil(days) + 1).min(periods) as u8)
             .collect();
         Ok(Problem {
             days,
@@ -203,6 +239,7 @@ impl Problem {
             classes: school.classes.len(),
             rooms: school.rooms.len(),
             hours,
+            free,
             class_hours,
             lesson_max,
             lessons: school.lessons.len(),
@@ -225,12 +262,27 @@ mod tests {
         assert_eq!(p.slots(), 6);
         assert_eq!(p.hours.len(), 5);
         assert_eq!(p.class_hours, vec![vec![0, 1, 2], vec![3, 4]]);
+        assert_eq!(p.free, vec![0, 1, 2, 3, 4]);
         assert_eq!(p.hours[3].room, Some(0));
+        assert!(p.hours.iter().all(|h| h.pin.is_none()));
         assert_eq!(p.teacher_max, vec![3, u8::MAX]);
         // 3 hours over 2 days: at most 2 a day, plus one of slack.
         assert_eq!(p.class_cap, vec![3, 2]);
         assert!(p.teacher_off[5]);
         assert_eq!(p.slot_of(4), Slot { day: 1, period: 1 });
+    }
+
+    #[test]
+    fn pinned_hours_are_the_first_of_their_lesson() {
+        let mut school = tiny();
+        school.lessons[0].pinned = vec![Slot { day: 1, period: 0 }, Slot { day: 0, period: 2 }];
+        let p = Problem::new(&school).unwrap();
+        let pins: Vec<_> = p.hours.iter().map(|h| h.pin).collect();
+        assert_eq!(pins, vec![Some(3), Some(2), None, None, None]);
+        assert_eq!(p.free, vec![2, 3, 4]);
+        // Only free hours are swapped; the even spread still counts every hour.
+        assert_eq!(p.class_hours, vec![vec![2], vec![3, 4]]);
+        assert_eq!(p.class_cap, vec![3, 2]);
     }
 
     #[test]
@@ -272,6 +324,29 @@ mod tests {
             (
                 "rooms 0 and 1 have the same name",
                 Box::new(|s| s.rooms.push(s.rooms[0].clone())),
+            ),
+            (
+                "4 hours pinned but 3 a week",
+                Box::new(|s| {
+                    s.lessons[0].pinned = (0..4)
+                        .map(|i| Slot {
+                            day: i / 3,
+                            period: i % 3,
+                        })
+                        .collect()
+                }),
+            ),
+            (
+                "lesson 1: pinned slot day 0 period 3 is outside the week",
+                Box::new(|s| s.lessons[1].pinned = vec![Slot { day: 0, period: 3 }]),
+            ),
+            (
+                "lesson 1: pinned slot day 2 period 0 is outside the week",
+                Box::new(|s| s.lessons[1].pinned = vec![Slot { day: 2, period: 0 }]),
+            ),
+            (
+                "lesson 0: slot day 1 period 1 is pinned twice",
+                Box::new(|s| s.lessons[0].pinned = vec![Slot { day: 1, period: 1 }; 2]),
             ),
             ("at least one lesson", Box::new(|s| s.lessons.clear())),
             (

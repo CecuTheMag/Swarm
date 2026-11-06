@@ -40,6 +40,7 @@ A timetable puts every lesson hour at a slot (day × period). Its cost is
 |---|---|---|
 | a teacher, class or room has two lessons at one slot | hard | per extra lesson |
 | a lesson at a slot its teacher or class is unavailable | hard | per lesson |
+| a pinned hour away from its pin (spec 0015) | hard | per hour |
 | a gap in a class's day (students wait between lessons) | soft | 100 per empty period |
 | a class's day starts late (morning shift) | soft | 30 per empty period before its first lesson |
 | a subject more often in a day than its `max_per_day` | soft | 50 per extra hour |

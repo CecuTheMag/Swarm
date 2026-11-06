@@ -62,6 +62,7 @@ pub(crate) mod testing {
                     per_week: 3,
                     room: None,
                     max_per_day: 2,
+                    pinned: vec![],
                 },
                 Lesson {
                     class: 1,
@@ -70,6 +71,7 @@ pub(crate) mod testing {
                     per_week: 2,
                     room: Some(0),
                     max_per_day: 1,
+                    pinned: vec![],
                 },
             ],
         }
