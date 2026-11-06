@@ -11,7 +11,11 @@ export type DashboardEvent = { "type": "snapshot", workers: Array<WorkerSummary>
 /**
  * Units it held that went back to the queue for other devices.
  */
-units_returned: number, } | { "type": "worker_banned", worker_id: string, 
+units_returned: number, } | { "type": "worker_banned", worker: WorkerSummary, 
+/**
+ * Whether it was still connected.
+ */
+connected: boolean, 
 /**
  * Wrong results it returned, known answers included.
  */

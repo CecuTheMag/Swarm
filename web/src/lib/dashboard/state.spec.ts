@@ -13,6 +13,7 @@ import {
 	unitsPerSecond,
 	THROUGHPUT_WINDOW_MS
 } from './state.ts';
+import type { DashboardEvent } from '#lib/protocol/DashboardEvent.ts';
 import type { JobSummary } from '#lib/protocol/JobSummary.ts';
 import type { WorkerSummary } from '#lib/protocol/WorkerSummary.ts';
 
@@ -37,6 +38,18 @@ const worker = (id: string): WorkerSummary => ({
 	device: { backend: 'webgpu', vendor: 'v', architecture: 'a' },
 	connected_at: 0,
 	units_done: 0
+});
+
+const banned = (
+	id: string,
+	more: Partial<Extract<DashboardEvent, { type: 'worker_banned' }>> = {}
+): DashboardEvent => ({
+	type: 'worker_banned',
+	worker: worker(id),
+	connected: true,
+	wrong_results: 1,
+	units_redone: 0,
+	...more
 });
 
 describe('dashboard state', () => {
@@ -70,7 +83,7 @@ describe('dashboard state', () => {
 
 	it('keeps a caught cheater on show after it is gone, then drops it', () => {
 		let s = apply(emptyState(), { type: 'worker_joined', worker: worker('c') }, 0);
-		s = apply(s, { type: 'worker_banned', worker_id: 'c', wrong_results: 4, units_redone: 2 }, 100);
+		s = apply(s, banned('c', { wrong_results: 4, units_redone: 2 }), 100);
 		expect(caughtDevices(s, 100).map((c) => [c.worker.id, c.left_at])).toEqual([['c', null]]);
 		expect(s.feed[0]).toMatchObject({ kind: 'banned', wrong_results: 4, units_redone: 2 });
 
@@ -89,7 +102,7 @@ describe('dashboard state', () => {
 		}
 		s = apply(s, { type: 'worker_left', worker_id: 'a', units_returned: 3 }, 10);
 		s = apply(s, { type: 'worker_left', worker_id: 'b', units_returned: 2 }, 20);
-		s = apply(s, { type: 'worker_banned', worker_id: 'c', wrong_results: 4, units_redone: 1 }, 30);
+		s = apply(s, banned('c', { wrong_results: 4, units_redone: 1 }), 30);
 		// A caught device leaving is part of its ban, not a departure.
 		s = apply(s, { type: 'worker_left', worker_id: 'c', units_returned: 1 }, 40);
 		expect(s.totals).toEqual({
@@ -104,13 +117,23 @@ describe('dashboard state', () => {
 		expect(s.totals.banned).toBe(1);
 	});
 
-	it('ignores a ban for a worker it never saw', () => {
-		const s = apply(
-			emptyState(),
-			{ type: 'worker_banned', worker_id: 'x', wrong_results: 1, units_redone: 0 },
-			0
-		);
-		expect(s.feed).toEqual([]);
+	it('shows a cheater outvoted only after it left, once', () => {
+		let s = apply(emptyState(), { type: 'worker_joined', worker: worker('c') }, 0);
+		s = apply(s, { type: 'worker_left', worker_id: 'c', units_returned: 0 }, 100);
+		s = apply(s, banned('c', { connected: false }), 200);
+		expect(s.feed[0]).toMatchObject({ kind: 'banned', wrong_results: 1 });
+		expect(caughtDevices(s, 200).map((c) => [c.worker.id, c.left_at])).toEqual([['c', 200]]);
+		expect(caughtDevices(s, 200 + CAUGHT_VISIBLE_MS)).toHaveLength(0);
+		expect(s.totals.banned).toBe(1);
+		// Told twice (a second dashboard event for the same worker): counted once.
+		s = apply(s, banned('c', { connected: false }), 300);
+		expect(s.totals.banned).toBe(1);
+	});
+
+	it('shows a ban for a worker it never saw, as a dashboard opened after it left', () => {
+		const s = apply(emptyState(), banned('x', { connected: false }), 0);
+		expect(s.feed[0]).toMatchObject({ kind: 'banned', device: worker('x').device });
+		expect(s.totals.banned).toBe(1);
 	});
 
 	it('keeps only the latest feed items', () => {

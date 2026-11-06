@@ -240,10 +240,13 @@ pub enum DashboardEvent {
         /// Units it held that went back to the queue for other devices.
         units_returned: u32,
     },
-    /// The worker's client returned wrong results and is blocked (spec 0004). Its
-    /// connection closes next, with a `worker_left`.
+    /// The worker's client returned wrong results and is blocked (spec 0004). A
+    /// connected worker's connection closes next, with a `worker_left`; a cheater may
+    /// also be outvoted only after it left.
     WorkerBanned {
-        worker_id: Uuid,
+        worker: WorkerSummary,
+        /// Whether it was still connected.
+        connected: bool,
         /// Wrong results it returned, known answers included.
         wrong_results: u32,
         /// Units it had helped decide that are computed again.

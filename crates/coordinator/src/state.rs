@@ -143,6 +143,9 @@ pub struct State {
     links: Mutex<HashMap<Uuid, WorkerLink>>,
     /// Connected workers whose client was banned; each session ends at its next message.
     banned: Mutex<HashSet<Uuid>>,
+    /// Workers that left within [`DEPARTED_FOR`], oldest first: a cheater may be outvoted
+    /// only after it left, and its ban is still announced.
+    departed: Mutex<VecDeque<Departed>>,
     /// Live images of path-tracer jobs.
     pub renders: Renders,
     /// Units decided since dashboards were last told, by network (see
@@ -192,6 +195,20 @@ pub const PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
 /// The window over which join summaries measure speed.
 pub const RATE_WINDOW: Duration = Duration::from_secs(10);
 
+/// A worker that left, as dashboards last saw it.
+struct Departed {
+    worker: WorkerSummary,
+    client_id: Uuid,
+    network_id: Uuid,
+    at: Instant,
+}
+
+/// How long a worker that left can still be announced as caught: longer than its last
+/// results take to be outvoted.
+const DEPARTED_FOR: Duration = Duration::from_secs(600);
+/// At most this many are remembered, however many come and go within [`DEPARTED_FOR`].
+const MAX_DEPARTED: usize = 10_000;
+
 #[derive(Default)]
 struct Progress {
     units: u32,
@@ -210,6 +227,7 @@ impl State {
             workers: Mutex::new(HashMap::new()),
             links: Mutex::new(HashMap::new()),
             banned: Mutex::new(HashSet::new()),
+            departed: Mutex::new(VecDeque::new()),
             renders: Renders::default(),
             progress: Mutex::new(HashMap::new()),
             device_units: Mutex::new(HashMap::new()),
@@ -336,10 +354,26 @@ impl State {
 
     /// Forgets a worker whose connection ended and announces it.
     pub fn worker_left(&self, worker_id: Uuid, units_returned: u32) {
-        self.workers.lock().unwrap().remove(&worker_id);
+        let worker = self.workers.lock().unwrap().remove(&worker_id);
         let link = self.links.lock().unwrap().remove(&worker_id);
-        self.banned.lock().unwrap().remove(&worker_id);
+        let banned = self.banned.lock().unwrap().remove(&worker_id);
         self.commands.lock().unwrap().remove(&worker_id);
+        if let (Some(worker), Some(link), false) = (worker, &link, banned) {
+            let now = Instant::now();
+            let mut departed = self.departed.lock().unwrap();
+            while departed
+                .front()
+                .is_some_and(|d| now - d.at > DEPARTED_FOR || departed.len() >= MAX_DEPARTED)
+            {
+                departed.pop_front();
+            }
+            departed.push_back(Departed {
+                worker,
+                client_id: link.client_id,
+                network_id: link.network_id,
+                at: now,
+            });
+        }
         if let Some(link) = link {
             self.summaries.lock().unwrap().remove(&link.network_id);
             self.publish(
@@ -353,10 +387,11 @@ impl State {
     }
 
     /// Marks the connected workers of banned clients, so their sessions end, and
-    /// announces each: on the projector, this is the cheater being caught.
+    /// announces each, and each that already left: on the projector, this is the
+    /// cheater being caught.
     pub fn clients_banned(&self, bans: &[Ban]) {
         for ban in bans {
-            let workers: Vec<(Uuid, Uuid)> = self
+            let connected: Vec<(Uuid, Uuid)> = self
                 .links
                 .lock()
                 .unwrap()
@@ -364,12 +399,31 @@ impl State {
                 .filter(|(_, link)| link.client_id == ban.client_id)
                 .map(|(worker, link)| (*worker, link.network_id))
                 .collect();
-            for (worker_id, network_id) in workers {
-                self.banned.lock().unwrap().insert(worker_id);
+            let mut caught: Vec<(WorkerSummary, Uuid, bool)> = {
+                let workers = self.workers.lock().unwrap();
+                let mut banned = self.banned.lock().unwrap();
+                connected
+                    .into_iter()
+                    .filter_map(|(id, network_id)| {
+                        banned.insert(id);
+                        Some((workers.get(&id)?.clone(), network_id, true))
+                    })
+                    .collect()
+            };
+            // Announced once: the departed are forgotten as they are announced.
+            self.departed.lock().unwrap().retain(|d| {
+                if d.client_id != ban.client_id {
+                    return true;
+                }
+                caught.push((d.worker.clone(), d.network_id, false));
+                false
+            });
+            for (worker, network_id, connected) in caught {
                 self.publish(
                     network_id,
                     DashboardEvent::WorkerBanned {
-                        worker_id,
+                        worker,
+                        connected,
                         wrong_results: ban.wrong_results,
                         units_redone: ban.units_redone,
                     },
@@ -544,5 +598,111 @@ impl State {
             .unwrap()
             .insert(network_id, (Instant::now(), summary.clone()));
         Ok(summary)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use protocol::{Backend, DeviceInfo};
+
+    fn state() -> AppState {
+        let db = PgPool::connect_lazy("postgres://localhost/unused").unwrap();
+        State::new(db, Config::default())
+    }
+
+    fn join(state: &State, client_id: Uuid, network_id: Uuid) -> Uuid {
+        let worker = WorkerSummary {
+            id: Uuid::now_v7(),
+            device: DeviceInfo {
+                backend: Backend::Native,
+                vendor: "test".into(),
+                architecture: "test".into(),
+            },
+            connected_at: 0,
+            units_done: 3,
+        };
+        let id = worker.id;
+        state.worker_joined(worker, client_id, network_id, Uuid::now_v7());
+        id
+    }
+
+    fn ban(client_id: Uuid) -> Ban {
+        Ban {
+            client_id,
+            wrong_results: 2,
+            units_redone: 1,
+        }
+    }
+
+    /// The bans announced since `events` subscribed: worker, network, still connected.
+    fn bans(events: &mut broadcast::Receiver<(Uuid, DashboardEvent)>) -> Vec<(Uuid, Uuid, bool)> {
+        std::iter::from_fn(|| events.try_recv().ok())
+            .filter_map(|(network, e)| match e {
+                DashboardEvent::WorkerBanned {
+                    worker, connected, ..
+                } => Some((worker.id, network, connected)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn a_cheater_outvoted_after_it_left_is_still_announced_once() {
+        let state = state();
+        let (cheater, honest, network) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+        let gone = join(&state, cheater, network);
+        let other = join(&state, honest, network);
+        state.worker_left(gone, 0);
+        state.worker_left(other, 0);
+
+        let mut events = state.events.subscribe();
+        state.clients_banned(&[ban(cheater)]);
+        assert_eq!(bans(&mut events), [(gone, network, false)]);
+        // Announced once, and the honest client's worker never.
+        state.clients_banned(&[ban(cheater)]);
+        assert_eq!(bans(&mut events), []);
+        state.clients_banned(&[ban(Uuid::now_v7())]);
+        assert_eq!(bans(&mut events), []);
+    }
+
+    #[tokio::test]
+    async fn a_connected_cheater_is_announced_and_not_again_once_it_leaves() {
+        let state = state();
+        let (cheater, network) = (Uuid::now_v7(), Uuid::now_v7());
+        let gone = join(&state, cheater, network);
+        state.worker_left(gone, 0);
+        let here = join(&state, cheater, network);
+
+        let mut events = state.events.subscribe();
+        state.clients_banned(&[ban(cheater)]);
+        let mut seen = bans(&mut events);
+        seen.sort();
+        let mut expected = vec![(gone, network, false), (here, network, true)];
+        expected.sort();
+        assert_eq!(seen, expected);
+        assert!(state.is_banned(here));
+
+        state.worker_left(here, 0);
+        state.clients_banned(&[ban(cheater)]);
+        assert_eq!(bans(&mut events), []);
+    }
+
+    #[tokio::test]
+    async fn departed_workers_are_remembered_up_to_a_limit() {
+        let state = state();
+        let network = Uuid::now_v7();
+        let first = Uuid::now_v7();
+        let id = join(&state, first, network);
+        state.worker_left(id, 0);
+        for _ in 0..MAX_DEPARTED {
+            let id = join(&state, Uuid::now_v7(), network);
+            state.worker_left(id, 0);
+        }
+        assert_eq!(state.departed.lock().unwrap().len(), MAX_DEPARTED);
+        // The oldest made room.
+        let mut events = state.events.subscribe();
+        state.clients_banned(&[ban(first)]);
+        assert_eq!(bans(&mut events), []);
     }
 }

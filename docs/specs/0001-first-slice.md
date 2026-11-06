@@ -87,7 +87,7 @@ has bundled.
 
 Coordinator → dashboard (`/ws/dashboard`): `snapshot` on connect (and again if the
 dashboard falls behind), then `worker_joined`, `worker_left { worker_id, units_returned }`
-(units it held that go back to the queue), `worker_banned { worker_id, wrong_results,
+(units it held that go back to the queue), `worker_banned { worker, connected, wrong_results,
 units_redone }` (spec 0004),
 `units_completed { units, jobs: [{ job_id, units_done, units_total }], workers: [{ worker_id, units }] }`,
 `job_updated { job }` (created, started, finished). Decided units are announced in

@@ -736,25 +736,33 @@ async fn an_honest_majority_outvotes_cheaters_and_bans_them(db: PgPool) {
     .await;
     assert!(blocked.unwrap_err().to_string().contains("blocked"));
 
-    // Each cheater appeared on the dashboard as banned, with its wrong results, and
-    // then left; nobody else was banned.
+    // Each cheater appeared on the dashboard as banned, once, with its wrong results,
+    // whether it was outvoted while connected or only after it left; and it left.
+    // Nobody else was banned.
     tokio::time::sleep(Duration::from_millis(500)).await;
     let seen = seen.lock().unwrap().clone();
     let banned: Vec<uuid::Uuid> = seen
         .iter()
         .filter_map(|e| match e {
             DashboardEvent::WorkerBanned {
-                worker_id,
+                worker,
                 wrong_results,
                 ..
             } => {
                 assert!(*wrong_results >= 1);
-                Some(*worker_id)
+                Some(worker.id)
             }
             _ => None,
         })
         .collect();
     assert_eq!(banned.len(), cheaters.len(), "{banned:?}");
+    assert_eq!(
+        banned
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len(),
+        banned.len()
+    );
     for worker in &banned {
         assert!(seen.iter().any(
             |e| matches!(e, DashboardEvent::WorkerLeft { worker_id, .. } if worker_id == worker)

@@ -75,7 +75,9 @@ banned (found by the load test, spec 0006).
 A ban is announced to dashboards (`worker_banned`) with the wrong results the client
 returned and the units being computed again; the projector page shows it at once, and
 the device's connection is closed at its next message, also when its ban came from
-another client's result. Jobs can be stopped by the organiser
+another client's result. A cheater may be outvoted only after it left (it finished its
+units before honest devices returned theirs); its ban is still announced, once, for
+devices that left within the last ten minutes. Jobs can be stopped by the organiser
 (`POST /api/jobs/{id}/cancel`, with the submit password).
 
 ## Interaction with lease limits (0002)

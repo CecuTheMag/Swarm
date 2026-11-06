@@ -148,9 +148,10 @@ export function apply(state: DashboardState, event: DashboardEvent, now: number)
 		}
 
 		case 'worker_banned': {
-			const worker = s.workers[event.worker_id];
-			if (!worker) return s;
+			// A cheater may be outvoted only after it left: it is still shown as caught.
+			const worker = s.workers[event.worker.id] ?? event.worker;
 			const { wrong_results, units_redone } = event;
+			if (s.caught[worker.id]) return s;
 			return {
 				...s,
 				totals: {
@@ -161,7 +162,13 @@ export function apply(state: DashboardState, event: DashboardEvent, now: number)
 				},
 				caught: {
 					...s.caught,
-					[worker.id]: { worker, at: now, wrong_results, units_redone, left_at: null }
+					[worker.id]: {
+						worker,
+						at: now,
+						wrong_results,
+						units_redone,
+						left_at: event.connected ? null : now
+					}
 				},
 				...withFeed(s, {
 					at: now,
