@@ -101,6 +101,49 @@ describe('importing a plan', () => {
 		);
 	});
 
+	it('reads pinned hours as a plan writes them (spec 0015)', () => {
+		const school = schoolOf(
+			'Клас;Предмет;Учител;Часове;Закрепени\n' +
+				'8А;Математика;Петрова;4;Пн1 Ср3\n' +
+				'8А;Физика;Колев;2;"пн 2, пт7"\n' +
+				'8А;Химия;Колев;2;\n'
+		);
+		expect(school.lessons.map((l) => l.pinned)).toEqual([
+			[
+				{ day: 0, period: 0 },
+				{ day: 2, period: 2 }
+			],
+			[
+				{ day: 0, period: 1 },
+				{ day: 4, period: 6 }
+			],
+			undefined
+		]);
+		expect('pinned' in school.lessons[2]).toBe(false);
+		expect(exportPlan(school).split('\r\n')[1]).toBe('8А;Математика;Петрова;4;1;;Пн1 Ср3');
+	});
+
+	it('says why pinned hours cannot be read', () => {
+		expect(
+			errorsOf(
+				'Клас;Предмет;Учител;Часове;Закрепени\n' +
+					'8А;Математика;Петрова;4;Сб1\n' +
+					'8Б;Математика;Петрова;4;Пн8\n' +
+					'8В;Математика;Петрова;4;Пн0\n' +
+					'8Г;Математика;Петрова;4;понеделник\n' +
+					'8Д;Математика;Петрова;4;Пн1 пн 1\n' +
+					'8Е;Математика;Петрова;2;Пн1 Вт1 Ср1\n'
+			)
+		).toEqual([
+			'Ред 2: закрепеният час „сб1“ е извън седмицата.',
+			'Ред 3: закрепеният час „пн8“ е извън седмицата.',
+			'Ред 4: закрепеният час „пн0“ е извън седмицата.',
+			'Ред 5: „Закрепени“ не се чете: „понеделник“ (пример: Пн1 Ср3).',
+			'Ред 6: „пн1“ е закрепен два пъти.',
+			'Ред 7: закрепени са 3 часа, а седмично са 2.'
+		]);
+	});
+
 	it('reads back the plan it exports, for every example school', () => {
 		for (const school of schools) {
 			const back = schoolOf(exportPlan(school), school.days, school.periods);

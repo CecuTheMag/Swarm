@@ -3,11 +3,12 @@
 What is left between today's grid and the full README vision, in build order. Each
 item gets its own spec in `docs/specs/` before work starts; this file only orders them.
 
-Status on 2026-11-05: specs 0001–0008 and 0010–0013 implemented (π and path-tracer
+Status on 2026-11-06: specs 0001–0008 and 0010–0015 implemented (π and path-tracer
 templates, leases with expiry, quorum verification with honeypots and reputation, CPU
 fallback, load tests, contributor safety, the chaos panel, networks that clients own
 and operate from the console, neural network sweeps, a network's own programs with
-review for the public network, school timetables) and the server public at
+review for the public network, school timetables with a deputy director's data entry,
+printing, pinned lessons and editing by hand) and the server public at
 `https://swarmrelay.duckdns.org`.
 
 ## Next up, in order (November 2026)
@@ -28,8 +29,9 @@ accounts, devices, the school.
    - ~~printing~~ — done: a page per class or teacher, all classes or all teachers;
    - shifts (a second shift's week) and a class's own room;
    - rounds: later searches continue from the best timetables found so far;
-   - pinning lessons by hand (a fixed slot) and editing the result, with the cost
-     shown live (next spec);
+   - ~~pinning lessons by hand and editing the result~~ — done (spec 0015): pins in the
+     plan and the editor, a found timetable moved hour by hour with each move's cost
+     shown first, kept per job, printed, and searched again around what was pinned;
    - **(owner)** a real school's data, from the deputy director, and their feedback;
      measurements on it and on a public benchmark (XHSTT) in `docs/measurements.md`.
 3. **Real devices (owner)** — a phone on mobile data, an iPhone (Safari's WebGPU), wake

@@ -16,12 +16,13 @@
 		removeLesson,
 		rename,
 		setWeek,
+		togglePin,
 		toggleUnavailable,
 		updateLesson,
 		type Kind,
 		type LessonInput
 	} from '#lib/school/edit.ts';
-	import { defaultMaxPerDay, exportPlan } from '#lib/school/import.ts';
+	import { defaultMaxPerDay, exportPlan, pinsText } from '#lib/school/import.ts';
 	import WeekPicker from '#lib/school/WeekPicker.svelte';
 	import ConfirmButton from '#lib/ui/ConfirmButton.svelte';
 	import type { JobSummary } from '#lib/protocol/JobSummary.ts';
@@ -266,6 +267,42 @@
 		}
 	}
 
+	// Pinned hours (spec 0015): whose week is open, and why a slot cannot be pinned.
+	let pinning = $state<number | null>(null);
+	let pinError = $state<string | null>(null);
+
+	function pin(index: number, slot: TtSlot) {
+		pinError = null;
+		try {
+			togglePin(school!, index, slot);
+		} catch (e) {
+			pinError = failureText(e);
+		}
+	}
+
+	/** Slots lesson `index` cannot be pinned at, and why. */
+	function blockedFor(index: number): (TtSlot & { why: string })[] {
+		const s = school!;
+		const l = s.lessons[index];
+		const out: (TtSlot & { why: string })[] = [];
+		for (const u of s.teachers[l.teacher].unavailable) {
+			out.push({ ...u, why: `${s.teachers[l.teacher].name} отсъства` });
+		}
+		for (const u of s.classes[l.class].unavailable) {
+			out.push({ ...u, why: `${s.classes[l.class].name} няма часове` });
+		}
+		s.lessons.forEach((o, i) => {
+			if (i === index) return;
+			const shares =
+				o.class === l.class || o.teacher === l.teacher || (l.room != null && o.room === l.room);
+			if (!shares) return;
+			for (const p of o.pinned ?? []) {
+				out.push({ ...p, why: `закрепен е ${s.classes[o.class].name} ${o.subject}` });
+			}
+		});
+		return out;
+	}
+
 	function startEditing(index: number) {
 		editing = index;
 		form = inputOf(school!, index);
@@ -470,6 +507,7 @@
 							<th scope="col" class="num">Седмично</th>
 							<th scope="col" class="num">На ден</th>
 							<th scope="col">Стая</th>
+							<th scope="col">Закрепени</th>
 							{#if admin}<th scope="col"><span class="sr-only">Действия</span></th>{/if}
 						</tr>
 					</thead>
@@ -482,6 +520,7 @@
 								<td class="num">{l.per_week}</td>
 								<td class="num">{l.max_per_day}</td>
 								<td>{l.room == null ? '' : school.rooms[l.room].name}</td>
+								<td data-testid="lesson-pins">{pinsText(l.pinned)}</td>
 								{#if admin}
 									<td class="row-actions">
 										<button type="button" class="ghost sm" onclick={() => startEditing(index)}
@@ -490,10 +529,21 @@
 										<button
 											type="button"
 											class="ghost sm"
+											aria-expanded={pinning === index}
+											data-testid="pin-lesson"
+											onclick={() => {
+												pinError = null;
+												pinning = pinning === index ? null : index;
+											}}>Закрепи</button
+										>
+										<button
+											type="button"
+											class="ghost sm"
 											data-testid="remove-lesson"
 											onclick={() => {
 												edit(() => removeLesson(school!, index));
 												editing = null;
+												pinning = null;
 											}}>Махни</button
 										>
 									</td>
@@ -503,6 +553,32 @@
 					</tbody>
 				</table>
 			</div>
+			{#if admin && pinning !== null && school.lessons[pinning]}
+				{@const l = school.lessons[pinning]}
+				{@const index = pinning}
+				<div class="pins" data-testid="pin-picker">
+					<h3>Закрепени часове: {school.classes[l.class].name} {l.subject}</h3>
+					<p class="muted small">
+						Закрепените часове остават, където са сложени: търсенето нарежда другите около тях.
+						{l.pinned?.length ?? 0} от {l.per_week} закрепени.
+					</p>
+					<WeekPicker
+						mode="pin"
+						days={school.days}
+						periods={school.periods}
+						marked={l.pinned ?? []}
+						blocked={blockedFor(index)}
+						label="Закрепени часове на {school.classes[l.class].name} {l.subject}"
+						ontoggle={(slots) => pin(index, slots[0])}
+					/>
+					{#if pinError}<p class="notice bad" role="alert" data-testid="pin-error">
+							{pinError}
+						</p>{/if}
+					<button type="button" class="secondary sm" onclick={() => (pinning = null)}
+						>Затвори</button
+					>
+				</div>
+			{/if}
 			{#if admin}
 				<form class="lesson-form" onsubmit={submitLesson} data-testid="lesson-form">
 					<label
@@ -650,7 +726,7 @@
 							<WeekPicker
 								days={school.days}
 								periods={school.periods}
-								away={(kind === 'class' ? school.classes : school.teachers)[index].unavailable}
+								marked={(kind === 'class' ? school.classes : school.teachers)[index].unavailable}
 								label="Часове, в които {entry.name} отсъства"
 								ontoggle={(slots) => (admin ? toggle(kind, index, slots) : undefined)}
 							/>
@@ -799,6 +875,19 @@
 	}
 	tr.editing td {
 		background: var(--brand-soft);
+	}
+	.pins {
+		margin-top: var(--s-4);
+		display: grid;
+		gap: var(--s-2);
+		justify-items: start;
+	}
+	.pins h3 {
+		margin: 0;
+		font-size: var(--text-md);
+	}
+	.pins :global(.table-wrap) {
+		width: 100%;
 	}
 	.row-actions {
 		white-space: nowrap;

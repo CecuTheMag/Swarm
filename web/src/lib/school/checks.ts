@@ -2,6 +2,7 @@
 // a search starts (spec 0014). These are counts only: a school that passes can still have
 // no valid timetable, and the search then reports its conflicts.
 
+import { atSlot, forSlot } from '#lib/console/timetable.ts';
 import type { TtSchool } from '#lib/protocol/TtSchool.ts';
 
 export interface Finding {
@@ -64,6 +65,58 @@ export function check(school: TtSchool): Finding[] {
 			});
 		}
 	});
+
+	// Pinned hours (spec 0015) the school itself makes impossible: at a slot their
+	// teacher or class is away, or two of one teacher, class or room at one slot.
+	const lessonName = (l: TtSchool['lessons'][number]) =>
+		`${school.classes[l.class]?.name ?? '?'}, ${l.subject}`;
+	const pinnedAt = new Map<string, number[]>();
+	school.lessons.forEach((l, index) => {
+		for (const s of l.pinned ?? []) {
+			const at = forSlot(s.day, s.period);
+			const away = (list: { day: number; period: number }[] | undefined) =>
+				(list ?? []).some((u) => u.day === s.day && u.period === s.period);
+			const teacher = school.teachers[l.teacher];
+			if (teacher && away(teacher.unavailable)) {
+				found.push({
+					level: 'problem',
+					about: { kind: 'lesson', index },
+					text: `${lessonName(l)}: закрепен ${at}, когато ${teacher.name} отсъства.`
+				});
+			}
+			if (away(school.classes[l.class]?.unavailable)) {
+				found.push({
+					level: 'problem',
+					about: { kind: 'lesson', index },
+					text: `${lessonName(l)}: закрепен ${at}, когато паралелката няма часове.`
+				});
+			}
+			const keys = [`teacher ${l.teacher}`, `class ${l.class}`];
+			if (l.room != null) keys.push(`room ${l.room}`);
+			for (const k of keys) {
+				const slot = `${k} ${s.day} ${s.period}`;
+				pinnedAt.set(slot, [...(pinnedAt.get(slot) ?? []), index]);
+			}
+		}
+	});
+	for (const [slot, lessons] of pinnedAt) {
+		if (lessons.length < 2) continue;
+		const [kind, which, day, period] = slot.split(' ');
+		const i = Number(which);
+		const at = atSlot(Number(day), Number(period));
+		const list = lessons.map((l) => lessonName(school.lessons[l])).join(' и ');
+		const who =
+			kind === 'teacher'
+				? school.teachers[i]?.name
+				: kind === 'class'
+					? school.classes[i]?.name
+					: school.rooms[i]?.name;
+		found.push({
+			level: 'problem',
+			about: { kind: 'lesson', index: lessons[1] },
+			text: `${who} има ${lessons.length} закрепени часа ${at}: ${list}.`
+		});
+	}
 
 	school.lessons.forEach((l, index) => {
 		if (l.per_week > l.max_per_day * school.days) {

@@ -99,4 +99,52 @@ describe('school checks', () => {
 			}
 		]);
 	});
+
+	it('find pinned hours the school itself rules out (spec 0015)', () => {
+		const s = school();
+		s.teachers[0].unavailable = [{ day: 1, period: 2 }];
+		s.classes[0].unavailable = [{ day: 0, period: 2 }];
+		s.lessons[0].pinned = [
+			{ day: 1, period: 2 },
+			{ day: 0, period: 2 },
+			{ day: 0, period: 0 }
+		];
+		s.lessons[1].pinned = [{ day: 0, period: 0 }];
+		expect(check(s).map((f) => [f.level, f.about, f.text])).toEqual([
+			[
+				'problem',
+				{ kind: 'lesson', index: 0 },
+				'8А, Математика: закрепен за вторник, 3. час, когато Петрова отсъства.'
+			],
+			[
+				'problem',
+				{ kind: 'lesson', index: 0 },
+				'8А, Математика: закрепен за понеделник, 3. час, когато паралелката няма часове.'
+			],
+			[
+				'problem',
+				{ kind: 'lesson', index: 1 },
+				'8А има 2 закрепени часа в понеделник, 1. час: 8А, Математика и 8А, Физическо.'
+			]
+		]);
+		// A teacher and a room are found as the class is.
+		const t = school();
+		t.classes.push({ name: '8Б', unavailable: [] });
+		t.lessons.push({
+			class: 1,
+			teacher: 0,
+			subject: 'Математика',
+			per_week: 1,
+			room: 0,
+			max_per_day: 1
+		});
+		t.lessons[1].pinned = [{ day: 1, period: 1 }];
+		t.lessons[2].pinned = [{ day: 1, period: 1 }];
+		t.lessons[0].pinned = [{ day: 1, period: 1 }];
+		expect(check(t).map((f) => f.text)).toEqual([
+			'Петрова има 2 закрепени часа във вторник, 2. час: 8А, Математика и 8Б, Математика.',
+			'8А има 2 закрепени часа във вторник, 2. час: 8А, Математика и 8А, Физическо.',
+			'Салон има 2 закрепени часа във вторник, 2. час: 8А, Физическо и 8Б, Математика.'
+		]);
+	});
 });

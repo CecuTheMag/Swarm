@@ -1,6 +1,6 @@
 # 0014 — A school's data, entered by its deputy director
 
-Status: implemented (pinning lessons and editing a found timetable are next)
+Status: implemented (pinning lessons and editing a found timetable: spec 0015)
 
 ## Problem
 

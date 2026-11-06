@@ -11,6 +11,7 @@ import {
 	removeLesson,
 	rename,
 	setWeek,
+	togglePin,
 	toggleUnavailable,
 	updateLesson,
 	type LessonInput
@@ -143,5 +144,49 @@ describe('editing a school', () => {
 		expect(() => setWeek(s, 0, 5)).toThrow('Дните');
 		expect(() => setWeek(s, 5, 13)).toThrow('Часовете');
 		expect([s.days, s.periods]).toEqual([4, 5]);
+	});
+
+	it('pins hours and unpins them, up to the hours a week (spec 0015)', () => {
+		const s = emptySchool('ПМГ');
+		addLesson(s, lesson({ per_week: 2 }));
+		togglePin(s, 0, { day: 2, period: 1 });
+		togglePin(s, 0, { day: 0, period: 3 });
+		expect(s.lessons[0].pinned).toEqual([
+			{ day: 0, period: 3 },
+			{ day: 2, period: 1 }
+		]);
+		expect(() => togglePin(s, 0, { day: 4, period: 0 })).toThrow(
+			'Математика има 2 часа седмично и всички са закрепени'
+		);
+		expect(() => togglePin(s, 0, { day: 5, period: 0 })).toThrow('извън седмицата');
+		togglePin(s, 0, { day: 2, period: 1 });
+		togglePin(s, 0, { day: 0, period: 3 });
+		// No pins, no `pinned`: the school reads as one from before pins.
+		expect('pinned' in s.lessons[0]).toBe(false);
+	});
+
+	it('keeps pins through a change of the lesson and of the week, where they fit', () => {
+		const s = emptySchool('ПМГ');
+		addLesson(s, lesson({ per_week: 3 }));
+		for (const slot of [
+			{ day: 0, period: 0 },
+			{ day: 1, period: 6 },
+			{ day: 4, period: 2 }
+		])
+			togglePin(s, 0, slot);
+		updateLesson(s, 0, lesson({ per_week: 3, teacher: 'Колев' }));
+		expect(s.lessons[0].pinned?.length).toBe(3);
+		updateLesson(s, 0, lesson({ per_week: 2 }));
+		expect(s.lessons[0].pinned).toEqual([
+			{ day: 0, period: 0 },
+			{ day: 1, period: 6 }
+		]);
+		setWeek(s, 5, 6);
+		expect(s.lessons[0].pinned).toEqual([{ day: 0, period: 0 }]);
+		setWeek(s, 5, 1);
+		expect(s.lessons[0].pinned).toEqual([{ day: 0, period: 0 }]);
+		setWeek(s, 1, 1);
+		togglePin(s, 0, { day: 0, period: 0 });
+		expect('pinned' in s.lessons[0]).toBe(false);
 	});
 });

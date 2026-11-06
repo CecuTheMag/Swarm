@@ -104,7 +104,45 @@ export function setWeek(school: TtSchool, days: number, periods: number) {
 	for (const t of school.teachers) {
 		if (t.max_per_day != null && t.max_per_day > periods) t.max_per_day = periods;
 	}
-	for (const l of school.lessons) l.max_per_day = Math.min(l.max_per_day, periods);
+	for (const l of school.lessons) {
+		l.max_per_day = Math.min(l.max_per_day, periods);
+		setPins(l, (l.pinned ?? []).filter(inWeek));
+	}
+}
+
+type Lesson = TtSchool['lessons'][number];
+
+/** A lesson's pins in slot order, or none: a school without pins has no `pinned`. */
+function setPins(lesson: Lesson, pins: TtSlot[]) {
+	if (pins.length === 0) {
+		delete lesson.pinned;
+		return;
+	}
+	lesson.pinned = pins
+		.map((s) => ({ day: s.day, period: s.period }))
+		.sort((a, b) => a.day - b.day || a.period - b.period);
+}
+
+/** Pins an hour of a lesson at a slot, or unpins it (spec 0015). */
+export function togglePin(school: TtSchool, index: number, slot: TtSlot) {
+	const l = school.lessons[index];
+	const pins = l.pinned ?? [];
+	if (pins.some((s) => sameSlot(s, slot))) {
+		setPins(
+			l,
+			pins.filter((s) => !sameSlot(s, slot))
+		);
+		return;
+	}
+	if (slot.day >= school.days || slot.period >= school.periods) {
+		throw new Error('Часът е извън седмицата.');
+	}
+	if (pins.length >= l.per_week) {
+		throw new Error(
+			`${l.subject} има ${l.per_week} ${l.per_week === 1 ? 'час' : 'часа'} седмично и всички са закрепени. Първо откачете един.`
+		);
+	}
+	setPins(l, [...pins, slot]);
 }
 
 export interface LessonInput {
@@ -155,9 +193,12 @@ export function addLesson(school: TtSchool, input: LessonInput): number {
 	return school.lessons.push(lessonOf(school, input)) - 1;
 }
 
-/** Changes a lesson the same way. */
+/** Changes a lesson the same way; it keeps its pins, as many as its new hours allow. */
 export function updateLesson(school: TtSchool, index: number, input: LessonInput) {
-	school.lessons[index] = lessonOf(school, input);
+	const pins = school.lessons[index].pinned ?? [];
+	const lesson: Lesson = lessonOf(school, input);
+	setPins(lesson, pins.slice(0, lesson.per_week));
+	school.lessons[index] = lesson;
 }
 
 export function removeLesson(school: TtSchool, index: number) {

@@ -2,6 +2,7 @@
 // and the tests run it.
 
 import { toBase64 } from './bytes.ts';
+import type { TtCost } from '#lib/protocol/TtCost.ts';
 
 export interface TtExports {
 	memory: WebAssembly.Memory;
@@ -41,3 +42,42 @@ export function solveTimetable(
 
 /** A unit's output as the coordinator takes it. */
 export const ttOutput = (s: TtSearch) => ({ slots: toBase64(s.slots), cost: s.cost });
+
+/** The exports that score a timetable a person edits (spec 0015). */
+export interface TtScoreExports {
+	memory: WebAssembly.Memory;
+	tt_school(len: number): number;
+	tt_prepare(): number;
+	tt_timetable(hours: number): number;
+	tt_score(): number;
+	tt_out(): number;
+}
+
+/**
+ * Scores timetables of `school` (its JSON bytes) exactly as the coordinator does, for as
+ * long as no other school is prepared in the module.
+ */
+export function timetableScorer(
+	k: TtScoreExports,
+	school: Uint8Array
+): (slots: ArrayLike<number>) => TtCost {
+	// The buffer is read after each call that may grow the memory, as in `solveTimetable`.
+	const at = k.tt_school(school.length);
+	new Uint8Array(k.memory.buffer, at, school.length).set(school);
+	const hours = k.tt_prepare();
+	if (hours < 0) throw new Error('the school is not valid');
+	return (slots) => {
+		if (slots.length !== hours) {
+			throw new Error(`${slots.length} slots for ${hours} lesson hours`);
+		}
+		const slotsAt = k.tt_timetable(hours);
+		const view = new DataView(k.memory.buffer, slotsAt, hours * 2);
+		for (let i = 0; i < hours; i++) view.setUint16(i * 2, slots[i], true);
+		const len = k.tt_score();
+		const out = k.tt_out();
+		const text = new TextDecoder().decode(new Uint8Array(k.memory.buffer, out, len));
+		const score = JSON.parse(text) as { cost: TtCost } | { error: string };
+		if ('error' in score) throw new Error(score.error);
+		return score.cost;
+	};
+}
