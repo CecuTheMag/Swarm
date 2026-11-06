@@ -110,7 +110,12 @@ test('a client creates a network, adds a device by its link and operates it', as
 	await viewer.getByTestId('invite-email').fill(`teacher-${Date.now()}@school.bg`);
 	await viewer.getByTestId('invite-password').fill('a teacher password');
 	await viewer.getByRole('button', { name: 'Създай профил' }).click();
-	await expect(viewer.getByTestId('network-title')).toHaveText('Кабинет 12');
+	// The console's first load in a new browser, while three devices compute in the same
+	// browser: on the two-core CI runner WebKit went 3.5 s without a frame here (trace of
+	// run 42254848621; every request answered in under 100 ms).
+	await expect(viewer.getByTestId('network-title')).toHaveText('Кабинет 12', {
+		timeout: 30_000
+	});
 	await expect(viewer.getByTestId('pause-network')).toHaveCount(0);
 
 	// Removed: the device stops and is told why.
@@ -120,10 +125,13 @@ test('a client creates a network, adds a device by its link and operates it', as
 	await first.getByTestId('remove-device').click();
 	const removed = [device, newcomer];
 	await expect
-		.poll(async () => {
-			const states = await Promise.all(removed.map((d) => status(d).getAttribute('data-status')));
-			return states.filter((s) => s === 'stopped').length;
-		})
+		.poll(
+			async () => {
+				const states = await Promise.all(removed.map((d) => status(d).getAttribute('data-status')));
+				return states.filter((s) => s === 'stopped').length;
+			},
+			{ timeout: 30_000 }
+		)
 		.toBe(1);
 
 	// Clean up: the network and its devices go, so later tests start empty.
