@@ -1,9 +1,11 @@
 <script lang="ts">
 	// The best timetable a job's searches found (spec 0013), per class and per teacher.
+	import { tick } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { api, failureText } from '#lib/api.ts';
 	import { useNetwork } from '#lib/console/networks.svelte.ts';
+	import PrintSheets from '#lib/console/PrintSheets.svelte';
 	import TimetableGrid from '#lib/console/TimetableGrid.svelte';
 	import {
 		brokenRules,
@@ -58,6 +60,21 @@
 		a.click();
 		URL.revokeObjectURL(a.href);
 	}
+	/** What the next print puts on paper: one page per class or teacher. */
+	let sheets = $state<View[]>([]);
+	async function print(which: 'shown' | 'class' | 'teacher') {
+		if (!school) return;
+		sheets =
+			which === 'shown'
+				? [view]
+				: (which === 'class' ? school.classes : school.teachers).map((_, index) => ({
+						kind: which,
+						index
+					}));
+		await tick();
+		window.print();
+	}
+
 	const fileName = $derived(`razpisanie-${jobId.slice(0, 8)}`);
 	function saveCsv() {
 		if (school) save(`${fileName}.csv`, 'text/csv', csv(school, placed));
@@ -119,6 +136,12 @@
 			<div class="actions">
 				<button class="secondary sm" onclick={saveCsv} data-testid="save-csv">Изтегли CSV</button>
 				<button class="secondary sm" onclick={saveJson}>Изтегли JSON</button>
+				<button class="secondary sm" onclick={() => print('class')} data-testid="print-classes"
+					>Печат: всички паралелки</button
+				>
+				<button class="secondary sm" onclick={() => print('teacher')} data-testid="print-teachers"
+					>Печат: всички учители</button
+				>
 			</div>
 		{/if}
 	</section>
@@ -149,7 +172,14 @@
 				</select>
 			</div>
 			<TimetableGrid {cells} days={school.days} kind={view.kind} />
+			<button
+				class="secondary sm print-one"
+				onclick={() => print('shown')}
+				data-testid="print-shown"
+				>Печат на {view.kind === 'class' ? 'паралелката' : 'учителя'}</button
+			>
 		</section>
+		{#if sheets.length > 0}<PrintSheets {school} {placed} {sheets} />{/if}
 
 		<section class="card">
 			<h2>Всички търсения</h2>
@@ -198,6 +228,9 @@
 	}
 	.pick {
 		margin-bottom: var(--s-3);
+	}
+	.print-one {
+		margin-top: var(--s-3);
 	}
 	.spread {
 		display: flex;

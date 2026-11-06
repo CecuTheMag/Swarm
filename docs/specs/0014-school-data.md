@@ -1,6 +1,6 @@
 # 0014 — A school's data, entered by its deputy director
 
-Status: in progress
+Status: implemented (pinning lessons and editing a found timetable are next)
 
 ## Problem
 
@@ -47,12 +47,14 @@ with the columns Паралелка, Предмет, Учител, Часове 
 cannot be read is reported with its line number and why; nothing is imported until every
 row reads. A JSON school (spec 0013) imports as it is.
 
-**Checks, live.** Before a search can start, the editor lists what makes the school
-impossible, in words: a class with more hours than the week has periods left to it, a
-teacher with more hours than the hours they are available, a room needed more hours than
-the week has, a lesson more often a day than allowed times the days. Each names the
-class, teacher or room. These are necessary conditions only: a school can pass them and
-still have no valid timetable, which the search then reports as hard conflicts.
+**Checks, live.** Before a search can start, the editor lists, in words and naming the
+class, teacher or room, what makes the school impossible (**problems**, which block the
+search): a class with more hours than its week has periods left to it, a teacher with
+more hours than the hours they are available, a room needed more hours than the week has.
+It also lists the soft rules that cannot all be met (**warnings**, which do not block):
+a subject more often a week than its daily limit times the days, a teacher with more
+hours than their daily limit times the days. These are counts only: a school can pass
+them and still have no valid timetable, which the search then reports as hard conflicts.
 
 **Searching.** „Търси разписание“ starts a timetable job (spec 0013) from the saved
 school. The job keeps its own copy: later edits, or deleting the school, leave it as it
@@ -60,10 +62,9 @@ was searched.
 
 ## Printing
 
-The timetable page prints: one page per class, one per teacher, or the whole school
-(each class on its own page), A4 landscape, without the console around it, with the
-school's name, the term and the date it was printed. The browser's own print dialog saves
-it as PDF.
+The timetable page prints the class or teacher shown, every class, or every teacher,
+each on its own A4 landscape page, without the console around it, with the school's name
+and the date it was printed. The browser's own print dialog saves it as PDF.
 
 ## Acceptance criteria
 

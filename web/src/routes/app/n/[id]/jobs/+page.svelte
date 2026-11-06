@@ -424,6 +424,10 @@
 						/></label
 					>
 				{/if}
+				<p class="muted">
+					Своето училище въведете или внесете от таблица в раздел
+					<a href={resolve('/app/n/[id]/schools', { id })}>„Училища“</a> и търсете разписание оттам.
+				</p>
 				<div class="segmented stack-sm" role="group" aria-label="Колко да се търси">
 					<button
 						type="button"
