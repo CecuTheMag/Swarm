@@ -492,3 +492,33 @@ mod tests {
         }
     }
 }
+
+/// A found timetable as a person edited it (spec 0015).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct TimetableEdit {
+    /// Base64 of one little-endian `u16` slot per lesson hour, as the job's result.
+    pub slots: String,
+    /// Hours to keep where they are in the next search, by index.
+    pub pinned: Vec<u32>,
+    /// Its cost, as the coordinator computed it.
+    pub cost: templates::tt::Cost,
+    /// Grows with every save.
+    pub version: u32,
+    #[ts(type = "number")]
+    pub updated_at: i64,
+    /// The account that saved it last, if it still exists.
+    pub updated_by: Option<String>,
+}
+
+/// Saves an edited timetable, edited from `version`; none for the first edit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct SaveTimetableEdit {
+    pub slots: String,
+    pub pinned: Vec<u32>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub version: Option<u32>,
+}

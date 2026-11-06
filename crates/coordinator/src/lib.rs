@@ -7,6 +7,7 @@ pub mod auth;
 pub mod catalog;
 pub mod chaos;
 pub mod db;
+pub mod edits;
 pub mod hours;
 pub mod networks;
 pub mod render;
@@ -124,6 +125,11 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/timetables/example", get(api::example_school))
         .route("/api/networks/{id}/jobs/{job}", get(networks::get_job))
+        // A found timetable as a person edited it (spec 0015).
+        .route(
+            "/api/networks/{id}/jobs/{job}/timetable",
+            get(edits::get).put(edits::save).delete(edits::drop),
+        )
         .route(
             "/api/networks/{id}/jobs/{job}/cancel",
             post(networks::cancel_job),
