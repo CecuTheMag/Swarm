@@ -15,20 +15,21 @@ review for the public network, school timetables) and the server public at
 Registration closes on 25 November. Items marked **(owner)** need the owner in person:
 accounts, devices, the school.
 
-1. **Reliable CI** — the console browser test waits 5 s for a paused device to show
-   „held“ while it finishes the unit in hand, and the chaos test waits 60 s for a job in
-   Firefox; both fail at times on the two-core CI runner. Widen those waits to what the
-   runner needs, and let `cargo test` run (each test file opens more PostgreSQL
-   connections than the server allows: fewer per test pool, or a higher limit in the
-   test database).
-2. **Timetables for a real school** (spec 0013, next spec 0014):
-   - data entry for a deputy director: teachers, classes, rooms and lessons as tables in
-     the console, import from a spreadsheet (CSV from Excel), the school's own week
-     (days, periods, shifts), unavailable slots by clicking a grid;
-   - printing: a page per class and per teacher, and the whole school on one sheet;
+1. ~~**Reliable CI**~~ — done 6 November: browsers cached and a stalled package mirror
+   fails over; failures keep traces; pause and hold waits sized to a unit; `cargo test`
+   runs four tests at a time per binary; sign-in optimised in debug builds. Two real bugs
+   found on the way (a cheater outvoted after leaving was never shown as caught; example
+   schools had namesakes). Left: one Firefox run in four full rounds kept „computing“
+   after a pause with only short units queued; not reproduced in six Firefox-only rounds.
+2. **Timetables for a real school** (specs 0013, 0014):
+   - ~~data entry for a deputy director~~ — done (spec 0014): the plan imported from a
+     spreadsheet, the week, teachers, classes and rooms, hours away on a grid, checks
+     before a search, versioned saves;
+   - ~~printing~~ — done: a page per class or teacher, all classes or all teachers;
+   - shifts (a second shift's week) and a class's own room;
    - rounds: later searches continue from the best timetables found so far;
    - pinning lessons by hand (a fixed slot) and editing the result, with the cost
-     shown live;
+     shown live (next spec);
    - **(owner)** a real school's data, from the deputy director, and their feedback;
      measurements on it and on a public benchmark (XHSTT) in `docs/measurements.md`.
 3. **Real devices (owner)** — a phone on mobile data, an iPhone (Safari's WebGPU), wake
