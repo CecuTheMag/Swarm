@@ -1,7 +1,7 @@
 // The Rust reference kernels in the console, to score a timetable a person edits exactly
 // as the coordinator does (spec 0015). Loaded once, on first use.
 
-import { kernelsWasmUrl } from '#lib/templates.ts';
+import { kernelsWasmUrl } from '#lib/kernels-wasm.ts';
 import type { TtScoreExports } from '#lib/tt.ts';
 
 let kernels: Promise<TtScoreExports> | undefined;

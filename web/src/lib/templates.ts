@@ -11,6 +11,4 @@ export { default as nnVectors } from '../../../templates/nn/vectors.json';
 export { default as ttVectorsText } from '../../../templates/tt/vectors.json?raw';
 // `mnist` packed at 14 × 14 (tools/pack_mnist.py); devices download it once, cached.
 export { default as mnistUrl } from '../../../templates/nn/mnist14.bin?url';
-// The Rust reference kernels compiled to WebAssembly (crates/kernels-wasm), the
-// CPU fallback for devices without WebGPU. The Vite config builds it.
-export { default as kernelsWasmUrl } from '../../../target/wasm32-unknown-unknown/release/kernels_wasm.wasm?url';
+export { kernelsWasmUrl } from './kernels-wasm.ts';

@@ -55,9 +55,10 @@
 	let selected = $state<number | null>(null);
 	let score = $state<((slots: number[]) => TtCost) | null>(null);
 
-	// A new job (after „Търси отново“) starts from nothing on the same page.
+	// A new job (after „Търси отново“) starts from nothing on the same page, before it is
+	// drawn: the last job's timetable is never shown under the new job's address.
 	let shownFor = '';
-	$effect(() => {
+	$effect.pre(() => {
 		if (shownFor === jobId) return;
 		shownFor = jobId;
 		job = null;
@@ -363,7 +364,7 @@
 {#if error}<p class="notice bad" role="alert" data-testid="timetable-error">{error}</p>{/if}
 
 {#if job && school}
-	<section class="card">
+	<section class="card" data-testid="timetable-job" data-job={job.id}>
 		<h2>{school.name}</h2>
 		{#if !result || !slots}
 			<p class="muted" data-testid="timetable-progress">
