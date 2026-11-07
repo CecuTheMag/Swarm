@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test, type Page } from '@playwright/test';
-import { signIn, UNIT_TIMEOUT } from './submit.ts';
+import { UNIT_TIMEOUT, deleteNetwork, signIn } from './submit.ts';
 
 // Spec 0010 in the browser: a client creates a network, adds devices with its link,
 // sees them live and operates them.
@@ -135,10 +135,7 @@ test('a client creates a network, adds a device by its link and operates it', as
 		.toBe(1);
 
 	// Clean up: the network and its devices go, so later tests start empty.
-	await page.goto(`${networkUrl}/rules`);
-	await page.getByTestId('delete-network').click();
-	await page.getByTestId('delete-network').click();
-	await page.waitForURL(/\/app$/);
+	await deleteNetwork(page, networkUrl);
 	await viewerContext.close();
 	await device.context().close();
 	await newcomer.context().close();

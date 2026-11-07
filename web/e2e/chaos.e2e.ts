@@ -11,7 +11,7 @@ test('the organiser switches a device off and adds a cheater that is caught', as
 	context,
 	request
 }) => {
-	test.setTimeout(120_000);
+	test.setTimeout(240_000);
 	const job = async (data: object) => {
 		const res = await request.post('/api/jobs', { headers: SUBMIT_HEADERS, data });
 		expect(res.status()).toBe(201);
@@ -62,7 +62,9 @@ test('the organiser switches a device off and adds a cheater that is caught', as
 		await expect(page.getByTestId('chaos-message')).toContainText('Измамник се включва');
 		await expect(page.getByTestId('caught-count')).toHaveText('1', { timeout: 60_000 });
 		await expect(page.getByTestId('feed')).toContainText('Хванат измамник');
-		await expect.poll(() => status(render.id), { timeout: 60_000 }).toBe('done');
+		// One device renders 256 tiles in software: on a slow CI runner 223 were done
+		// after a minute (run 42278907355).
+		await expect.poll(() => status(render.id), { timeout: 120_000 }).toBe('done');
 	} finally {
 		await request.post(`/api/jobs/${render.id}/cancel`, { headers: SUBMIT_HEADERS });
 		await worker.getByRole('button', { name: 'Спри' }).click();

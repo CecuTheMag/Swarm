@@ -3,7 +3,7 @@
 // kept, printed, given back, and searched again around the hours pinned.
 
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { signIn } from './submit.ts';
+import { deleteNetwork, signIn } from './submit.ts';
 
 /** Two classes of ten hours; 8А's PE is pinned at Monday's first period. */
 const PLAN =
@@ -15,6 +15,12 @@ const PLAN =
 	'8Б;Математика;Иван Петров;4;2;;\n' +
 	'8Б;Физическо възпитание и спорт;Георги Иванов;2;1;Салон;\n';
 
+/**
+ * How long a step may take on a starved CI runner: WebKit there has gone seconds
+ * without running the page's scripts while devices computed (CI run 42278907355).
+ */
+const STARVED = 30_000;
+
 /** The cell of `period` and `day` (from 0) in a week's grid. */
 const cell = (grid: Locator, period: number, day: number) =>
 	grid.locator(`tbody tr:nth-child(${period + 1}) td:nth-of-type(${day + 1})`);
@@ -22,6 +28,7 @@ const cell = (grid: Locator, period: number, day: number) =>
 /** The first target whose preview breaks `hard` more rules (or more than 0 for 'any'). */
 async function target(grid: Locator, hard: number | 'any') {
 	const all = grid.getByTestId('target');
+	await expect(all.first()).toBeVisible({ timeout: STARVED });
 	const found = await all.evaluateAll(
 		(els, want) =>
 			els.findIndex((e) => {
@@ -39,7 +46,13 @@ async function target(grid: Locator, hard: number | 'any') {
 	};
 }
 
+/** Waits until the page shows the timetable of the job in its address, searched. */
 async function waitForTimetable(page: Page) {
+	await page.waitForURL(/\/jobs\/[0-9a-f-]{36}\/timetable$/);
+	const job = new URL(page.url()).pathname.split('/').at(-2)!;
+	await expect(page.getByTestId('timetable-job')).toHaveAttribute('data-job', job, {
+		timeout: STARVED
+	});
 	await expect(page.getByTestId('timetable-valid')).toBeVisible({ timeout: 120_000 });
 }
 
@@ -100,7 +113,8 @@ test('a deputy director pins lessons, edits the timetable found, and searches ag
 
 	// Editing: hours pinned in the school do not move.
 	await page.getByTestId('edit-timetable').click();
-	await expect(page.getByTestId('edit-toolbar')).toBeVisible();
+	// Editing starts once the WebAssembly scorer has loaded.
+	await expect(page.getByTestId('edit-toolbar')).toBeVisible({ timeout: STARVED });
 	await expect(grid.locator('button[data-testid="hour"][disabled]')).toHaveCount(1);
 	const maths = grid
 		.locator('button[data-testid="hour"]:not([disabled])', { hasText: 'Математика' })
@@ -173,13 +187,12 @@ test('a deputy director pins lessons, edits the timetable found, and searches ag
 	await waitForTimetable(page);
 	await expect(page.getByTestId('timetable-valid')).toHaveAttribute('data-valid', 'true');
 	await expect(page.getByTestId('edit-state')).toHaveCount(0);
-	await expect(cell(grid, free.period, free.day)).toContainText(/Математика\s*🔒/);
+	await expect(cell(grid, free.period, free.day)).toContainText(/Математика\s*🔒/, {
+		timeout: STARVED
+	});
 	await expect(cell(grid, 0, 0)).toContainText(/Физическо възпитание и спорт\s*🔒/);
 
 	// Clean up: later tests start with an empty network list.
 	await device.context().close();
-	await page.goto(`${url}/rules`);
-	await page.getByTestId('delete-network').click();
-	await page.getByTestId('delete-network').click();
-	await page.waitForURL(/\/app$/);
+	await deleteNetwork(page, url);
 });

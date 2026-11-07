@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { signIn } from './submit.ts';
+import { deleteNetwork, signIn } from './submit.ts';
 
 // Spec 0011 in the browser: a sweep of small neural networks trains on a device of the
 // network, through the real kernels (GPU or CPU), and the console ranks it.
@@ -61,9 +61,6 @@ test('a neural network sweep trains on a device and is ranked', async ({ page, b
 	await expect(page.getByTestId('digit-guess')).toHaveText('–');
 
 	// Clean up: later tests start with an empty network list.
-	await page.goto(`${networkUrl}/rules`);
-	await page.getByTestId('delete-network').click();
-	await page.getByTestId('delete-network').click();
-	await page.waitForURL(/\/app$/);
+	await deleteNetwork(page, networkUrl);
 	await context.close();
 });

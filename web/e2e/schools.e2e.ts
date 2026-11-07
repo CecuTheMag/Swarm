@@ -2,7 +2,7 @@
 // kept between visits, searched for on the school's devices, and printed.
 
 import { expect, test, type Page } from '@playwright/test';
-import { signIn } from './submit.ts';
+import { deleteNetwork, signIn } from './submit.ts';
 
 /** The plan as Excel saves it in a Bulgarian locale: `;`, a byte order mark, CRLF. */
 const PLAN =
@@ -141,7 +141,10 @@ test('a deputy director imports the plan, corrects it, searches and prints', asy
 	await device.getByRole('button', { name: 'Включи се' }).click();
 	await expect(job).toHaveAttribute('data-status', 'done', { timeout: 120_000 });
 	await job.getByTestId('timetable-link').click();
-	await expect(page.getByTestId('timetable-valid')).toHaveAttribute('data-valid', 'true');
+	// WebKit on a starved CI runner has run the page's scripts seconds late (run 42278907355).
+	await expect(page.getByTestId('timetable-valid')).toHaveAttribute('data-valid', 'true', {
+		timeout: 30_000
+	});
 	await page.getByTestId('view-teachers').click();
 	await page.getByTestId('timetable-pick').selectOption({ label: 'Мария Петрова' });
 	const wednesday = page.getByTestId('timetable-grid').locator('tbody tr td:nth-of-type(3)');
@@ -168,8 +171,5 @@ test('a deputy director imports the plan, corrects it, searches and prints', asy
 
 	// Clean up: later tests start with an empty network list.
 	await device.context().close();
-	await page.goto(`${url}/rules`);
-	await page.getByTestId('delete-network').click();
-	await page.getByTestId('delete-network').click();
-	await page.waitForURL(/\/app$/);
+	await deleteNetwork(page, url);
 });

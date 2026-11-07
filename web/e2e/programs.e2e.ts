@@ -4,7 +4,7 @@
 
 import { readFileSync } from 'node:fs';
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { signIn } from './submit.ts';
+import { deleteNetwork, signIn } from './submit.ts';
 import type { JobOutputs } from '../src/lib/protocol/JobOutputs.ts';
 import type { JobSummary } from '../src/lib/protocol/JobSummary.ts';
 
@@ -37,13 +37,6 @@ async function createNetwork(page: Page, name: string) {
 }
 
 /** Clean up: later tests start with an empty network list. */
-async function deleteNetwork(page: Page, url: string) {
-	await page.goto(`${url}/rules`);
-	await page.getByTestId('delete-network').click();
-	await page.getByTestId('delete-network').click();
-	await page.waitForURL(/\/app$/);
-}
-
 async function uploadProgram(page: Page, url: string, fixture: string) {
 	await page.goto(`${url}/programs`);
 	await page.getByTestId('program-name').fill(fixture);

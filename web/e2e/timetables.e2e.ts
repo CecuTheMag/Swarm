@@ -3,7 +3,7 @@
 
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { signIn } from './submit.ts';
+import { deleteNetwork, signIn } from './submit.ts';
 import { solveTimetable, type TtExports } from '../src/lib/tt.ts';
 import type { JobSummary } from '../src/lib/protocol/JobSummary.ts';
 import type { TtJobParams } from '../src/lib/protocol/TtJobParams.ts';
@@ -63,7 +63,10 @@ test("a school's devices find its timetable and the console shows it", async ({
 	expect(result.cost.total).toBe(Math.min(...expected));
 
 	await job.getByTestId('timetable-link').click();
-	await expect(page.getByTestId('timetable-valid')).toHaveAttribute('data-valid', 'true');
+	// WebKit on a starved CI runner has run the page's scripts seconds late (run 42278907355).
+	await expect(page.getByTestId('timetable-valid')).toHaveAttribute('data-valid', 'true', {
+		timeout: 30_000
+	});
 	await expect(page.getByTestId('timetable-cost')).toHaveText(String(result.cost.total));
 	// The first class's week holds its 31 hours.
 	await expect(page.getByTestId('hour')).toHaveCount(31);
@@ -82,8 +85,5 @@ test("a school's devices find its timetable and the console shows it", async ({
 
 	// Clean up: later tests start with an empty network list.
 	await device.context().close();
-	await page.goto(`${networkUrl}/rules`);
-	await page.getByTestId('delete-network').click();
-	await page.getByTestId('delete-network').click();
-	await page.waitForURL(/\/app$/);
+	await deleteNetwork(page, networkUrl);
 });
