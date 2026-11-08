@@ -19,6 +19,9 @@ pub mod ws;
 use axum::{
     Router,
     extract::DefaultBodyLimit,
+    http::{HeaderValue, header},
+    middleware,
+    response::Response,
     routing::{get, patch, post},
 };
 use sqlx::{
@@ -162,7 +165,27 @@ pub fn router(state: AppState) -> Router {
         .route("/ws/dashboard", get(ws::dashboard))
         .route("/ws/networks/{id}/live", get(ws::network_live))
         .route("/ws/join/{code}/summary", get(ws::join_summary))
+        .layer(middleware::map_response(security_headers))
         .with_state(state)
+}
+
+/// What every response says about itself (spec 0016). The coordinator serves JSON,
+/// images and downloads, never pages: none of it may run as a page, be framed by one,
+/// be sniffed into a script, or tell another site where it was linked from.
+async fn security_headers(mut response: Response) -> Response {
+    let headers = response.headers_mut();
+    for (name, value) in [
+        (
+            header::CONTENT_SECURITY_POLICY,
+            "default-src 'none'; frame-ancestors 'none'",
+        ),
+        (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+        (header::X_FRAME_OPTIONS, "DENY"),
+        (header::REFERRER_POLICY, "no-referrer"),
+    ] {
+        headers.insert(name, HeaderValue::from_static(value));
+    }
+    response
 }
 
 /// Writes the units each device decided to the database every few seconds, rather than

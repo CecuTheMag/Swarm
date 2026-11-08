@@ -2,6 +2,16 @@
 :80 {
 	encode zstd gzip
 
+	# Browsers that reached the site over HTTPS (Kant's Caddy, Tailscale Funnel) keep to
+	# HTTPS from then on; on the LAN port they ignore it. The rest fills in responses the
+	# web and the coordinator did not mark themselves, such as static files (spec 0016).
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		?X-Content-Type-Options nosniff
+		?X-Frame-Options DENY
+		?Referrer-Policy same-origin
+	}
+
 	@coordinator path /api/* /ws/* /healthz
 	handle @coordinator {
 		reverse_proxy coordinator:7700

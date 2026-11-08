@@ -33,7 +33,28 @@ export default defineConfig({
 				runes: ({ filename }) =>
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
-			adapter: adapter()
+			adapter: adapter(),
+			// The site loads nothing from other origins and no other site may frame it
+			// (spec 0016). Inline scripts carry a nonce per response; WebAssembly compiles
+			// from the site's own modules; styles may be inline, as Svelte sets style
+			// attributes. Older Safari does not count a same-origin WebSocket as 'self',
+			// hence ws: and wss: for the worker's connection.
+			csp: {
+				mode: 'auto',
+				directives: {
+					'default-src': ['self'],
+					'script-src': ['self', 'wasm-unsafe-eval'],
+					'style-src': ['self', 'unsafe-inline'],
+					'img-src': ['self', 'data:', 'blob:'],
+					'font-src': ['self', 'data:'],
+					'connect-src': ['self', 'ws:', 'wss:'],
+					'worker-src': ['self'],
+					'object-src': ['none'],
+					'base-uri': ['self'],
+					'form-action': ['self'],
+					'frame-ancestors': ['none']
+				}
+			}
 		})
 	],
 	server: {

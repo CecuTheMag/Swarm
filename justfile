@@ -36,7 +36,8 @@ share port="7701":
     @tailscale serve status
 
 # Submitting jobs needs the password only where the coordinator has one (`just stack`
-# does; the dev coordinator does not). Run `just unshare` after.
+# does; the dev coordinator opens the public network with SWARM_OPEN_PUBLIC=1 in .env).
+# Run `just unshare` after.
 # Serve the web app over HTTPS on the public internet, for devices without Tailscale.
 share-public port="7701":
     tailscale funnel --bg {{port}}

@@ -14,7 +14,15 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 async fn serve(db: PgPool, config: Config) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap().to_string();
-    let state = State::new(db, config);
+    // As on a development machine (SWARM_OPEN_PUBLIC=1): the public network takes jobs
+    // from anyone, unless a test sets a submit token.
+    let state = State::new(
+        db,
+        Config {
+            open_public: true,
+            ..config
+        },
+    );
     coordinator::spawn_reaper(state.clone());
     coordinator::spawn_progress(state.clone());
     let app = coordinator::router(state);
@@ -897,6 +905,7 @@ async fn serve_with_self_url(db: PgPool, config: Config) -> String {
         db,
         Config {
             self_url: Some(format!("ws://{addr}/ws/worker")),
+            open_public: true,
             ..config
         },
     );

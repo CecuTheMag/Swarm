@@ -57,10 +57,19 @@ pub struct Config {
     /// round trips overlap the work; a fast device behind a slow link needs several in
     /// flight to stay busy.
     pub max_leases_per_worker: usize,
+    /// How long a sign-in waits for one of the [`crate::auth::SIGN_IN_CHECKS`] password
+    /// checks before it is told to try again (spec 0016).
+    pub sign_in_wait: Duration,
     /// Password for submitting jobs (`SWARM_SUBMIT_TOKEN`). Anyone may join as a worker,
-    /// but on a public address only the organiser starts jobs. None leaves submitting open.
-    /// The chaos panel needs it too (spec 0008).
+    /// but on a public address only the organiser starts jobs. Without it, only the
+    /// public network's admins do, unless `open_public`. The chaos panel needs it too
+    /// (spec 0008).
     pub submit_token: Option<String>,
+    /// Without a submit token, lets anyone who does not sign in act as the public
+    /// network's admin: start jobs, use the chaos panel, manage its devices
+    /// (`SWARM_OPEN_PUBLIC=1`). For a development machine only; a coordinator that
+    /// forgets its token stays closed (spec 0016).
+    pub open_public: bool,
     /// This coordinator's own worker endpoint, which cheaters added by the chaos panel
     /// connect to like any device. None turns adding cheaters off.
     pub self_url: Option<String>,
@@ -81,6 +90,7 @@ impl Config {
         cfg.submit_token = std::env::var("SWARM_SUBMIT_TOKEN")
             .ok()
             .filter(|t| !t.is_empty());
+        cfg.open_public = std::env::var("SWARM_OPEN_PUBLIC").is_ok_and(|v| v == "1");
         cfg
     }
 
@@ -124,7 +134,9 @@ impl Default for Config {
             idle_timeout: Duration::from_secs(30),
             no_work_retry: Duration::from_secs(2),
             max_leases_per_worker: 8,
+            sign_in_wait: Duration::from_secs(10),
             submit_token: None,
+            open_public: false,
             self_url: None,
         }
     }
@@ -163,6 +175,8 @@ pub struct State {
     pub chaos_cheaters: AtomicUsize,
     /// Failed sign-ins per email (spec 0010).
     pub logins: crate::auth::LoginLimiter,
+    /// Password checks running now, at most [`crate::auth::SIGN_IN_CHECKS`] (spec 0016).
+    pub sign_ins: Arc<tokio::sync::Semaphore>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -236,6 +250,7 @@ impl State {
             commands: Mutex::new(HashMap::new()),
             chaos_cheaters: AtomicUsize::new(0),
             logins: crate::auth::LoginLimiter::default(),
+            sign_ins: Arc::new(tokio::sync::Semaphore::new(crate::auth::SIGN_IN_CHECKS)),
         })
     }
 

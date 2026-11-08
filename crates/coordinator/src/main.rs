@@ -37,6 +37,16 @@ async fn main() -> anyhow::Result<()> {
     }
     let mut config = Config::from_env();
     config.self_url = self_url(&addr);
+    match (&config.submit_token, config.open_public) {
+        (None, true) => tracing::warn!(
+            "SWARM_OPEN_PUBLIC: anyone may start jobs and use the chaos panel on the public \
+             network; never on a public address"
+        ),
+        (None, false) => tracing::info!(
+            "no SWARM_SUBMIT_TOKEN: only the public network's admins start jobs on it"
+        ),
+        (Some(_), _) => {}
+    }
     let state = State::new(db, config);
     coordinator::spawn_reaper(state.clone());
     coordinator::spawn_progress(state.clone());

@@ -17,7 +17,13 @@ async fn serve(db: PgPool) -> String {
     accounts::ensure_admin(&db, ADMIN.0, ADMIN.1).await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap().to_string();
-    let app = coordinator::router(State::new(db, Config::default()));
+    // As on a development machine (SWARM_OPEN_PUBLIC=1): the public network takes jobs
+    // from anyone, unless a test sets a submit token.
+    let config = Config {
+        open_public: true,
+        ..Config::default()
+    };
+    let app = coordinator::router(State::new(db, config));
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     addr
 }

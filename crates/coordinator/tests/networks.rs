@@ -2,7 +2,10 @@
 //! invitations, roles, isolation between networks, lending, the owner's controls as a
 //! connected device sees them, and the live streams.
 
-use coordinator::{Config, State, accounts, auth::PUBLIC_NETWORK};
+use coordinator::{
+    AppState, Config, State, accounts,
+    auth::{self, PUBLIC_NETWORK},
+};
 use futures_util::{SinkExt, StreamExt};
 use protocol::{
     CoordinatorMessage, DashboardEvent, DeviceControl, JobSummary, NetworkSummary,
@@ -34,7 +37,15 @@ async fn serve(db: PgPool, config: Config) -> String {
     accounts::ensure_admin(&db, ADMIN.0, ADMIN.1).await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap().to_string();
-    let state = State::new(db, config);
+    // As on a development machine (SWARM_OPEN_PUBLIC=1): the public network takes jobs
+    // from anyone, unless a test sets a submit token.
+    let state = State::new(
+        db,
+        Config {
+            open_public: true,
+            ..config
+        },
+    );
     coordinator::spawn_reaper(state.clone());
     coordinator::spawn_progress(state.clone());
     let app = coordinator::router(state);
@@ -742,4 +753,166 @@ async fn live_streams_carry_only_their_network(db: PgPool) {
             .status(),
         StatusCode::NOT_FOUND
     );
+}
+
+/// Like [`serve`], with the configuration exactly as given (the public network open only
+/// if it says so), and the coordinator's state at hand.
+async fn serve_as_given(db: PgPool, config: Config) -> (String, AppState) {
+    accounts::ensure_admin(&db, ADMIN.0, ADMIN.1).await.unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    let state = State::new(db, config);
+    let app = coordinator::router(state.clone());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (addr, state)
+}
+
+/// A coordinator that lacks its submit token keeps the public network closed to anyone
+/// who does not sign in; its admins still run it. Open only on a development machine
+/// that asks for it, and never once a token is set (spec 0016).
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn the_public_network_stays_closed_without_its_token(db: PgPool) {
+    let job =
+        json!({ "template": "pi", "params": { "units": 2, "samples_per_unit": 1024, "seed": 1 } });
+    let public = format!("/api/networks/{PUBLIC_NETWORK}");
+
+    let (addr, _) = serve_as_given(db.clone(), config()).await;
+    let stranger = Browser::new(&addr);
+    assert_eq!(
+        stranger.post("/api/jobs", job.clone()).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    for path in ["devices", "keys", "members"] {
+        let res = stranger.get(&format!("{public}/{path}")).await;
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED, "{path}");
+    }
+    let cheaters = json!({ "count": 1, "collude": false });
+    assert_eq!(
+        stranger
+            .post(&format!("{public}/chaos/cheaters"), cheaters)
+            .await
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let admin = Browser::admin(&addr).await;
+    assert_eq!(
+        admin.post("/api/jobs", job.clone()).await.status(),
+        StatusCode::CREATED
+    );
+
+    let open = Config {
+        open_public: true,
+        ..config()
+    };
+    let (dev, _) = serve_as_given(db.clone(), open).await;
+    assert_eq!(
+        Browser::new(&dev)
+            .post("/api/jobs", job.clone())
+            .await
+            .status(),
+        StatusCode::CREATED
+    );
+
+    let with_token = Config {
+        open_public: true,
+        submit_token: Some("organiser password".into()),
+        ..config()
+    };
+    let (prod, _) = serve_as_given(db, with_token).await;
+    assert_eq!(
+        Browser::new(&prod).post("/api/jobs", job).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+/// Sign-ins check passwords a few at a time. While every check is taken, a sign-in
+/// waits, then is told to try again, and that never counts as a wrong password against
+/// the account (spec 0016).
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn sign_ins_wait_for_a_free_password_check(db: PgPool) {
+    let config = Config {
+        sign_in_wait: Duration::from_millis(200),
+        ..config()
+    };
+    let (addr, state) = serve_as_given(db, config).await;
+    let browser = Browser::new(&addr);
+
+    let every_check = state
+        .sign_ins
+        .acquire_many(auth::SIGN_IN_CHECKS as u32)
+        .await
+        .unwrap();
+    // More than the eight wrong passwords that lock an email for a while.
+    for _ in 0..10 {
+        assert_eq!(
+            browser.login(ADMIN.0, ADMIN.1).await.status(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+    }
+    drop(every_check);
+    assert_eq!(
+        browser.login(ADMIN.0, ADMIN.1).await.status(),
+        StatusCode::OK
+    );
+}
+
+/// Every coordinator response, errors included, says it is no page: not to be framed,
+/// sniffed into a script, or followed with a Referer (spec 0016).
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn responses_carry_security_headers(db: PgPool) {
+    let (addr, _) = serve_as_given(db, config()).await;
+    let browser = Browser::new(&addr);
+    for path in [
+        "/healthz",
+        "/api/me",
+        "/api/jobs/not-a-job",
+        "/api/no-such-route",
+    ] {
+        let res = browser.get(path).await;
+        let headers = res.headers();
+        assert_eq!(
+            headers["content-security-policy"], "default-src 'none'; frame-ancestors 'none'",
+            "{path}"
+        );
+        assert_eq!(headers["x-content-type-options"], "nosniff", "{path}");
+        assert_eq!(headers["x-frame-options"], "DENY", "{path}");
+        assert_eq!(headers["referrer-policy"], "no-referrer", "{path}");
+    }
+}
+
+/// A sign-in given up halfway (the client hung up and its request was dropped) keeps its
+/// password check's slot until the check is done, so clients that hang up at once
+/// cannot run more checks than the limit (spec 0016).
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn an_abandoned_sign_in_keeps_its_slot_until_its_check_ends(db: PgPool) {
+    let state = State::new(db, config());
+    let sign_ins: Vec<_> = (0..auth::SIGN_IN_CHECKS)
+        .map(|_| {
+            let state = state.clone();
+            tokio::spawn(async move { auth::check_sign_in(&state, "a guess".into(), None).await })
+        })
+        .collect();
+    while state.sign_ins.available_permits() > 0 {
+        tokio::task::yield_now().await;
+    }
+    for sign_in in &sign_ins {
+        sign_in.abort();
+    }
+    for sign_in in sign_ins {
+        assert!(sign_in.await.unwrap_err().is_cancelled());
+    }
+    assert_eq!(
+        state.sign_ins.available_permits(),
+        0,
+        "the checks still run"
+    );
+
+    let all_free = async {
+        while state.sign_ins.available_permits() < auth::SIGN_IN_CHECKS {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(30), all_free)
+        .await
+        .expect("every slot is free once the checks end");
 }

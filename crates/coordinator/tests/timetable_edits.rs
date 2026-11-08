@@ -29,6 +29,8 @@ async fn serve(db: PgPool) -> String {
             honeypot_rate: 0.0,
             new_client_honeypot_rate: 0.0,
             no_work_retry: Duration::from_millis(100),
+            // As on a development machine (SWARM_OPEN_PUBLIC=1).
+            open_public: true,
             ..Config::default()
         },
     );

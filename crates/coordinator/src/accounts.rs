@@ -100,13 +100,8 @@ pub async fn login(
     .bind(&email)
     .fetch_optional(&state.db)
     .await?;
-    let hash = row
-        .as_ref()
-        .map_or_else(|| auth::dummy_hash().to_owned(), |r| r.3.clone());
-    let password = body.password.clone();
-    let valid = tokio::task::spawn_blocking(move || auth::verify_password(&password, &hash))
-        .await
-        .unwrap_or(false);
+    let hash = row.as_ref().map(|r| r.3.clone());
+    let valid = auth::check_sign_in(&state, body.password.clone(), hash).await?;
     let Some((id, email_db, name, _, is_admin)) = row.filter(|_| valid) else {
         state.logins.failed(&email);
         return Err(AppError::BadRequest("wrong email or password".into()));

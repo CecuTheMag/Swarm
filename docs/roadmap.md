@@ -3,13 +3,13 @@
 What is left between today's grid and the full README vision, in build order. Each
 item gets its own spec in `docs/specs/` before work starts; this file only orders them.
 
-Status on 2026-11-06: specs 0001–0008 and 0010–0015 implemented (π and path-tracer
+Status on 2026-11-08: specs 0001–0008 and 0010–0016 implemented (π and path-tracer
 templates, leases with expiry, quorum verification with honeypots and reputation, CPU
 fallback, load tests, contributor safety, the chaos panel, networks that clients own
 and operate from the console, neural network sweeps, a network's own programs with
 review for the public network, school timetables with a deputy director's data entry,
-printing, pinned lessons and editing by hand) and the server public at
-`https://swarmrelay.duckdns.org`.
+printing, pinned lessons and editing by hand, and the hardening of spec 0016) and the
+server public at `https://swarmrelay.duckdns.org`.
 
 ## Next up, in order (November 2026)
 

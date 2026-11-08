@@ -60,6 +60,37 @@ pub fn dummy_hash() -> &'static str {
     HASH.get_or_init(|| hash_password("not a real password"))
 }
 
+/// Sign-in password checks computed at once. Each takes 19 MiB and ~50 ms of a core,
+/// and made-up emails never reach the per-email limit, so a flood of sign-ins queues
+/// for these instead of running thousands of checks at once (spec 0016).
+pub const SIGN_IN_CHECKS: usize = 4;
+
+/// Checks `password` against the account's `hash` (the dummy one if there is no such
+/// account) on a blocking thread, once one of the [`SIGN_IN_CHECKS`] is free. A sign-in
+/// that waits longer than `sign_in_wait` is told to try again.
+///
+/// The check keeps its slot until it is done, even when the sign-in is given up (the
+/// client hung up and the request was dropped): otherwise clients that hang up at once
+/// would free slots while their checks still run, and the limit would not hold.
+pub async fn check_sign_in(
+    state: &AppState,
+    password: String,
+    hash: Option<String>,
+) -> Result<bool, AppError> {
+    let slot = state.sign_ins.clone().acquire_owned();
+    let slot = tokio::time::timeout(state.config.sign_in_wait, slot)
+        .await
+        .map_err(|_| AppError::TooManyRequests)?
+        .expect("the sign-in semaphore is never closed");
+    let valid = tokio::task::spawn_blocking(move || {
+        let _slot = slot;
+        let hash = hash.unwrap_or_else(|| dummy_hash().to_owned());
+        verify_password(&password, &hash)
+    })
+    .await;
+    Ok(valid.unwrap_or(false))
+}
+
 /// The value of cookie `name`, if sent.
 pub fn cookie(headers: &HeaderMap, name: &str) -> Option<String> {
     headers
@@ -184,9 +215,11 @@ pub async fn network_access(
     network_id: Uuid,
     min: Role,
 ) -> Result<Access, AppError> {
-    // Without a submit token (development), the public network is open to anyone who
-    // does not identify themselves, as before networks existed.
+    // On a development machine that asks for it, the public network is open to anyone
+    // who does not identify themselves, as before networks existed. Only on request: a
+    // coordinator that merely lacks its token stays closed.
     if network_id == PUBLIC_NETWORK
+        && state.config.open_public
         && state.config.submit_token.is_none()
         && bearer(headers).is_none()
         && cookie(headers, SESSION_COOKIE).is_none()
