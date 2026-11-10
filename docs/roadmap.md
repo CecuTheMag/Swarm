@@ -37,6 +37,8 @@ accounts, devices, the school.
 3. **Real devices (owner)** — a phone on mobile data, an iPhone (Safari's WebGPU), wake
    lock and losing signal on a real phone, a program and a timetable job on a phone, the
    laptop fallback (`docs/demo-day.md` Plan B); results in `docs/measurements.md`.
+   The MacBook's part (Safari, Metal, an iPhone through Web Inspector, the presenting
+   laptop) is planned in `docs/macbook.md`.
 4. **Registration material** — the annotation (README section 21) rewritten around what
    Рояк is now: networks for schools, a school's own programs, timetables, with the
    measured numbers; **(owner)** the school's written permission and a week of measuring
