@@ -7,7 +7,10 @@ test('the screen stays on while the device takes part, and not after', async ({
 	context,
 	browserName
 }) => {
-	test.skip(browserName === 'webkit', 'WebKit on Linux has no wake lock');
+	test.skip(
+		browserName === 'webkit' && process.platform === 'linux',
+		'WebKit on Linux has no wake lock'
+	);
 	// Chrome grants it to pages by itself; headless Chromium needs to be told.
 	if (browserName === 'chromium') await context.grantPermissions(['screen-wake-lock']);
 	await page.goto('/worker');

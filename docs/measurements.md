@@ -23,9 +23,14 @@ test the CPU fallback, which is what a browser without WebGPU gets.
 | 2026-10-29 | Chromium (headless, no WebGPU) | Playwright 1.64 | CPU (WebAssembly) | All pass, bit-exact |
 | 2026-10-29 | Firefox (headless) | Playwright 1.64 | CPU (WebAssembly) | All pass, bit-exact; screen wake lock works |
 | 2026-10-29 | WebKit, Safari's engine (headless, Ubuntu container) | Playwright 1.64 | CPU (WebAssembly) | All pass, bit-exact; wake lock not tested (WebKit on Linux has none) |
+| 2026-11-11 | Chromium 156 (headless, macOS 26.3.1, M1 Max) | Playwright 1.64.1 | WebGPU, SwiftShader adapter (`google` / `swiftshader`): the Vulkan flag picks it on macOS too | All pass |
+| 2026-11-11 | Chromium 156 (headless, no WebGPU, macOS) | Playwright 1.64.1 | CPU (WebAssembly) | All pass, bit-exact |
+| 2026-11-11 | Firefox 157 (headless, macOS) | Playwright 1.64.1 | CPU (WebAssembly): no adapter in Playwright's headless Firefox | All pass, bit-exact |
+| 2026-11-11 | WebKit 27.2, Safari's engine (headless, natively on macOS) | Playwright 1.64.1 | **WebGPU on the real GPU** (adapter `apple` / `apple`, Metal on the M1 Max) | All pass; self-test bit-exact on the GPU; screen wake lock works. The first automated run on real GPU hardware |
 
 Not yet tested on real devices: Safari on an iPhone (iOS 26 ships WebGPU, so it would
-take the GPU path) and Firefox with WebGPU (Windows, macOS).
+take the GPU path) and Firefox with WebGPU (Windows, macOS). Safari's engine on Apple's
+GPU passes in WebKit on macOS above, which is the same WebGPU stack the iPhone uses.
 
 ## School lab, 2026-11-04
 

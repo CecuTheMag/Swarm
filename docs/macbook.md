@@ -47,7 +47,7 @@ phone or from SwiftShader, a GPU emulated on the processor. The MacBook adds:
 
 1. Tools:
    ```
-   brew install just cargo-nextest
+   brew install just cargo-nextest zbar   # zbar: the console test decodes the QR code
    brew install --cask google-chrome firefox microsoft-edge
    ```
 2. Open **OrbStack** once: it puts `docker` and `docker compose` on the PATH. Give it

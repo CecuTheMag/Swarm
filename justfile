@@ -52,8 +52,11 @@ unshare:
 # server in ~/swarm.env (the first deploy creates it with a random submit password).
 deploy server=env_var_or_default("SWARM_SERVER", ""):
     @test -n "{{server}}" || { echo "usage: just deploy user@host (or set SWARM_SERVER)"; exit 1; }
+    # Only files that exist (--cached also lists deleted ones), with flags both GNU tar
+    # and macOS bsdtar take; COPYFILE_DISABLE keeps macOS ._* metadata files out.
     git ls-files -z --cached --others --exclude-standard \
-      | tar --null --files-from=- --ignore-failed-read -cf - \
+      | xargs -0 sh -c 'for f; do if [ -e "$f" ] || [ -L "$f" ]; then printf "%s\0" "$f"; fi; done' sh \
+      | COPYFILE_DISABLE=1 tar --null --no-xattrs -T - -cf - \
       | ssh {{server}} 'rm -rf ~/swarm && mkdir -p ~/swarm && tar -xf - -C ~/swarm'
     ssh {{server}} 'test -f ~/swarm.env || (umask 077 && echo "SWARM_SUBMIT_TOKEN=$(openssl rand -hex 12)" > ~/swarm.env)'
     ssh {{server}} 'cd ~/swarm && docker compose --env-file ~/swarm.env -f deploy/compose.server.yaml up -d --build --remove-orphans'
@@ -116,7 +119,13 @@ run-program module *args:
 e2e:
     cd web && pnpm exec playwright test --project webgpu --project cpu --project firefox
 
-# The browser tests in WebKit (Safari's engine), from Playwright's container.
+# The browser tests in WebKit (Safari's engine). macOS runs WebKit natively; on Linux it
+# needs Ubuntu's libraries, so the tests connect to Playwright's container.
+[macos]
+e2e-webkit:
+    cd web && pnpm exec playwright test --project webkit
+
+[linux]
 e2e-webkit:
     docker rm -f swarm-pw-webkit >/dev/null 2>&1 || true
     docker run -d --name swarm-pw-webkit --network host --init \
