@@ -62,6 +62,10 @@ struct Args {
     /// come to these workers (spec 0017); they answer with a stand-in, not a model.
     #[arg(long)]
     gpu_buffer: Option<u64>,
+    /// Refuse language-model units, as a device whose answer to the model's known question
+    /// was wrong.
+    #[arg(long)]
+    ai_unfit: bool,
 }
 
 #[tokio::main]
@@ -110,6 +114,7 @@ async fn main() -> anyhow::Result<()> {
         community: !args.no_community,
         fuel: args.fuel,
         gpu_buffer: args.gpu_buffer,
+        ai_unfit: args.ai_unfit,
     };
     let handles: Vec<_> = (0..args.workers)
         .map(|i| {

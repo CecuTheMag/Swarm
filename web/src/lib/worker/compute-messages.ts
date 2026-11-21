@@ -10,5 +10,6 @@ export type ComputeRequest =
 
 export type ComputeResponse =
 	| { kind: 'reply'; id: number; ok: true; value: unknown }
-	| { kind: 'reply'; id: number; ok: false; error: string }
+	// `unfit`: the device computes the unit's model wrongly (spec 0017).
+	| { kind: 'reply'; id: number; ok: false; error: string; unfit?: boolean }
 	| { kind: 'device_lost'; reason: string };

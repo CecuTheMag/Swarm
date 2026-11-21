@@ -6,6 +6,7 @@
 import ortWasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url';
 import ortMjsUrl from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url';
 import { MODELS_PATH, verifiedFetch } from './files.ts';
+import { assertCheck, UnfitError } from './check.ts';
 import type { AiCatalog } from '#lib/protocol/AiCatalog.ts';
 import type { AiModel } from '#lib/protocol/AiModel.ts';
 import type { AiUnitOutput } from '#lib/protocol/AiUnitOutput.ts';
@@ -16,6 +17,7 @@ type Loaded = {
 	tokenizer: Awaited<ReturnType<Transformers['AutoTokenizer']['from_pretrained']>>;
 	model: Awaited<ReturnType<Transformers['AutoModelForCausalLM']['from_pretrained']>>;
 };
+type Asked = { prompt: string; system?: string | null; max_new_tokens: number };
 
 export interface AiRunner {
 	run(params: AiUnitParams, signal: AbortSignal): Promise<AiUnitOutput>;
@@ -31,6 +33,45 @@ export function createAiRunner(
 ): AiRunner {
 	let transformers: Promise<Transformers> | undefined;
 	const models = new Map<string, Promise<Loaded>>();
+	let gpu: Promise<GPUDevice> | undefined;
+
+	// The runtime's own GPU device, without the `subgroups` feature: on the Adreno 642L its
+	// subgroup kernels hang the GPU (docs/measurements.md). Every device runs the same
+	// kernels this way, so honest devices also part less often.
+	const gpuDevice = () =>
+		(gpu ??= (async () => {
+			const adapter = await navigator.gpu?.requestAdapter();
+			if (!adapter) throw new Error('no WebGPU adapter for the model');
+			// The runtime asks for the adapter's limits when it makes its own device.
+			const requiredLimits: Record<string, number> = {};
+			for (const key in adapter.limits) {
+				const value = (adapter.limits as unknown as Record<string, unknown>)[key];
+				if (typeof value === 'number') requiredLimits[key] = value;
+			}
+			const device = await adapter.requestDevice({
+				requiredFeatures: adapter.features.has('shader-f16') ? ['shader-f16'] : [],
+				requiredLimits
+			});
+			// A lost device takes the models on it along; the next unit loads them again.
+			void device.lost.then(() => {
+				gpu = undefined;
+				models.clear();
+			});
+			return device;
+		})().catch((e) => {
+			gpu = undefined;
+			throw e;
+		}));
+
+	const sessionOptions = async () =>
+		device === 'webgpu'
+			? {
+					// The fused kernels of higher levels compute wrong tokens on the Adreno
+					// 642L once the model decodes one token at a time.
+					graphOptimizationLevel: 'basic',
+					executionProviders: [{ name: 'webgpu', device: await gpuDevice() }]
+				}
+			: undefined;
 
 	const runtime = () =>
 		(transformers ??= import('@huggingface/transformers').then((t) => {
@@ -62,12 +103,19 @@ export function createAiRunner(
 				const tokenizer = await t.AutoTokenizer.from_pretrained(model.id);
 				const lm = await t.AutoModelForCausalLM.from_pretrained(model.id, {
 					dtype: model.dtype as 'fp32',
-					device
+					device,
+					session_options: (await sessionOptions()) as never
 				});
-				return { tokenizer, model: lm };
+				const loaded = { tokenizer, model: lm };
+				const check = model.check;
+				assertCheck(model.name, check, await generate(t, model, loaded, check));
+				return loaded;
 			})();
-			// A failed load (a refused file, a lost GPU) is tried again with the next unit.
-			loaded.catch(() => models.delete(model.id));
+			// A failed load (a refused file, a lost GPU) is tried again with the next unit; a
+			// device that computes the model wrongly keeps refusing it.
+			loaded.catch((e) => {
+				if (!(e instanceof UnfitError)) models.delete(model.id);
+			});
 			models.set(model.id, loaded);
 		}
 		return loaded;
@@ -79,71 +127,79 @@ export function createAiRunner(
 			if (!model) throw new Error(`model ${p.model} is not in the catalog`);
 			signal.throwIfAborted();
 			const t = await runtime();
-			const { tokenizer, model: lm } = await load(model);
+			const loaded = await load(model);
 			signal.throwIfAborted();
-
-			const inputs = model.chat
-				? (tokenizer.apply_chat_template(
-						[
-							...(p.system ? [{ role: 'system', content: p.system }] : []),
-							{ role: 'user', content: p.prompt }
-						],
-						{ add_generation_prompt: true, return_dict: true }
-					) as Record<string, unknown>)
-				: (tokenizer(p.system ? `${p.system}\n\n${p.prompt}` : p.prompt) as Record<
-						string,
-						unknown
-					>);
-			const promptLength = (inputs.input_ids as { dims: number[] }).dims.at(-1)!;
-
-			// For each generated token: the chosen logit minus the runner-up's.
-			const margins: number[] = [];
-			// The list passes each processor's return value on, so it returns the logits
-			// unchanged (the bundled types say `void`).
-			class Margins extends t.LogitsProcessor {
-				_call(_ids: bigint[][], logits: InstanceType<Transformers['Tensor']>) {
-					const scores = (logits as unknown as { data: Float32Array }[])[0].data;
-					let best = -Infinity;
-					let second = -Infinity;
-					for (let i = 0; i < scores.length; i++) {
-						const s = scores[i];
-						if (s > best) {
-							second = best;
-							best = s;
-						} else if (s > second) {
-							second = s;
-						}
-					}
-					margins.push(Number.isFinite(second) ? best - second : 0);
-					return logits;
-				}
-			}
-			// „Спри“ stops the generation after the token being computed.
-			class Stop extends t.StoppingCriteria {
-				_call(ids: number[][]) {
-					return ids.map(() => signal.aborted);
-				}
-			}
-			const processors = new t.LogitsProcessorList();
-			processors.push(new Margins());
-			const criteria = new t.StoppingCriteriaList();
-			criteria.push(new Stop());
-
-			const sequences = (await lm.generate({
-				...inputs,
-				max_new_tokens: p.max_new_tokens,
-				do_sample: false,
-				num_beams: 1,
-				repetition_penalty: 1,
-				no_repeat_ngram_size: 0,
-				logits_processor: processors,
-				stopping_criteria: criteria
-			} as unknown as Parameters<typeof lm.generate>[0])) as { tolist(): bigint[][] };
+			const answer = await generate(t, model, loaded, p, signal);
 			signal.throwIfAborted();
-
-			const tokens = sequences.tolist()[0].slice(promptLength).map(Number);
-			const text = tokenizer.decode(tokens, { skip_special_tokens: true });
-			return { text, tokens, margins: margins.slice(0, tokens.length) };
+			return answer;
 		}
 	};
+}
+
+/** Greedy decoding, with each token's margin over the runner-up. */
+async function generate(
+	t: Transformers,
+	model: AiModel,
+	{ tokenizer, model: lm }: Loaded,
+	p: Asked,
+	signal?: AbortSignal
+): Promise<AiUnitOutput> {
+	const inputs = model.chat
+		? (tokenizer.apply_chat_template(
+				[
+					...(p.system ? [{ role: 'system', content: p.system }] : []),
+					{ role: 'user', content: p.prompt }
+				],
+				{ add_generation_prompt: true, return_dict: true }
+			) as Record<string, unknown>)
+		: (tokenizer(p.system ? `${p.system}\n\n${p.prompt}` : p.prompt) as Record<string, unknown>);
+	const promptLength = (inputs.input_ids as { dims: number[] }).dims.at(-1)!;
+
+	// For each generated token: the chosen logit minus the runner-up's.
+	const margins: number[] = [];
+	// The list passes each processor's return value on, so it returns the logits
+	// unchanged (the bundled types say `void`).
+	class Margins extends t.LogitsProcessor {
+		_call(_ids: bigint[][], logits: InstanceType<Transformers['Tensor']>) {
+			const scores = (logits as unknown as { data: Float32Array }[])[0].data;
+			let best = -Infinity;
+			let second = -Infinity;
+			for (let i = 0; i < scores.length; i++) {
+				const s = scores[i];
+				if (s > best) {
+					second = best;
+					best = s;
+				} else if (s > second) {
+					second = s;
+				}
+			}
+			margins.push(Number.isFinite(second) ? best - second : 0);
+			return logits;
+		}
+	}
+	// „Спри“ stops the generation after the token being computed.
+	class Stop extends t.StoppingCriteria {
+		_call(ids: number[][]) {
+			return ids.map(() => signal?.aborted ?? false);
+		}
+	}
+	const processors = new t.LogitsProcessorList();
+	processors.push(new Margins());
+	const criteria = new t.StoppingCriteriaList();
+	criteria.push(new Stop());
+
+	const sequences = (await lm.generate({
+		...inputs,
+		max_new_tokens: p.max_new_tokens,
+		do_sample: false,
+		num_beams: 1,
+		repetition_penalty: 1,
+		no_repeat_ngram_size: 0,
+		logits_processor: processors,
+		stopping_criteria: criteria
+	} as unknown as Parameters<typeof lm.generate>[0])) as { tolist(): bigint[][] };
+
+	const tokens = sequences.tolist()[0].slice(promptLength).map(Number);
+	const text = tokenizer.decode(tokens, { skip_special_tokens: true });
+	return { text, tokens, margins: margins.slice(0, tokens.length) };
 }

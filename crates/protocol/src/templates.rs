@@ -281,14 +281,14 @@ pub mod ai {
     /// only the models, and the exact files, it lists.
     pub const CATALOG: &str = include_str!("../../../templates/ai/catalog.json");
 
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
     #[ts(export, rename = "AiCatalog")]
     pub struct Catalog {
         pub version: u32,
         pub models: Vec<Model>,
     }
 
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
     #[ts(export, rename = "AiModel")]
     pub struct Model {
         /// The model's repository on Hugging Face; its files are served at
@@ -309,6 +309,21 @@ pub mod ai {
         #[ts(type = "number | null")]
         pub min_gpu_buffer: Option<u64>,
         pub files: Vec<ModelFile>,
+        /// A question with its known answer, asked of the model whenever a device loads it.
+        pub check: ModelCheck,
+    }
+
+    /// A device whose answer parts from `tokens` other than at a near-tie computes the
+    /// model wrongly and takes none of the job's units: the same rule as two devices'
+    /// answers to one unit, against a device known to be right (spec 0017).
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+    #[ts(export, rename = "AiModelCheck")]
+    pub struct ModelCheck {
+        pub prompt: String,
+        pub max_new_tokens: u32,
+        pub tokens: Vec<u32>,
+        /// For each token, its logit minus the runner-up's on the reference device.
+        pub margins: Vec<f32>,
     }
 
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]

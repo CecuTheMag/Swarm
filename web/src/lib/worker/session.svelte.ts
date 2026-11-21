@@ -1,4 +1,5 @@
 import { ComputeClient } from './compute-client.ts';
+import { UnfitError } from '#lib/ai/check.ts';
 import { cpuThreads } from '#lib/cpu/pool.ts';
 import { DEFAULT_POWER, restMs, type PauseReason } from './pacing.ts';
 import type { Backend } from '#lib/protocol/Backend.ts';
@@ -91,6 +92,11 @@ export class WorkerSession {
 	unitsRejected = $state(0);
 	lastUnitMs = $state<number | null>(null);
 	error = $state<string | null>(null);
+	/**
+	 * Whether this device answered a language model's known question wrongly (spec 0017),
+	 * so it takes none of that model's units.
+	 */
+	unfitForAi = $state(false);
 	/** Share of the time spent computing, in percent. */
 	power = $state<number>(DEFAULT_POWER);
 	/** Why the device is paused, or null. */
@@ -448,7 +454,10 @@ export class WorkerSession {
 			} catch (e) {
 				if (!this.running) break;
 				const reason = e instanceof Error ? e.message : String(e);
-				reply = { type: 'failed', lease_id: unit.lease_id, reason };
+				// A device that computes a model wrongly is given none of the job's units again.
+				const unfit = e instanceof UnfitError;
+				if (unfit) this.unfitForAi = true;
+				reply = { type: 'failed', lease_id: unit.lease_id, reason, ...(unfit ? { unfit } : {}) };
 			}
 			// A unit of a connection that has since been lost is not ours to answer; units
 			// of the new connection may already be queued behind it.

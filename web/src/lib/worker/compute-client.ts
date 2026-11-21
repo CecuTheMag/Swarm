@@ -3,6 +3,7 @@ import type { DeviceInfo } from '#lib/protocol/DeviceInfo.ts';
 import type { TemplateRef } from '#lib/protocol/TemplateRef.ts';
 import type { JsonValue } from '#lib/protocol/serde_json/JsonValue.ts';
 import type { ComputeRequest, ComputeResponse } from './compute-messages.ts';
+import { UnfitError } from '#lib/ai/check.ts';
 
 export interface UnitResult {
 	output: JsonValue;
@@ -30,7 +31,7 @@ export class ComputeClient {
 			const p = this.pending.get(msg.id);
 			this.pending.delete(msg.id);
 			if (msg.ok) p?.resolve(msg.value);
-			else p?.reject(new Error(msg.error));
+			else p?.reject(msg.unfit ? new UnfitError(msg.error) : new Error(msg.error));
 		};
 	}
 

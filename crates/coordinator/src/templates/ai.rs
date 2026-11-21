@@ -200,6 +200,30 @@ mod tests {
     }
 
     #[test]
+    fn every_model_has_a_known_answer_a_device_could_give() {
+        for m in &protocol::templates::ai::catalog().models {
+            let c = &m.check;
+            assert!(
+                !c.prompt.is_empty() && c.prompt.len() <= MAX_PROMPT_BYTES,
+                "{}",
+                m.id
+            );
+            assert!(c.max_new_tokens <= MAX_NEW_TOKENS, "{}", m.id);
+            let unit =
+                json!({ "model": m.id, "prompt": c.prompt, "max_new_tokens": c.max_new_tokens });
+            let answer = json!({ "text": "", "tokens": c.tokens, "margins": c.margins });
+            Ai.validate_output(&unit, &answer)
+                .unwrap_or_else(|e| panic!("{}: {e}", m.id));
+            // A model that answers with near-ties only is no check at all.
+            assert!(
+                c.margins.iter().any(|&x| x >= NEAR_TIE) || m.test,
+                "{}",
+                m.id
+            );
+        }
+    }
+
+    #[test]
     fn one_unit_per_prompt_in_order() {
         let units = Ai.split(&params(&["first", "second", "third"])).unwrap();
         assert_eq!(units.len(), 3);

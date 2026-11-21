@@ -260,3 +260,64 @@ async fn model_files_are_served_only_from_the_catalog(db: PgPool) {
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+async fn unit_releases(db: &PgPool, job_id: uuid::Uuid) -> i64 {
+    sqlx::query_scalar("SELECT COALESCE(sum(releases), 0)::bigint FROM units WHERE job_id = $1")
+        .bind(job_id)
+        .fetch_one(db)
+        .await
+        .unwrap()
+}
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn a_device_that_computes_the_model_wrongly_gets_none_of_its_units(db: PgPool) {
+    // Two releases fail a unit: refusals from unfit devices must not count.
+    let addr = serve(
+        db.clone(),
+        Config {
+            max_releases: 2,
+            ..unverified()
+        },
+    )
+    .await;
+    let job = create(&addr, &job_params(SMOL, &prompts(3))).await;
+    let pi = reqwest::Client::new()
+        .post(format!("http://{addr}/api/jobs"))
+        .json(&sim_worker::pi_job(2, 1000, 5))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(pi.status(), 201);
+    let pi: JobSummary = pi.json().await.unwrap();
+
+    let unfit = || sim_worker::Options {
+        ai_unfit: true,
+        ..sim(&addr, Some(ENOUGH))
+    };
+    // The model's job is queued first: each unfit device refuses one of its units, then
+    // gets only the π job's.
+    let stats = sim_worker::run(unfit()).await.unwrap();
+    assert_eq!(stats.completed, 3, "one refused unit and the two of π");
+    assert_eq!(stats.accepted, 2);
+    assert_eq!(get_job(&addr, pi.id).await.status, JobStatus::Done);
+    for _ in 0..3 {
+        let stats = sim_worker::run(unfit()).await.unwrap();
+        assert_eq!(stats.completed, 1);
+        assert_eq!(stats.accepted, 0);
+    }
+    let waiting = get_job(&addr, job.id).await;
+    assert_eq!(waiting.status, JobStatus::Running, "{:?}", waiting.error);
+    assert_eq!(waiting.units_done, 0);
+    assert_eq!(unit_releases(&db, job.id).await, 0, "a refusal was charged");
+
+    // A device that computes the model right answers every prompt.
+    let stats = sim_worker::run(sim(&addr, Some(ENOUGH))).await.unwrap();
+    assert_eq!(stats.completed, 3);
+    let done = get_job(&addr, job.id).await;
+    assert_eq!(done.status, JobStatus::Done);
+    let result: ai::JobResult = serde_json::from_value(done.result.unwrap()).unwrap();
+    let want = expected(&job_params(SMOL, &prompts(3)));
+    for (got, want) in result.answers.iter().zip(&want) {
+        assert_eq!(got.text, want.text);
+    }
+}

@@ -23,6 +23,7 @@ import { fromBase64, toBase64 } from '#lib/bytes.ts';
 import { ProgramRunner } from '#lib/program/runner.ts';
 import { aiCatalogText, nnShader, piShader, ptShader, ttVectorsText } from '#lib/templates.ts';
 import { createAiRunner, type AiRunner } from '#lib/ai/runner.ts';
+import { UnfitError } from '#lib/ai/check.ts';
 import type { ComputeRequest, ComputeResponse } from './compute-messages.ts';
 import type { Backend } from '#lib/protocol/Backend.ts';
 import type { DeviceInfo } from '#lib/protocol/DeviceInfo.ts';
@@ -191,7 +192,8 @@ self.onmessage = async (event: MessageEvent<ComputeRequest>) => {
 			kind: 'reply',
 			id: req.id,
 			ok: false,
-			error: e instanceof Error ? e.message : String(e)
+			error: e instanceof Error ? e.message : String(e),
+			...(e instanceof UnfitError ? { unfit: true } : {})
 		});
 	} finally {
 		if (run) current.delete(run);

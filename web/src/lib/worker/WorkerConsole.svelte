@@ -209,6 +209,14 @@
 			</p>
 		{/if}
 
+		{#if session.unfitForAi}
+			<p class="notice warn" role="status" data-testid="unfit-ai">
+				<Icon name="info" size={18} />
+				Графичният процесор на това устройство не изчислява езиковия модел вярно, затова то не получава
+				въпроси към модела. Другите задачи продължават.
+			</p>
+		{/if}
+
 		{#if session.status === 'unsupported'}
 			<p class="notice bad" role="alert">
 				<Icon name="alert" size={18} />

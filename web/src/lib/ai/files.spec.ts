@@ -25,7 +25,8 @@ async function catalogWith(content: string): Promise<AiCatalog> {
 						size: bytes(content).byteLength,
 						sha256: await sha256OfBytes(bytes(content))
 					}
-				]
+				],
+				check: { prompt: 'Hi', max_new_tokens: 1, tokens: [1], margins: [1] }
 			}
 		]
 	};

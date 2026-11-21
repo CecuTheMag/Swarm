@@ -606,6 +606,8 @@ async fn pending_unit(
            -- A language model only for a device whose GPU can hold it (spec 0017).
            AND (j.min_gpu_buffer IS NULL OR j.min_gpu_buffer <=
                 (SELECT w.max_buffer_size FROM workers w WHERE w.id = $2))
+           -- Nor for one that computes the job's model wrongly.
+           AND NOT EXISTS (SELECT 1 FROM workers w WHERE w.id = $2 AND j.id = ANY(w.unfit_jobs))
            AND NOT EXISTS (
                SELECT 1 FROM leases l JOIN workers w ON w.id = l.worker_id
                WHERE l.unit_id = u.id AND l.released_at IS NULL
@@ -1453,6 +1455,8 @@ pub enum ReleaseReason {
     Invalid,
     /// No heartbeat in time, or the lease reached its maximum lifetime.
     Expired,
+    /// The worker cannot compute the unit's job correctly (spec 0017).
+    Unfit,
 }
 
 impl ReleaseReason {
@@ -1462,6 +1466,7 @@ impl ReleaseReason {
             Self::Failed => "failed",
             Self::Invalid => "invalid",
             Self::Expired => "expired",
+            Self::Unfit => "unfit",
         }
     }
 }
@@ -1494,6 +1499,47 @@ pub async fn release_lease(
     let released = release_leases(&mut tx, &owned, ReleaseReason::Failed, cfg).await?;
     tx.commit().await?;
     Ok(released)
+}
+
+/// Releases a lease whose worker cannot compute the unit's job correctly: its answer to
+/// the model's known question was wrong (spec 0017). The unit goes back to the queue
+/// without being charged a try, since the device, not the unit, is at fault, and the
+/// worker is given none of the job's units again.
+pub async fn release_unfit(db: &PgPool, worker_id: Uuid, lease_id: Uuid) -> sqlx::Result<Released> {
+    let mut tx = db.begin().await?;
+    let lease: Option<(Uuid, Uuid, bool)> = sqlx::query_as(
+        "UPDATE leases l SET released_at = now(), release_reason = 'unfit'
+         FROM units u
+         WHERE l.id = $1 AND l.worker_id = $2 AND u.id = l.unit_id
+           AND l.completed_at IS NULL AND l.released_at IS NULL
+         RETURNING l.unit_id, u.job_id, l.honeypot",
+    )
+    .bind(lease_id)
+    .bind(worker_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((unit_id, job_id, honeypot)) = lease else {
+        return Ok(Released::default());
+    };
+    if !honeypot {
+        sqlx::query("UPDATE units SET status = 'pending' WHERE id = $1 AND status = 'leased'")
+            .bind(unit_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    sqlx::query(
+        "UPDATE workers SET unfit_jobs = array_append(unfit_jobs, $2)
+         WHERE id = $1 AND NOT $2 = ANY(unfit_jobs)",
+    )
+    .bind(worker_id)
+    .bind(job_id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(Released {
+        leases: 1,
+        failed_jobs: Vec::new(),
+    })
 }
 
 /// Releases every active lease of a worker (it disconnected).

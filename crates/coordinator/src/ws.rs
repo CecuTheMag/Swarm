@@ -456,12 +456,20 @@ async fn worker_loop(
                 CoordinatorMessage::Ack { lease_id, accepted }
             }
 
-            WorkerMessage::Failed { lease_id, reason } => {
+            WorkerMessage::Failed {
+                lease_id,
+                reason,
+                unfit,
+            } => {
                 if active.remove(&lease_id) {
-                    tracing::warn!(%worker_id, %lease_id, %reason, "worker failed a unit");
-                    let released =
+                    let released = if unfit {
+                        tracing::warn!(%worker_id, %lease_id, %reason, "worker is unfit for a job");
+                        db::retrying(|| db::release_unfit(&state.db, worker_id, lease_id)).await?
+                    } else {
+                        tracing::warn!(%worker_id, %lease_id, %reason, "worker failed a unit");
                         db::retrying(|| db::release_lease(&state.db, worker_id, lease_id, cfg))
-                            .await?;
+                            .await?
+                    };
                     state.publish_released(released);
                 }
                 CoordinatorMessage::Ack {

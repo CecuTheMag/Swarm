@@ -85,6 +85,12 @@ pub enum WorkerMessage {
     Failed {
         lease_id: Uuid,
         reason: String,
+        /// The device cannot compute this job's units correctly: its answer to the model's
+        /// known question was wrong (spec 0017). The unit goes back without being charged a
+        /// try, and this connection gets none of the job's units again.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[ts(as = "Option<bool>", optional)]
+        unfit: bool,
     },
 }
 

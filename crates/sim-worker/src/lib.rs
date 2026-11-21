@@ -59,6 +59,9 @@ pub struct Options {
     /// The GPU buffer to report, as a browser with WebGPU does, so units of language models
     /// that need one come to this worker (spec 0017). None reports no GPU.
     pub gpu_buffer: Option<u64>,
+    /// Fault injection: refuse language-model units as a device whose answer to the
+    /// model's known question was wrong (spec 0017).
+    pub ai_unfit: bool,
 }
 
 /// About two minutes of work for the interpreter.
@@ -80,6 +83,7 @@ impl Default for Options {
             community: true,
             fuel: DEFAULT_FUEL,
             gpu_buffer: None,
+            ai_unfit: false,
         }
     }
 }
@@ -525,6 +529,17 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
             } => {
                 owed -= 1;
                 idle_answers = 0;
+                if opts.ai_unfit && template.id == ai::ID {
+                    let msg = WorkerMessage::Failed {
+                        lease_id,
+                        reason: "the model's check came out wrong on this device".into(),
+                        unfit: true,
+                    };
+                    held.insert(lease_id, Instant::now());
+                    send(&mut ws, &mut stats, msg).await?;
+                    owed += 1;
+                    continue;
+                }
                 let started = Instant::now();
                 let cheat = opts.cheat;
                 let fuel = opts.fuel;
@@ -549,6 +564,7 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
                     Err(e) => WorkerMessage::Failed {
                         lease_id,
                         reason: e.to_string(),
+                        unfit: false,
                     },
                 };
                 if !opts.delay.is_zero() {
