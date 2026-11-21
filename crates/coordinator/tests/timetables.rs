@@ -256,6 +256,7 @@ async fn worker(db: &PgPool) -> Uuid {
         backend: Backend::Native,
         vendor: "test".into(),
         architecture: "test".into(),
+        max_buffer_size: None,
     };
     let registration = db::insert_worker(
         db,

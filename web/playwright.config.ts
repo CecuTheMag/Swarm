@@ -44,7 +44,9 @@ export default defineConfig({
 				// As on the public server; the same password as e2e/submit.ts.
 				SWARM_SUBMIT_TOKEN: 'e2e-submit-password',
 				// The platform admin the console tests sign in as (e2e/submit.ts).
-				SWARM_BOOTSTRAP_ADMIN: 'e2e-admin@swarm.test:e2e admin password'
+				SWARM_BOOTSTRAP_ADMIN: 'e2e-admin@swarm.test:e2e admin password',
+				// The catalog's tiny test model (spec 0017), from `python3 tools/models.py --test`.
+				SWARM_TEST_MODELS: '1'
 			},
 			reuseExistingServer: false,
 			timeout: 300_000

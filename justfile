@@ -61,6 +61,17 @@ deploy server=env_var_or_default("SWARM_SERVER", ""):
     ssh {{server}} 'test -f ~/swarm.env || (umask 077 && echo "SWARM_SUBMIT_TOKEN=$(openssl rand -hex 12)" > ~/swarm.env)'
     ssh {{server}} 'cd ~/swarm && docker compose --env-file ~/swarm.env -f deploy/compose.server.yaml up -d --build --remove-orphans'
 
+# `--test` fetches the tiny test model the browser tests use instead.
+# Model files of the catalog (spec 0017) into models/, each checked against its SHA-256.
+models *args:
+    python3 tools/models.py {{args}}
+
+# Only what changed is sent; run `just models` first.
+# Copy the model files to the server (the coordinator serves them from ~/swarm-models).
+deploy-models server=env_var_or_default("SWARM_SERVER", ""):
+    @test -n "{{server}}" || { echo "usage: just deploy-models user@host (or set SWARM_SERVER)"; exit 1; }
+    rsync -a --delete --exclude 'hf-internal-testing/' models/ {{server}}:swarm-models/
+
 # The platform admin on the deployed server (spec 0010): prints a new random password
 # once, on the server's terminal only. Run it again to reset a forgotten password.
 admin-create email server=env_var_or_default("SWARM_SERVER", ""):

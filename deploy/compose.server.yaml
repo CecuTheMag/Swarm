@@ -42,6 +42,9 @@ services:
       RUST_LOG: info
       # Only whoever knows it starts jobs; anyone may still join as a worker.
       SWARM_SUBMIT_TOKEN: ${SWARM_SUBMIT_TOKEN:?set it in ~/swarm.env on the server}
+      # Language models (spec 0017), copied to the server by `just deploy-models`.
+      SWARM_MODELS_DIR: /models
+    volumes: ["${HOME}/swarm-models:/models:ro"]
     depends_on:
       postgres: { condition: service_healthy }
 

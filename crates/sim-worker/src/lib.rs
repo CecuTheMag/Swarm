@@ -10,7 +10,7 @@ use futures_util::{SinkExt, StreamExt};
 use protocol::{
     Backend, CoordinatorMessage, DeviceControl, DeviceInfo, PROTOCOL_VERSION, TemplateRef,
     WorkerMessage,
-    templates::{nn, pi, program, pt, tt},
+    templates::{ai, nn, pi, program, pt, tt},
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -56,6 +56,9 @@ pub struct Options {
     /// Work budget of one program unit, roughly in instructions: the browser's time
     /// limit in the interpreter's terms.
     pub fuel: u64,
+    /// The GPU buffer to report, as a browser with WebGPU does, so units of language models
+    /// that need one come to this worker (spec 0017). None reports no GPU.
+    pub gpu_buffer: Option<u64>,
 }
 
 /// About two minutes of work for the interpreter.
@@ -76,6 +79,7 @@ impl Default for Options {
             delay: Duration::ZERO,
             community: true,
             fuel: DEFAULT_FUEL,
+            gpu_buffer: None,
         }
     }
 }
@@ -136,6 +140,15 @@ impl Cheat {
                     })
                     .collect();
                 Some(json!({ "rgb": pt::encode_rgb(&rgb) }))
+            }
+            // Plausible text a liar made up instead of running the model.
+            ai::ID => {
+                let tokens: Vec<u32> = if constant {
+                    vec![42; 3]
+                } else {
+                    (0..3).map(|_| fastrand::u32(..1000)).collect()
+                };
+                Some(json!({ "text": "made up", "tokens": tokens, "margins": [1.0, 1.0, 1.0] }))
             }
             nn::ID => {
                 // A plausible score and a made-up network: a liar cannot know the
@@ -332,8 +345,44 @@ fn compute_template(template_id: &str, version: u32, params: &Value) -> anyhow::
             let (output, _) = network::train_unit(&p).map_err(anyhow::Error::msg)?;
             Ok(serde_json::to_value(output)?)
         }
+        (ai::ID, ai::VERSION) => {
+            let p: ai::UnitParams = serde_json::from_value(params.clone())?;
+            Ok(serde_json::to_value(stand_in_answer(&p))?)
+        }
         _ => bail!("unsupported template {template_id} v{version}"),
     }
+}
+
+/// What a simulated device answers for a language-model unit. It runs no model: the
+/// answer is a pure function of the unit, so honest simulated devices agree with each other
+/// as devices running the same model greedily do, and tests of verification, ordering and
+/// scheduling need no weights. Browsers compute real answers (spec 0017).
+pub fn stand_in_answer(p: &ai::UnitParams) -> ai::UnitOutput {
+    let mut h = Sha256::new();
+    for part in [
+        p.model.as_str(),
+        p.system.as_deref().unwrap_or(""),
+        &p.prompt,
+    ] {
+        h.update(part.as_bytes());
+        h.update([0]);
+    }
+    let digest = h.finalize();
+    let n = (p.max_new_tokens as usize).min(8);
+    let tokens: Vec<u32> = digest
+        .chunks_exact(4)
+        .take(n)
+        .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]) % 50_000)
+        .collect();
+    ai::UnitOutput {
+        text: format!("stand-in answer {}", hex_prefix(&digest)),
+        margins: vec![1.0; tokens.len()],
+        tokens,
+    }
+}
+
+fn hex_prefix(bytes: &[u8]) -> String {
+    bytes.iter().take(6).map(|b| format!("{b:02x}")).collect()
 }
 
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
@@ -393,6 +442,7 @@ pub async fn run(opts: Options) -> anyhow::Result<Stats> {
                 backend: Backend::Native,
                 vendor: "cpu".into(),
                 architecture: std::env::consts::ARCH.into(),
+                max_buffer_size: opts.gpu_buffer,
             },
             client_id: Some(opts.client_id.unwrap_or_else(Uuid::new_v4)),
             join_code: opts.join_code.clone(),

@@ -15,8 +15,9 @@ use axum::{
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use protocol::{
-    CreateJob, JobOutputs, ProgramSummary, Review, ReviewDecision, UploadProgram, api::Role,
-    templates::program,
+    CreateJob, JobOutputs, ProgramSummary, Review, ReviewDecision, UploadProgram,
+    api::Role,
+    templates::{ai, program},
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -427,7 +428,8 @@ pub async fn blob_file(
         .into_response())
 }
 
-/// `GET /api/networks/{id}/jobs/{job}/outputs` (viewers): a program job's outputs.
+/// `GET /api/networks/{id}/jobs/{job}/outputs` (viewers): a program job's outputs, or a
+/// language-model job's answers as they are decided (spec 0017), in unit order.
 pub async fn outputs(
     State(state): State<AppState>,
     method: Method,
@@ -436,19 +438,27 @@ pub async fn outputs(
 ) -> Result<Json<JobOutputs>, AppError> {
     auth::network_access(&state, &method, &headers, id, Role::Viewer).await?;
     let job = crate::networks::job_in(&state, id, job_id).await?;
-    if job.template != program::ID {
-        return Err(AppError::BadRequest(
-            "only program jobs have outputs to download".into(),
-        ));
-    }
+    let text: fn(Value) -> Option<String> = match job.template.as_str() {
+        program::ID => |o| {
+            serde_json::from_value::<program::UnitOutput>(o)
+                .ok()
+                .map(|o| o.output)
+        },
+        ai::ID => |o| {
+            serde_json::from_value::<ai::UnitOutput>(o)
+                .ok()
+                .map(|o| o.text)
+        },
+        _ => {
+            return Err(AppError::BadRequest(
+                "only program and language-model jobs have outputs to download".into(),
+            ));
+        }
+    };
     let outputs = db::unit_outputs(&state.db, job_id)
         .await?
         .into_iter()
-        .map(|output| {
-            output
-                .and_then(|o| serde_json::from_value::<program::UnitOutput>(o).ok())
-                .map(|o| o.output)
-        })
+        .map(|output| output.and_then(text))
         .collect();
     Ok(Json(JobOutputs { outputs }))
 }

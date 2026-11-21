@@ -32,6 +32,11 @@ pub struct DeviceInfo {
     /// GPU vendor (e.g. "nvidia"), or CPU description for non-GPU backends.
     pub vendor: String,
     pub architecture: String,
+    /// The GPU's largest buffer (`maxBufferSize`), so the coordinator gives language-model
+    /// units only to devices that can hold the model (spec 0017). None without a GPU.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
+    pub max_buffer_size: Option<u64>,
 }
 
 /// Identifies the exact code a worker must run for a unit.

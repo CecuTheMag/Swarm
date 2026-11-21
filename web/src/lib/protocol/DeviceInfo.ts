@@ -5,4 +5,9 @@ export type DeviceInfo = { backend: Backend,
 /**
  * GPU vendor (e.g. "nvidia"), or CPU description for non-GPU backends.
  */
-vendor: string, architecture: string, };
+vendor: string, architecture: string, 
+/**
+ * The GPU's largest buffer (`maxBufferSize`), so the coordinator gives language-model
+ * units only to devices that can hold the model (spec 0017). None without a GPU.
+ */
+max_buffer_size?: number, };

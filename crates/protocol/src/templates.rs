@@ -251,6 +251,145 @@ pub mod nn {
         pub rows: Vec<Row>,
     }
 }
+pub mod ai {
+    //! Language models on the swarm (spec 0017): every capable device runs a whole small
+    //! model in its browser, and one unit is one prompt.
+
+    use serde::{Deserialize, Serialize};
+    use std::sync::LazyLock;
+    use ts_rs::TS;
+
+    pub const ID: &str = "ai";
+    pub const VERSION: u32 = 1;
+
+    pub const MAX_PROMPTS: usize = 10_000;
+    /// One prompt or the system prompt, as UTF-8.
+    pub const MAX_PROMPT_BYTES: usize = 8 * 1024;
+    /// All prompts of one job together.
+    pub const MAX_JOB_BYTES: usize = 16 << 20;
+    pub const MAX_NEW_TOKENS: u32 = 512;
+    /// Generated text per unit: far more than `MAX_NEW_TOKENS` tokens can decode to.
+    pub const MAX_TEXT_BYTES: usize = 64 * 1024;
+    /// Two answers that part at a token both devices chose by less than this (logit of the
+    /// chosen token minus the runner-up's) are the same answer: an honest near-tie, which
+    /// GPUs that round differently decide differently. Measured on the M1 Max: Chrome and
+    /// WebKit gave the same 64-token answer to 34 of 50 prompts, and every other answer
+    /// parted at a token both chose by at most 0.31 (docs/measurements.md).
+    pub const NEAR_TIE: f32 = 0.5;
+
+    /// The model catalog the site ships; its SHA-256 is the template's, so a device runs
+    /// only the models, and the exact files, it lists.
+    pub const CATALOG: &str = include_str!("../../../templates/ai/catalog.json");
+
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[ts(export, rename = "AiCatalog")]
+    pub struct Catalog {
+        pub version: u32,
+        pub models: Vec<Model>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[ts(export, rename = "AiModel")]
+    pub struct Model {
+        /// The model's repository on Hugging Face; its files are served at
+        /// `/models/{id}/{path}`.
+        pub id: String,
+        pub name: String,
+        pub licence: String,
+        pub source: String,
+        /// The pinned revision the files come from.
+        pub revision: String,
+        /// Weights' precision, as transformers.js names it.
+        pub dtype: String,
+        /// Whether prompts go through the model's chat template.
+        pub chat: bool,
+        /// Only for tests: served and accepted only where test models are enabled.
+        pub test: bool,
+        /// Largest GPU buffer a device must offer, or none for a model any device can run.
+        #[ts(type = "number | null")]
+        pub min_gpu_buffer: Option<u64>,
+        pub files: Vec<ModelFile>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[ts(export, rename = "AiModelFile")]
+    pub struct ModelFile {
+        pub path: String,
+        #[ts(type = "number")]
+        pub size: u64,
+        pub sha256: String,
+    }
+
+    static PARSED: LazyLock<Catalog> =
+        LazyLock::new(|| serde_json::from_str(CATALOG).expect("the model catalog is valid JSON"));
+
+    pub fn catalog() -> &'static Catalog {
+        &PARSED
+    }
+
+    pub fn model(id: &str) -> Option<&'static Model> {
+        catalog().models.iter().find(|m| m.id == id)
+    }
+
+    /// Parameters supplied when submitting a job.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(deny_unknown_fields)]
+    #[ts(export, rename = "AiJobParams")]
+    pub struct JobParams {
+        /// A model of the catalog.
+        pub model: String,
+        /// One unit each, answered in this order.
+        pub prompts: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub system: Option<String>,
+        pub max_new_tokens: u32,
+    }
+
+    /// One prompt. Decoding is greedy, so two honest devices compute the same thing.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[serde(deny_unknown_fields)]
+    #[ts(export, rename = "AiUnitParams")]
+    pub struct UnitParams {
+        pub model: String,
+        pub prompt: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub system: Option<String>,
+        pub max_new_tokens: u32,
+    }
+
+    /// What a device returns for one prompt.
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+    #[serde(deny_unknown_fields)]
+    #[ts(export, rename = "AiUnitOutput")]
+    pub struct UnitOutput {
+        /// The generated text, special tokens left out.
+        pub text: String,
+        /// The generated token ids, the end-of-text token included when there is one.
+        pub tokens: Vec<u32>,
+        /// For each token, the chosen token's logit minus the runner-up's: how close the
+        /// choice was (spec 0017, the near-tie rule).
+        pub margins: Vec<f32>,
+    }
+
+    /// One prompt's answer in the job's result.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[ts(export, rename = "AiAnswer")]
+    pub struct Answer {
+        pub text: String,
+        pub tokens: u32,
+    }
+
+    /// The answers, in prompt order.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+    #[ts(export, rename = "AiResult")]
+    pub struct JobResult {
+        pub model: String,
+        pub answers: Vec<Answer>,
+    }
+}
+
 pub mod program {
     //! A group's own WebAssembly program (spec 0008).
 

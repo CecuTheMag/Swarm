@@ -588,7 +588,8 @@ button:disabled,
 /* ---------- Fields ---------- */
 
 input,
-select {
+select,
+textarea {
 	font: inherit;
 	font-size: 16px; /* never below 16 px: iOS would zoom the page */
 	color: var(--text);
@@ -611,8 +612,14 @@ select {
 	background-position: right 14px center;
 }
 
+textarea {
+	resize: vertical;
+	line-height: 1.45;
+}
+
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
 	outline: none;
 	border-color: var(--brand);
 	box-shadow: 0 0 0 4px var(--brand-soft);

@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "HuggingFaceTB/SmolLM2-360M-Instruct",
+      "name": "SmolLM2 360M Instruct",
+      "licence": "Apache-2.0",
+      "source": "https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct",
+      "revision": "a10cc1512eabd3dde888204e902eca88bddb4951",
+      "dtype": "q4f16",
+      "chat": true,
+      "test": false,
+      "min_gpu_buffer": 268435456,
+      "files": [
+        {
+          "path": "config.json",
+          "size": 846,
+          "sha256": "224f72354f10d617a359cc82ad15a3c96e866b9b2ffadb81997eeea9e88e22ee"
+        },
+        {
+          "path": "generation_config.json",
+          "size": 132,
+          "sha256": "87b916edaaab66b3899b9d0dd0752727dff6666686da0504d89ae0a6e055a013"
+        },
+        {
+          "path": "tokenizer.json",
+          "size": 2104556,
+          "sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c"
+        },
+        {
+          "path": "tokenizer_config.json",
+          "size": 3764,
+          "sha256": "4ec77d44f62efeb38d7e044a1db318f6a939438425312dfa333b8382dbad98df"
+        },
+        {
+          "path": "onnx/model_q4f16.onnx",
+          "size": 272737275,
+          "sha256": "cc63370efc2aca6d5307518b85162777132cc5b8d68eeb8154ea9b5fce09ad46"
+        }
+      ]
+    },
+    {
+      "id": "hf-internal-testing/tiny-random-LlamaForCausalLM",
+      "name": "Tiny random Llama (tests only)",
+      "licence": "none stated; random weights, served only where test models are enabled",
+      "source": "https://huggingface.co/hf-internal-testing/tiny-random-LlamaForCausalLM",
+      "revision": "9fb191250dd56d0ba7ec9785a025ed29c03d5998",
+      "dtype": "fp32",
+      "chat": false,
+      "test": true,
+      "min_gpu_buffer": null,
+      "files": [
+        {
+          "path": "config.json",
+          "size": 721,
+          "sha256": "5b52782dd9a2b8a4eb87f321448a61cd56cf0764493a1ff73f327259e14ab382"
+        },
+        {
+          "path": "generation_config.json",
+          "size": 116,
+          "sha256": "571666454de749a224e3739e09821239165ebfed71213632951805ccf25e90bb"
+        },
+        {
+          "path": "tokenizer.json",
+          "size": 1842764,
+          "sha256": "9cf973f7249a063159ed9c5e7eb05e5d15289b7c5571ae4e1d7315b2189b5831"
+        },
+        {
+          "path": "tokenizer_config.json",
+          "size": 1918,
+          "sha256": "1847d0a066bd2bd9fb9cb01a2141e7f3befb0a915689878903c3a4dad0f761f9"
+        },
+        {
+          "path": "onnx/model.onnx",
+          "size": 8398936,
+          "sha256": "f2c87402ad46c39f45071afc4d5cc539ffa157c9dc439471d9b964b015176f72"
+        }
+      ]
+    }
+  ]
+}

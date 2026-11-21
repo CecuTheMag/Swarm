@@ -54,6 +54,10 @@ accounts, devices, the school.
    them: a lesson transcribed, 2 000 essays summarised ([spec 0017](specs/0017-ai-on-the-swarm.md)); verification of
    float outputs (fixed decoding, tolerance on scores, spot checks on trusted devices)
    and model caching on the school's network are the hard parts.
+   Phase 1 done 21 November: SmolLM2-360M answers a file of prompts on the network's
+   devices with WebGPU, models pinned by hash and cached, the near-tie rule for GPUs that
+   round differently, the console's form and answers. Next: a model that answers
+   Bulgarian, then speech (Whisper, phase 2).
 7. **More example programs** — a Monte Carlo experiment a physics teacher would run in
    class and a parameter sweep, in `examples/programs`, and a C header for programs not
    written in Rust.

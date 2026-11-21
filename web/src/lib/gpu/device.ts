@@ -22,7 +22,9 @@ export async function requestGpu(): Promise<Gpu> {
 		info: {
 			backend: 'webgpu',
 			vendor: adapter.info.vendor || 'unknown',
-			architecture: adapter.info.architecture || adapter.info.description || 'unknown'
+			architecture: adapter.info.architecture || adapter.info.description || 'unknown',
+			// Language-model units go only to devices whose GPU can hold the model (spec 0017).
+			max_buffer_size: adapter.limits.maxBufferSize
 		}
 	};
 }

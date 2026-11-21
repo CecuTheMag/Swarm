@@ -74,6 +74,9 @@ export default defineConfig({
 			'/ws': { target: 'ws://localhost:7700', ws: true }
 		}
 	},
+	// The model runtime (spec 0017) loads only with the first language-model unit; bundled
+	// up front, so the dev server does not reload the page mid-unit to optimise it then.
+	optimizeDeps: { include: ['@huggingface/transformers'] },
 	preview: {
 		port: 7702,
 		strictPort: true

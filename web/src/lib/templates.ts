@@ -11,4 +11,7 @@ export { default as nnVectors } from '../../../templates/nn/vectors.json';
 export { default as ttVectorsText } from '../../../templates/tt/vectors.json?raw';
 // `mnist` packed at 14 × 14 (tools/pack_mnist.py); devices download it once, cached.
 export { default as mnistUrl } from '../../../templates/nn/mnist14.bin?url';
+// The model catalog of language-model units (spec 0017): its hash is the template's, and
+// every model file is checked against the SHA-256 it lists.
+export { default as aiCatalogText } from '../../../templates/ai/catalog.json?raw';
 export { kernelsWasmUrl } from './kernels-wasm.ts';

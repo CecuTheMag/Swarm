@@ -58,6 +58,10 @@ struct Args {
     /// Work budget of one program unit, roughly in instructions.
     #[arg(long, default_value_t = sim_worker::DEFAULT_FUEL)]
     fuel: u64,
+    /// Report a GPU whose largest buffer has this many bytes, so language-model units
+    /// come to these workers (spec 0017); they answer with a stand-in, not a model.
+    #[arg(long)]
+    gpu_buffer: Option<u64>,
 }
 
 #[tokio::main]
@@ -105,6 +109,7 @@ async fn main() -> anyhow::Result<()> {
         delay: Duration::from_millis(args.delay_ms),
         community: !args.no_community,
         fuel: args.fuel,
+        gpu_buffer: args.gpu_buffer,
     };
     let handles: Vec<_> = (0..args.workers)
         .map(|i| {

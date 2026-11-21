@@ -147,8 +147,9 @@ pub async fn create_job(db: &PgPool, new: NewJob<'_>) -> sqlx::Result<JobSummary
         .await?;
     let job: JobRow = sqlx::query_as(concat!(
         "INSERT INTO jobs (id, template, template_version, template_sha256, params, status,
-                           units_total, network_id, quorum, program_id, owner_network_id)
-         VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7, $8, $9, $10)
+                           units_total, network_id, quorum, program_id, owner_network_id,
+                           min_gpu_buffer)
+         VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7, $8, $9, $10, $11)
          RETURNING ",
         job_columns!(),
         ""
@@ -163,6 +164,12 @@ pub async fn create_job(db: &PgPool, new: NewJob<'_>) -> sqlx::Result<JobSummary
     .bind(quorum)
     .bind(program_id)
     .bind(owner_network_id)
+    .bind(
+        template
+            .template
+            .min_gpu_buffer(params)
+            .map(|b| i64::try_from(b).unwrap_or(i64::MAX)),
+    )
     .fetch_one(&mut *tx)
     .await?;
 
@@ -354,8 +361,8 @@ pub async fn insert_worker(
     }
     let connected_at = sqlx::query_scalar(
         "INSERT INTO workers (id, backend, vendor, architecture, client_version, client_id,
-                              network_id, device_id, community)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING connected_at",
+                              network_id, device_id, community, max_buffer_size)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING connected_at",
     )
     .bind(id)
     .bind(backend)
@@ -366,6 +373,11 @@ pub async fn insert_worker(
     .bind(network_id)
     .bind(record.id)
     .bind(community)
+    .bind(
+        device
+            .max_buffer_size
+            .map(|b| i64::try_from(b).unwrap_or(i64::MAX)),
+    )
     .fetch_one(&mut *tx)
     .await?;
     tx.commit().await?;
@@ -591,6 +603,9 @@ async fn pending_unit(
          JOIN jobs j ON j.id = u.job_id
          WHERE u.network_id = $3 AND u.status = 'pending'
            AND (j.program_id IS NULL OR $4)
+           -- A language model only for a device whose GPU can hold it (spec 0017).
+           AND (j.min_gpu_buffer IS NULL OR j.min_gpu_buffer <=
+                (SELECT w.max_buffer_size FROM workers w WHERE w.id = $2))
            AND NOT EXISTS (
                SELECT 1 FROM leases l JOIN workers w ON w.id = l.worker_id
                WHERE l.unit_id = u.id AND l.released_at IS NULL
@@ -665,6 +680,10 @@ async fn pick_honeypot(
          FROM (SELECT id, floor(random() * units_total)::int AS seq
                FROM jobs WHERE status = 'done' AND template_sha256 = ANY($3)
                  AND network_id = ANY($4)
+                 -- Not language models yet: an honest device on another kind of GPU may
+                 -- choose a different token at a near-tie, and a wrong answer to a
+                 -- known unit bans (spec 0017, phase 3).
+                 AND template <> 'ai'
                ORDER BY random() LIMIT 1) j
          JOIN units u ON u.job_id = j.id AND u.seq = j.seq AND u.status = 'done'
          WHERE NOT EXISTS (

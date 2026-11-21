@@ -1,6 +1,7 @@
 # 0017 — AI on the swarm
 
-Status: planned (phase 1 starts 21 November 2026; target for the defense: phases 1–2)
+Status: phase 1 built 21 November 2026, with the near-tie rule of phase 3 (see
+„Phase 1 as built“); target for the defense: phases 1–2
 
 ## Goal
 
@@ -37,7 +38,7 @@ A model is data, but it decides what a device computes, so it is pinned like a k
   it cannot point at a URL.
 - The browser downloads each file, checks its SHA-256 before use, and keeps it in
   Cache Storage: a device downloads a model once.
-- Files are served from Swarm's own origin (`/models/…`), so the CSP keeps
+- Files are served from Swarm's own origin (`/api/models/…`), so the CSP keeps
   `connect-src 'self'`. Optionally an operator adds one mirror origin for model files
   (a pinned revision on a CDN); the hash check makes the mirror unable to change what
   runs.
@@ -96,6 +97,48 @@ before it is trusted.
 4. **Bigger models on bigger devices**: tiers by device memory, a 1–3B model on PCs with
    a real graphics card; images (classification, embeddings for search).
 
+## Phase 1 as built (21 November 2026)
+
+- **Template `ai`.** The catalog (`templates/ai/catalog.json`) is the template's pinned
+  source: its SHA-256 goes with every unit, and each file it lists carries its size and
+  SHA-256. `just models` downloads the files from their pinned Hugging Face revision and
+  checks them; `just deploy-models` copies them to the server, whose coordinator serves
+  `/api/models/{model}/{file}` for catalog files only.
+- **Models.** SmolLM2-360M-Instruct (`q4f16`, 273 MB). The catalog's test model,
+  `hf-internal-testing/tiny-random-LlamaForCausalLM` (10 MB, random weights, no licence
+  stated), is accepted and served only where `SWARM_TEST_MODELS=1`: the browser tests and
+  development, never a server.
+- **Which devices.** A device reports its GPU's largest buffer (`max_buffer_size`); a job
+  of a model with `min_gpu_buffer` (256 MiB for SmolLM2) goes only to devices that report
+  at least that much. Devices without WebGPU report none, so lab PCs and the CPU fallback
+  never get SmolLM2 units; the test model runs anywhere.
+- **In the browser.** transformers.js and ONNX Runtime Web load in the compute worker with
+  the first such unit. Every file goes through a fetch that loads only catalog files from
+  this site, checks the SHA-256 before use, and keeps checked copies in Cache Storage. The
+  runtime's WebAssembly is served by the site too (no CDN), loaded as a module, not a blob.
+  A logits processor records each token's margin; a stopping criterion ends the
+  generation after the current token when „Спри“ is pressed.
+- **Agreement: the near-tie rule now.** Measured on the M1 Max, Chrome and WebKit gave the
+  same 64-token answer for only 34 of 50 prompts; every other answer parted at a token both
+  chose by at most 0.31. Exact agreement would have counted a third of honest answers
+  against their devices. Two answers agree when they are identical, or identical up to a
+  token both devices chose by less than 0.5 (`NEAR_TIE`), and not at the first token: an
+  honest device was that unsure of its first token for 16 of 150 answers, so a made-up
+  answer would pass that often, while every honest parting came at token 5 or later.
+  Faking the first token takes running the model.
+- **No honeypots of language models yet.** A known answer computed on another kind of GPU
+  can part at a near-tie, and two wrong answers to known units ban a device. Devices
+  answering language-model units still get honeypots of the other templates.
+- **Simulated devices** answer with a stand-in (`sim_worker::stand_in_answer`): no model,
+  a pure function of the unit, so the Rust tests of order, scheduling and cheaters need no
+  weights.
+- **Console.** „Текст с ИИ“: a model, the answer length, verification, instructions, and
+  the prompts typed or from a file (lines or JSON Lines with `prompt`). The job's page
+  shows each answer as it is decided and downloads them as CSV or text.
+
+**Found.** SmolLM2-360M does not answer Bulgarian (it repeats the question). A model for
+Bulgarian prompts is still to be chosen. Measurements: [measurements.md](../measurements.md#language-models-on-the-swarm-spec-0017).
+
 ## Acceptance (phase 1)
 
 - A network starts a text job from a file of prompts in the console; its devices with
@@ -109,6 +152,12 @@ before it is trusted.
 - CI: the browser test uses a tiny test model (a few MB, random weights) in Chromium
   with WebGPU and the CPU fallback; Rust tests cover split, validation, agree and
   aggregate.
+
+All met on 21 November 2026 (Rust: `templates::ai`, `models`, `tests/ai.rs`; browser:
+`e2e/ai.e2e.ts` in Chromium with and without WebGPU, Firefox and WebKit; Vitest:
+`lib/ai/files.spec.ts`), with two notes: „Спри“ mid-token was checked by hand with
+SmolLM2 (the test model answers too fast to interrupt), and in WebKit as Playwright opens
+it a new page re-downloads the model (a private session; see measurements).
 
 ## Verified by
 

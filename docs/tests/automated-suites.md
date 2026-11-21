@@ -4,7 +4,7 @@ They run on every change (`just check`, `just e2e`, `just e2e-webkit`; CI runs t
 
 ## Rust (`cargo test --workspace`)
 
-About 260 tests across the crates, many against a real PostgreSQL (`sqlx::test`). `cargo
+About 280 tests across the crates, many against a real PostgreSQL (`sqlx::test`). `cargo
 test` runs four at a time per test binary (`.cargo/config.toml`): sqlx shares 20
 connections among a binary's database tests. `cargo nextest run` runs each in its own
 process.
@@ -23,6 +23,7 @@ process.
 | Edited timetables (`tests/timetable_edits.rs`, spec 0015) | An edit saved and read back is the same, with the coordinator's own cost; a first edit twice, or a save from an older or dropped version, is refused and keeps nothing; timetables of the wrong length, slots outside the week, bad base64 and pinned hours out of range, twice or pinned in the school already are refused; viewers read, admins change, other networks see nothing; only timetable jobs have one |
 | Hardening (`tests/networks.rs`, spec 0016) | Without its token the public network refuses strangers on every route and still serves its admins; it opens only on request, never once a token is set; a sign-in waits for a free password check and is told to try again, which never counts as a wrong password, and one given up halfway keeps its check's slot until the check ends; every coordinator response, errors included, carries its security headers |
 | Live events (`state.rs`) | A cheater outvoted after it left is still announced as caught, once; a connected one once; how many departed workers are remembered is bounded |
+| Language models (`templates/ai.rs`, `models.rs`, `tests/ai.rs`, spec 0017) | Every catalog file is pinned by size and SHA-256; a job splits into one unit per prompt, in order; bad jobs (unknown model, empty or too long prompts, token limits, unknown fields) are refused; answers agree when identical or parted at a near-tie both devices report, never at the first token or when one device was sure; only devices whose GPU holds the model get its units (none, too small, enough); test models only where enabled; only catalog files are served, never another path; a device making up answers is outvoted and banned while every answer equals the honest one |
 | End to end (`tests/e2e.rs`) | Simulated devices run real jobs through a real coordinator: π exact, a rendered picture, a neural network sweep with a cheater among the devices (banned; every score equals the reference; the downloaded model has the accuracy the devices reported) |
 
 ## Browser unit tests (`pnpm test`, Vitest)
@@ -37,6 +38,7 @@ process.
 | `cpu/tt.spec.ts`, `console/timetable.spec.ts` | The WebAssembly solver gives the shared vectors exactly and scores timetables as the Rust tests do; a timetable drawn per class and teacher, and written as CSV; hard conflicts named; an hour moved or traded by hand; hand pins added to a school for the next search |
 | `school/csv.spec.ts`, `school/import.spec.ts` | CSV as spreadsheets save it, read back exactly whatever the fields hold; a plan imported with every bad row named by line, pinned hours too; every example school's plan exported and read back |
 | `school/checks.spec.ts`, `school/edit.spec.ts` | Each impossibility check fires for a school built to fail it and never for the examples, pins included; edits keep lessons pointing at the right entries, and a refused edit changes nothing; pins kept within the lesson's hours and the week |
+| `ai/files.spec.ts`, `console/ai.spec.ts` | Model files only from the catalog and this site; a file whose SHA-256 differs is refused and not kept; the second load reads the checked copy; a damaged copy is replaced; prompts from lines or JSON Lines (bad lines named); answers written as CSV and text |
 | `bytes.spec.ts`, `console/programs.spec.ts` | Base64, hex and SHA-256 as the coordinator computes them; job inputs from a file or a count |
 
 ## Browser tests (`just e2e`, Playwright)
@@ -60,6 +62,7 @@ path), Firefox, and WebKit (Safari's engine) with `just e2e-webkit`.
 | `timetables.e2e.ts` | A school's devices search its timetable; every search's cost equals an independent recomputation; the console shows it per class and teacher and downloads it as CSV (spec 0013) |
 | `schools.e2e.ts` | A deputy director imports a plan (bad rows named), marks a teacher away, finds a class with too many hours, saves, reloads, is stopped from overwriting another admin's save, searches on the school's device (the teacher's free day is kept free) and prints every class on its own page (spec 0014) |
 | `timetable-edit.e2e.ts` | A deputy director pins a lesson with the plan and another in the editor (a slot taken is refused), searches, moves an hour onto a busy teacher and sees the clash named, undoes it, moves it where it breaks nothing, saves, reloads to the same cost the coordinator computed, prints it, gives the edit back and takes it again, and searches again: the hour put by hand is pinned in the new timetable (spec 0015) |
+| `ai.e2e.ts` | A language model (the catalog's tiny test model) answers a job from the console on a network's device, its five files fetched once from this site and never from another; the answers download as CSV in prompt order; a fresh page reads the model from the checked cache with no request (not in WebKit's private session); a tampered model file is refused on the device and nothing is answered (spec 0017) |
 | `programs.e2e.ts` | A network uploads its own program, a device computes it, the outputs download exactly; an endless program leaves the page usable and stops when asked; review opens the public network; a contributor's choice about community programs is kept (spec 0012) |
 
 Latest full run: see the bottom of `docs/measurements.md` (Browser engines).

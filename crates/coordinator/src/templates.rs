@@ -5,6 +5,7 @@
 //! shipped with the site, or a network's checked program (spec 0012) pinned by its
 //! hash; jobs of the other templates carry parameters, never code.
 
+pub mod ai;
 pub mod nn;
 mod pi;
 pub mod program;
@@ -40,6 +41,16 @@ pub trait Template: Send + Sync {
     fn blob(&self, _params: &Value) -> Option<Vec<u8>> {
         None
     }
+    /// The largest GPU buffer a device needs for this job's units, or none when any device
+    /// can compute them: a language model's weights (spec 0017).
+    fn min_gpu_buffer(&self, _params: &Value) -> Option<u64> {
+        None
+    }
+    /// Whether the job uses something meant only for tests, accepted only where
+    /// `SWARM_TEST_MODELS=1` (spec 0017).
+    fn test_only(&self, _params: &Value) -> bool {
+        false
+    }
     /// Whether two valid outputs for the same unit count as the same answer (spec 0004).
     fn agree(&self, unit_params: &Value, a: &Value, b: &Value) -> bool;
     /// Reduces unit outputs (in unit order) into the job result.
@@ -53,7 +64,14 @@ pub struct Registered {
 }
 
 static REGISTRY: LazyLock<Vec<Registered>> = LazyLock::new(|| {
-    let all: [&'static dyn Template; 5] = [&pi::Pi, &pt::Pt, &nn::Nn, &program::Program, &tt::Tt];
+    let all: [&'static dyn Template; 6] = [
+        &pi::Pi,
+        &pt::Pt,
+        &nn::Nn,
+        &program::Program,
+        &tt::Tt,
+        &ai::Ai,
+    ];
     all.into_iter()
         .map(|template| Registered {
             template,
@@ -79,13 +97,13 @@ mod tests {
 
     #[test]
     fn registry_hashes_are_hex_sha256() {
-        for id in ["pi", "pt", "nn", "tt"] {
+        for id in ["pi", "pt", "nn", "tt", "ai"] {
             let sha256 = get(id).unwrap().sha256.clone().unwrap();
             assert_eq!(sha256.len(), 64);
             assert!(sha256.chars().all(|c| c.is_ascii_hexdigit()));
         }
         assert_eq!(get("program").unwrap().sha256, None);
-        assert_eq!(current_hashes().len(), 4);
+        assert_eq!(current_hashes().len(), 5);
     }
 
     #[test]

@@ -138,6 +138,13 @@ jobs:
           sudo apt-get install -y --no-install-recommends zbar-tools
         working-directory: web
       - run: cargo build -p coordinator
+      # The catalog's tiny test model (spec 0017), pinned by its hashes, for the language
+      # model tests; kept between runs.
+      - uses: actions/cache@v4
+        with:
+          path: models
+          key: test-models-${{ hashFiles('templates/ai/catalog.json') }}
+      - run: python3 tools/models.py --test
       - run: df -h /
       - run: pnpm exec playwright test
         working-directory: web

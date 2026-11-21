@@ -427,3 +427,52 @@ give a better best timetable, with diminishing returns; the spread is what a sin
 computer running one search would risk. These example schools are easier than a real
 one (no class or room preferences beyond the gym and labs): the numbers for a real
 school's data are still to be measured.
+
+## Language models on the swarm (spec 0017)
+
+2026-11-21, MacBook Pro M1 Max (macOS 26.3.1, mains power), SmolLM2-360M-Instruct
+(`q4f16`, 273 MB of files) through transformers.js 4.3.2 on WebGPU, one browser alone on
+the local grid, 50 English prompts, system prompt „Answer in one or two sentences.“, at
+most 64 new tokens, greedy decoding.
+
+| Browser | First unit (model loaded from the server) | First unit, model from the cache | Other units | Tokens/s | 50 prompts |
+|---|---|---|---|---|---|
+| Chrome 158 | 2 029 ms | 2 008 ms | 426 ms | 67.4 | 23.2 s |
+| Edge 157 | 2 516 ms | 2 034 ms | 429 ms | 67.0 | 23.9 s |
+| WebKit 27.2 (Safari's engine) | 1 913 ms | 1 842 ms | 449 ms | 65.0 | 24.1 s |
+
+Tokens per second count every generated token over the units' compute time, the prompt
+included; answers averaged 28 tokens. Loading the model costs about 1.6 s on top of a
+unit, whether its files come over the network (here from the same machine) or from the
+browser's checked copy: hashing 273 MB and preparing the GPU dominate. Over the home
+line (4.8 MB/s up, [above](#public-address-relay-sweep-spec-0006)) the download alone is
+about a minute per device, once.
+
+**Do different GPUs choose the same tokens?** The same 50 prompts in the three browsers:
+
+- Chrome and Edge (the same shader compiler, Tint): identical answers for 50 of 50, margins
+  included.
+- Chrome or Edge against WebKit (another compiler on the same GPU): identical for 34 of 50.
+  Every other answer parted at a token both browsers chose by at most 0.31 (logit of the
+  chosen token minus the runner-up's), at token 5 to 29, never at the first.
+- Margins of Chrome's 1 416 tokens: median 1.97; 74 below 0.1, 253 below 0.5. 16 of 150
+  first tokens (all three browsers) were chosen by less than 0.5.
+
+With exact agreement, an honest iPhone and an honest Android phone would have disagreed on
+a third of the prompts, and each disagreement counts against a device's trust. Phase 1
+therefore takes the near-tie rule from phase 3: two answers agree when they are the same
+up to a token both devices chose by less than 0.5, and not at the first token (matching
+the first token takes running the model). Under it all 150 pairs above agree.
+
+**„Спри“** during a 512-token answer: the page stopped 24 ms after the click; the
+coordinator released the unit as the device left and it went back to the queue with no
+result.
+
+**Language.** SmolLM2-360M answers English well and does not answer Bulgarian: for
+„Какво е фотосинтеза?“ and „Назови три реки в България.“ it repeated the question. A
+model for Bulgarian prompts is still to be chosen and measured.
+
+**Caching in WebKit.** In Chrome and Firefox a new page reads the model from Cache
+Storage with no request. In WebKit as Playwright opens it (a private session) a new
+page's worker found the cache empty and downloaded the files again; a Safari profile on
+a real device is still to be checked.

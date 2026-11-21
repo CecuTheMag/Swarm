@@ -18,6 +18,9 @@
 	import type { TtResult } from '#lib/protocol/TtResult.ts';
 	import type { TtSchool } from '#lib/protocol/TtSchool.ts';
 	import { downloadOutputs, encodeArgs, parseInputs } from '#lib/console/programs.ts';
+	import { parsePrompts } from '#lib/console/ai.ts';
+	import { aiCatalogText } from '#lib/templates.ts';
+	import type { AiCatalog } from '#lib/protocol/AiCatalog.ts';
 
 	const network = useNetwork();
 	const id = $derived(page.params.id!);
@@ -33,7 +36,7 @@
 	const jobs = $derived(live ? sortedJobs(live.state) : []);
 
 	// What to compute, in plain terms; the technical fields stay one click away.
-	let template = $state<'pt' | 'nn' | 'pi' | 'program' | 'tt'>('pt');
+	let template = $state<'pt' | 'nn' | 'pi' | 'program' | 'tt' | 'ai'>('pt');
 	let quality = $state<'fast' | 'normal' | 'high'>('normal');
 	const QUALITY = {
 		fast: { width: 960, height: 540, spp: 64, passes: 4 },
@@ -199,6 +202,43 @@
 		};
 	}
 
+	// Questions for a language model (spec 0017): every capable device runs the whole
+	// model and answers some of them. Test models are listed only when the address asks.
+	const aiModels = $derived(
+		(JSON.parse(aiCatalogText) as AiCatalog).models.filter(
+			(m) => !m.test || page.url.searchParams.has('test-models')
+		)
+	);
+	let aiModel = $state('');
+	const aiChosen = $derived(aiModels.find((m) => m.id === aiModel) ?? aiModels[0]);
+	// The choice shown is the one used: the first model until another is picked.
+	$effect(() => {
+		if (!aiModels.some((m) => m.id === untrack(() => aiModel))) aiModel = aiModels[0]?.id ?? '';
+	});
+	let aiSource = $state<'text' | 'file'>('text');
+	let aiText = $state('');
+	let aiFile = $state<File | null>(null);
+	let aiSystem = $state('Отговаряй кратко и ясно.');
+	let aiTokens = $state(128);
+	const aiSize = (m: (typeof aiModels)[number]) =>
+		Math.round(m.files.reduce((sum, f) => sum + f.size, 0) / 1e6);
+
+	/** The body of a language-model job, from the form. */
+	async function aiJob() {
+		const prompts = parsePrompts(aiSource === 'text' ? aiText : ((await aiFile?.text()) ?? ''));
+		if (prompts.length === 0) throw new Error('Напишете поне един въпрос.');
+		return {
+			template: 'ai',
+			params: {
+				model: aiChosen.id,
+				prompts,
+				...(aiSystem.trim() ? { system: aiSystem.trim() } : {}),
+				max_new_tokens: aiTokens
+			},
+			...(network.view?.public ? {} : { quorum })
+		};
+	}
+
 	let error = $state<string | null>(null);
 	let busy = $state(false);
 
@@ -211,25 +251,27 @@
 				body:
 					template === 'program'
 						? await programJob()
-						: template === 'tt'
-							? await timetableJob()
-							: template === 'pi'
-								? { template, params: { units, samples_per_unit: samples, seed } }
-								: template === 'nn'
-									? {
-											template,
-											params: {
-												dataset,
-												steps: nnSteps,
-												hidden: list(nnHidden),
-												layers: list(nnLayers),
-												learning_rate: list(nnLr),
-												batch: list(nnBatch),
-												seeds: nnSeeds,
-												seed
+						: template === 'ai'
+							? await aiJob()
+							: template === 'tt'
+								? await timetableJob()
+								: template === 'pi'
+									? { template, params: { units, samples_per_unit: samples, seed } }
+									: template === 'nn'
+										? {
+												template,
+												params: {
+													dataset,
+													steps: nnSteps,
+													hidden: list(nnHidden),
+													layers: list(nnLayers),
+													learning_rate: list(nnLr),
+													batch: list(nnBatch),
+													seeds: nnSeeds,
+													seed
+												}
 											}
-										}
-									: { template, params: { width, height, tile, spp, passes, seed } }
+										: { template, params: { width, height, tile, spp, passes, seed } }
 			});
 		} catch (e) {
 			error = failureText(e);
@@ -260,14 +302,16 @@
 		pt: 'Изображение',
 		nn: 'Невронна мрежа',
 		pi: 'Числото π',
-		tt: 'Разписание'
+		tt: 'Разписание',
+		ai: 'Текст с ИИ'
 	};
 	const kindIcon = {
 		pt: 'image',
 		nn: 'network',
 		pi: 'atom',
 		program: 'code',
-		tt: 'school'
+		tt: 'school',
+		ai: 'chip'
 	} as const;
 	const ttResult = (r: unknown) => r as TtResult;
 	/** A program job shows its program's name. */
@@ -316,6 +360,14 @@
 					data-testid="kind-tt"
 				>
 					<Icon name="school" size={16} /> Разписание
+				</button>
+				<button
+					type="button"
+					aria-pressed={template === 'ai'}
+					onclick={() => (template = 'ai')}
+					data-testid="kind-ai"
+				>
+					<Icon name="chip" size={16} /> Текст с ИИ
 				</button>
 				<button
 					type="button"
@@ -467,6 +519,85 @@
 						>
 					{/if}
 				</div>
+			{:else if template === 'ai'}
+				<p class="muted">
+					Езиков модел отговаря на много въпроси наведнъж. Всяко устройство с видеокарта пуска целия
+					модел в браузъра и отговаря на част от тях: нищо не излиза извън устройствата и сървъра.
+				</p>
+				<div class="fields">
+					<label
+						>Модел
+						<select bind:value={aiModel} data-testid="ai-model">
+							{#each aiModels as m (m.id)}
+								<option value={m.id}
+									>{m.name} ({aiSize(m)} MB{m.test ? ', само за тестове' : ''})</option
+								>
+							{/each}
+						</select></label
+					>
+					<label
+						>Дължина на отговора
+						<select bind:value={aiTokens} data-testid="ai-tokens">
+							<option value={32}>кратък (до 32 токена)</option>
+							<option value={128}>нормален (до 128 токена)</option>
+							<option value={256}>дълъг (до 256 токена)</option>
+							<option value={512}>много дълъг (до 512 токена)</option>
+						</select></label
+					>
+					{#if !network.view?.public}
+						<label
+							>Проверка
+							<select bind:value={quorum} data-testid="ai-quorum">
+								<option value={1}>1 отговор (вярвам на устройствата)</option>
+								<option value={2}>2 еднакви отговора</option>
+								<option value={3}>3 еднакви отговора</option>
+							</select></label
+						>
+					{/if}
+				</div>
+				<p class="muted small">
+					Устройствата изтеглят модела веднъж ({aiChosen ? aiSize(aiChosen) : 0} MB) и го пазят. Лиценз:
+					{aiChosen?.licence}.
+				</p>
+				<label
+					>Указания към модела
+					<input bind:value={aiSystem} maxlength="2000" data-testid="ai-system" /></label
+				>
+				<div class="segmented stack-sm" role="group" aria-label="Въпроси">
+					<button
+						type="button"
+						aria-pressed={aiSource === 'text'}
+						onclick={() => (aiSource = 'text')}>Написани тук</button
+					>
+					<button
+						type="button"
+						aria-pressed={aiSource === 'file'}
+						onclick={() => (aiSource = 'file')}
+						data-testid="ai-file-mode">От файл</button
+					>
+				</div>
+				{#if aiSource === 'text'}
+					<label
+						>Въпроси, по един на ред
+						<textarea
+							rows="6"
+							bind:value={aiText}
+							required
+							placeholder="Какво е фотосинтеза?&#10;Назови три реки в България."
+							data-testid="ai-prompts"></textarea></label
+					>
+				{:else}
+					<label
+						>Файл с въпроси (по един на ред или JSON Lines с поле "prompt")
+						<input
+							type="file"
+							accept=".txt,.jsonl,.csv,text/plain"
+							required
+							data-testid="ai-file"
+							onchange={(e) => (aiFile = e.currentTarget.files?.[0] ?? null)}
+						/></label
+					>
+				{/if}
 			{:else if template === 'program'}
 				{#if programs.length === 0}
 					<p class="muted">
@@ -561,7 +692,10 @@
 				<p class="muted">Числото π по метода Монте Карло: точен, проверим резултат.</p>
 			{/if}
 
-			<details bind:open={advanced} hidden={template === 'program' || template === 'tt'}>
+			<details
+				bind:open={advanced}
+				hidden={template === 'program' || template === 'tt' || template === 'ai'}
+			>
 				<summary>Подробни настройки</summary>
 				<div class="fields">
 					{#if template === 'nn'}
@@ -664,6 +798,11 @@
 									).cost.total}</span
 								>
 							{/if}
+						{:else if job.template === 'ai'}
+							<a
+								href={resolve('/app/n/[id]/jobs/[job]/answers', { id, job: job.id })}
+								data-testid="answers-link">Отговори</a
+							>
 						{:else if job.template === 'program'}
 							{#if job.status === 'done'}
 								<button class="secondary sm" data-testid="download" onclick={() => download(job.id)}
@@ -706,8 +845,22 @@
 	.new p {
 		margin: 0;
 	}
+	/* Six kinds do not fit one row with their icons: they wrap, as rounded rectangles. */
 	.kinds {
-		justify-self: start;
+		justify-self: stretch;
+		grid-auto-flow: row;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		border-radius: 14px;
+	}
+	.kinds button {
+		border-radius: 11px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+	}
+	.kinds :global(svg) {
+		flex-shrink: 0;
 	}
 	details summary {
 		cursor: pointer;

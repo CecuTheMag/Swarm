@@ -21,7 +21,8 @@ import { solveCpuTt } from '#lib/cpu/tt.ts';
 import { encodeRgb } from '#lib/pt.ts';
 import { fromBase64, toBase64 } from '#lib/bytes.ts';
 import { ProgramRunner } from '#lib/program/runner.ts';
-import { nnShader, piShader, ptShader, ttVectorsText } from '#lib/templates.ts';
+import { aiCatalogText, nnShader, piShader, ptShader, ttVectorsText } from '#lib/templates.ts';
+import { createAiRunner, type AiRunner } from '#lib/ai/runner.ts';
 import type { ComputeRequest, ComputeResponse } from './compute-messages.ts';
 import type { Backend } from '#lib/protocol/Backend.ts';
 import type { DeviceInfo } from '#lib/protocol/DeviceInfo.ts';
@@ -32,6 +33,8 @@ import type { NnUnitParams } from '#lib/protocol/NnUnitParams.ts';
 import type { ProgramUnitParams } from '#lib/protocol/ProgramUnitParams.ts';
 import type { TemplateRef } from '#lib/protocol/TemplateRef.ts';
 import type { TtUnitParams } from '#lib/protocol/TtUnitParams.ts';
+import type { AiCatalog } from '#lib/protocol/AiCatalog.ts';
+import type { AiUnitParams } from '#lib/protocol/AiUnitParams.ts';
 
 interface Kernel {
 	sha256: string;
@@ -49,7 +52,7 @@ const programs = new ProgramRunner();
 const post = (msg: ComputeResponse) => self.postMessage(msg);
 
 type Run = (params: JsonValue, signal: AbortSignal) => Promise<JsonValue>;
-type Hashes = { pi: string; pt: string; nn: string; tt: string };
+type Hashes = { pi: string; pt: string; nn: string; tt: string; ai: string };
 
 /** Sets up the kernels on the GPU, or on the CPU if there is none or `backend` asks for it. */
 async function init(backend?: Backend): Promise<DeviceInfo> {
@@ -57,7 +60,8 @@ async function init(backend?: Backend): Promise<DeviceInfo> {
 		pi: await sha256Hex(piShader),
 		pt: await sha256Hex(ptShader),
 		nn: await sha256Hex(nnShader),
-		tt: await sha256Hex(ttVectorsText)
+		tt: await sha256Hex(ttVectorsText),
+		ai: await sha256Hex(aiCatalogText)
 	};
 	if (backend !== 'wasm') {
 		try {
@@ -86,11 +90,19 @@ function register(
 		const threads = (pool ??= cpuForTimetables ??= createCpuPool(cpuThreads()));
 		return { ...(await solveCpuTt(threads, params as TtUnitParams, signal)) };
 	};
+	// Language models (spec 0017) on the GPU when there is one; the runtime and the model
+	// load with the first such unit.
+	let ai: AiRunner | undefined;
+	const runAi: Run = async (params, signal) => {
+		ai ??= createAiRunner(JSON.parse(aiCatalogText) as AiCatalog, pool ? 'wasm' : 'webgpu');
+		return { ...(await ai.run(params as AiUnitParams, signal)) };
+	};
 	kernels = new Map([
 		['pi@1', { sha256: hashes.pi, run: pi }],
 		['pt@1', { sha256: hashes.pt, run: pt }],
 		['nn@1', { sha256: hashes.nn, run: nn }],
-		['tt@1', { sha256: hashes.tt, run: tt }]
+		['tt@1', { sha256: hashes.tt, run: tt }],
+		['ai@1', { sha256: hashes.ai, run: runAi }]
 	]);
 }
 

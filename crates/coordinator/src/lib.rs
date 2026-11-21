@@ -9,6 +9,7 @@ pub mod chaos;
 pub mod db;
 pub mod edits;
 pub mod hours;
+pub mod models;
 pub mod networks;
 pub mod render;
 pub mod schools;
@@ -112,6 +113,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/programs/approved", get(catalog::approved))
         .route("/api/modules/{file}", get(catalog::module_file))
         .route("/api/blobs/{file}", get(catalog::blob_file))
+        // Model files of the catalog (spec 0017), checked by their SHA-256 in the browser.
+        .route("/api/models/{*path}", get(models::file))
         // Schools for timetables (spec 0014), of at most 2 MiB as JSON.
         .route(
             "/api/networks/{id}/schools",

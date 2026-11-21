@@ -73,6 +73,11 @@ pub struct Config {
     /// This coordinator's own worker endpoint, which cheaters added by the chaos panel
     /// connect to like any device. None turns adding cheaters off.
     pub self_url: Option<String>,
+    /// Accepts jobs for, and serves, the catalog's test models (`SWARM_TEST_MODELS=1`):
+    /// for browser tests and development only (spec 0017).
+    pub test_models: bool,
+    /// Where `just models` put the model files (`SWARM_MODELS_DIR`, default `models`).
+    pub models_dir: std::path::PathBuf,
 }
 
 impl Config {
@@ -91,6 +96,10 @@ impl Config {
             .ok()
             .filter(|t| !t.is_empty());
         cfg.open_public = std::env::var("SWARM_OPEN_PUBLIC").is_ok_and(|v| v == "1");
+        cfg.test_models = std::env::var("SWARM_TEST_MODELS").is_ok_and(|v| v == "1");
+        if let Some(dir) = std::env::var_os("SWARM_MODELS_DIR").filter(|d| !d.is_empty()) {
+            cfg.models_dir = dir.into();
+        }
         cfg
     }
 
@@ -138,6 +147,8 @@ impl Default for Config {
             submit_token: None,
             open_public: false,
             self_url: None,
+            test_models: false,
+            models_dir: "models".into(),
         }
     }
 }
@@ -633,6 +644,7 @@ mod tests {
                 backend: Backend::Native,
                 vendor: "test".into(),
                 architecture: "test".into(),
+                max_buffer_size: None,
             },
             connected_at: 0,
             units_done: 3,

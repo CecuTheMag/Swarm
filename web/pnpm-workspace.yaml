@@ -1,2 +1,5 @@
 allowBuilds:
   esbuild: true
+  # transformers.js depends on these for Node; the browser uses onnxruntime-web only.
+  onnxruntime-node: false
+  protobufjs: false

@@ -29,3 +29,6 @@ playwright-report/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Model files (spec 0017): `just models` downloads them
+/models/

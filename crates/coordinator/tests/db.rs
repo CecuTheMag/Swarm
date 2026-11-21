@@ -36,6 +36,7 @@ async fn worker_of(db: &PgPool, client_id: Uuid) -> Uuid {
         backend: Backend::Native,
         vendor: "test".into(),
         architecture: "test".into(),
+        max_buffer_size: None,
     };
     let registration = db::insert_worker(
         db,
@@ -1081,6 +1082,7 @@ async fn a_banned_client_is_blocked_and_what_it_decided_is_redone(db: PgPool) {
         backend: Backend::Native,
         vendor: "test".into(),
         architecture: "test".into(),
+        max_buffer_size: None,
     };
     assert!(matches!(
         db::insert_worker(

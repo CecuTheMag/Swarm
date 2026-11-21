@@ -704,6 +704,11 @@ pub async fn start_job(
 ) -> Result<JobSummary, AppError> {
     let template = templates::get(&body.template)
         .ok_or_else(|| AppError::BadRequest(format!("unknown template {:?}", body.template)))?;
+    if template.template.test_only(&body.params) && !state.config.test_models {
+        return Err(AppError::BadRequest(
+            "test models run only where SWARM_TEST_MODELS=1".into(),
+        ));
+    }
     let units = template
         .template
         .split(&body.params)
