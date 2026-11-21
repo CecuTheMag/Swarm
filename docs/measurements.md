@@ -476,3 +476,22 @@ model for Bulgarian prompts is still to be chosen and measured.
 Storage with no request. In WebKit as Playwright opens it (a private session) a new
 page's worker found the cache empty and downloaded the files again; a Safari profile on
 a real device is still to be checked.
+
+**On a phone (2026-11-21).** Nothing Phone (1) (Adreno 642L, Android 15, Chrome 157, on
+a charger), on the Mac's dev server through `adb reverse`; the same 50 prompts. The page
+reports WebGPU with `shader-f16` and a 1 GiB largest buffer, so it qualifies for
+SmolLM2. Results:
+
+- **Wrong answers.** Every answer parted from the Mac's at the first token, 14 of 14, and
+  the text is not language („together_mond_des+oles-268same-splitn_18…“). The near-tie
+  rule agreed with none of them, so against a Mac these answers are refused. Two phones
+  with the same GPU could agree with each other on such answers: a model must not run on
+  a device where it computes wrongly (to fix before phones take language-model units).
+- **Speed.** 15.0 s per answer after a first unit of 33.8 s (download over USB, hash,
+  set-up): 4.25 tokens/s, 16× slower than the M1 Max.
+- **GPU lost.** After 14 answers (3.5 minutes) the page reported „GPU device lost: A
+  valid external Instance reference no longer exists“ and stopped; its two units in hand
+  went back to the queue. Battery 40 °C, CPU 57 °C, thermal status normal.
+
+The `q4f16` build keeps activations in 16-bit floats; whether the `q4` build (32-bit
+activations, 388 MB) computes correctly on the Adreno is the next check.

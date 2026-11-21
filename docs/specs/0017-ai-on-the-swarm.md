@@ -137,7 +137,12 @@ before it is trusted.
   shows each answer as it is decided and downloads them as CSV or text.
 
 **Found.** SmolLM2-360M does not answer Bulgarian (it repeats the question). A model for
-Bulgarian prompts is still to be chosen. Measurements: [measurements.md](../measurements.md#language-models-on-the-swarm-spec-0017).
+Bulgarian prompts is still to be chosen. On a Nothing Phone (1) (Adreno 642L) the `q4f16`
+build gives wrong answers from the first token, at 4 tokens/s, and the GPU device was
+lost after 14 answers. Against a Mac such answers are refused, but two such phones would
+agree: before phones take language-model units, a device must prove the model computes
+correctly on it (a known answer checked when the model loads), and the build or settings
+that are right on the Adreno must be found. Measurements: [measurements.md](../measurements.md#language-models-on-the-swarm-spec-0017).
 
 ## Acceptance (phase 1)
 
