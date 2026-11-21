@@ -4,7 +4,7 @@
 
 import { readFileSync } from 'node:fs';
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { deleteNetwork, signIn } from './submit.ts';
+import { createNetwork, deleteNetwork } from './submit.ts';
 import type { JobOutputs } from '../src/lib/protocol/JobOutputs.ts';
 import type { JobSummary } from '../src/lib/protocol/JobSummary.ts';
 
@@ -26,15 +26,6 @@ const indexInput = (i: number) => {
 	b.writeUInt32LE(i);
 	return b;
 };
-
-/** Creates a network in the console; returns its page address and join link. */
-async function createNetwork(page: Page, name: string) {
-	await signIn(page);
-	await page.getByTestId('new-network-name').fill(name);
-	await page.getByRole('button', { name: 'Създай' }).click();
-	await expect(page.getByTestId('network-title')).toHaveText(name);
-	return { url: page.url(), link: await page.getByTestId('join-link').inputValue() };
-}
 
 /** Clean up: later tests start with an empty network list. */
 async function uploadProgram(page: Page, url: string, fixture: string) {

@@ -2,7 +2,7 @@
 // kept between visits, searched for on the school's devices, and printed.
 
 import { expect, test, type Page } from '@playwright/test';
-import { deleteNetwork, signIn } from './submit.ts';
+import { createNetwork, deleteNetwork } from './submit.ts';
 
 /** The plan as Excel saves it in a Bulgarian locale: `;`, a byte order mark, CRLF. */
 const PLAN =
@@ -15,14 +15,6 @@ const PLAN =
 	'8Б;Математика;Иван Петров;4;2;\r\n' +
 	'8Б;Физика и астрономия;Елена Иванова;2;1;Лаборатория\r\n' +
 	'8Б;Физическо възпитание и спорт;Георги Иванов;2;1;Салон\r\n';
-
-async function createNetwork(page: Page, name: string) {
-	await signIn(page);
-	await page.getByTestId('new-network-name').fill(name);
-	await page.getByRole('button', { name: 'Създай' }).click();
-	await expect(page.getByTestId('network-title')).toHaveText(name);
-	return { url: page.url(), link: await page.getByTestId('join-link').inputValue() };
-}
 
 /** The row of the teacher, class or room called `name` (names are inputs, to rename). */
 async function entry(page: Page, name: string) {

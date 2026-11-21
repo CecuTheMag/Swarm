@@ -3,7 +3,7 @@
 // kept, printed, given back, and searched again around the hours pinned.
 
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { deleteNetwork, signIn } from './submit.ts';
+import { createNetwork, deleteNetwork } from './submit.ts';
 
 /** Two classes of ten hours; 8А's PE is pinned at Monday's first period. */
 const PLAN =
@@ -62,10 +62,7 @@ test('a deputy director pins lessons, edits the timetable found, and searches ag
 }) => {
 	test.setTimeout(240_000);
 	page.on('dialog', (d) => void d.accept());
-	await signIn(page);
-	await page.getByTestId('new-network-name').fill('Ръчно разписание');
-	await page.getByRole('button', { name: 'Създай' }).click();
-	await expect(page.getByTestId('network-title')).toHaveText('Ръчно разписание');
+	await createNetwork(page, 'Ръчно разписание');
 	const url = page.url();
 	const link = await page.getByTestId('join-link').inputValue();
 

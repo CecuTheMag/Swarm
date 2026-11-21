@@ -1,14 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { deleteNetwork, signIn } from './submit.ts';
+import { createNetwork, deleteNetwork } from './submit.ts';
 
 // Spec 0011 in the browser: a sweep of small neural networks trains on a device of the
 // network, through the real kernels (GPU or CPU), and the console ranks it.
 test('a neural network sweep trains on a device and is ranked', async ({ page, browser }) => {
 	test.setTimeout(150_000);
-	await signIn(page);
-	await page.getByTestId('new-network-name').fill('Кръжок по ИИ');
-	await page.getByRole('button', { name: 'Създай' }).click();
-	await expect(page.getByTestId('network-title')).toHaveText('Кръжок по ИИ');
+	await createNetwork(page, 'Кръжок по ИИ');
 	const networkUrl = page.url();
 	const link = await page.getByTestId('join-link').inputValue();
 

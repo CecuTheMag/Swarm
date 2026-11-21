@@ -26,6 +26,20 @@ export async function signIn(page: Page, who = ADMIN) {
 }
 
 /**
+ * Creates a network from the console's start page, signed in as `who`, and returns its
+ * page address and join link. Three requests and a page change: on a starved two-core
+ * runner WebKit took longer than the default 5 s to draw the new network (run
+ * 43005304755), so the wait is 30 s, as for the console's first load.
+ */
+export async function createNetwork(page: Page, name: string, who = ADMIN) {
+	await signIn(page, who);
+	await page.getByTestId('new-network-name').fill(name);
+	await page.getByRole('button', { name: 'Създай' }).click();
+	await expect(page.getByTestId('network-title')).toHaveText(name, { timeout: 30_000 });
+	return { url: page.url(), link: await page.getByTestId('join-link').inputValue() };
+}
+
+/**
  * Deletes the network at `networkUrl` from its rules page, as its owner does: a tap that
  * asks, a tap that confirms. The question lasts 4 s; a browser starved on a two-core
  * runner has delivered the second tap after that (Firefox, 4.2 s late), so a tap that

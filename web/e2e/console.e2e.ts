@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test, type Page } from '@playwright/test';
-import { UNIT_TIMEOUT, deleteNetwork, signIn } from './submit.ts';
+import { UNIT_TIMEOUT, createNetwork, deleteNetwork } from './submit.ts';
 
 // Spec 0010 in the browser: a client creates a network, adds devices with its link,
 // sees them live and operates them.
@@ -21,10 +21,7 @@ test('a client creates a network, adds a device by its link and operates it', as
 	browser
 }, testInfo) => {
 	test.setTimeout(UNIT_TIMEOUT + 120_000);
-	await signIn(page);
-	await page.getByTestId('new-network-name').fill('Кабинет 12');
-	await page.getByRole('button', { name: 'Създай' }).click();
-	await expect(page.getByTestId('network-title')).toHaveText('Кабинет 12');
+	await createNetwork(page, 'Кабинет 12');
 	const networkUrl = page.url();
 
 	// The QR code a phone scans leads to this network's join page.

@@ -3,7 +3,7 @@
 
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { deleteNetwork, signIn } from './submit.ts';
+import { createNetwork, deleteNetwork } from './submit.ts';
 import { solveTimetable, type TtExports } from '../src/lib/tt.ts';
 import type { JobSummary } from '../src/lib/protocol/JobSummary.ts';
 import type { TtJobParams } from '../src/lib/protocol/TtJobParams.ts';
@@ -23,10 +23,7 @@ test("a school's devices find its timetable and the console shows it", async ({
 	browser
 }, testInfo) => {
 	test.setTimeout(180_000);
-	await signIn(page);
-	await page.getByTestId('new-network-name').fill('ПМГ разписание');
-	await page.getByRole('button', { name: 'Създай' }).click();
-	await expect(page.getByTestId('network-title')).toHaveText('ПМГ разписание');
+	await createNetwork(page, 'ПМГ разписание');
 	const networkUrl = page.url();
 	const network = new URL(networkUrl).pathname.split('/').at(-1);
 	const link = await page.getByTestId('join-link').inputValue();
