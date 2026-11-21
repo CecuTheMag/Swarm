@@ -51,7 +51,7 @@ accounts, devices, the school.
    moved to [vision.md](vision.md) without the catalog metadata.
 6a. **AI on the swarm** — every capable device runs a whole small model in the browser
    (a language model, speech recognition), and the swarm spreads many requests over
-   them: a lesson transcribed, 2 000 essays summarised. Spec 0017 first; verification of
+   them: a lesson transcribed, 2 000 essays summarised ([spec 0017](specs/0017-ai-on-the-swarm.md)); verification of
    float outputs (fixed decoding, tolerance on scores, spot checks on trusted devices)
    and model caching on the school's network are the hard parts.
 7. **More example programs** — a Monte Carlo experiment a physics teacher would run in
