@@ -11,7 +11,7 @@ learning rate, batch size, training length) and reports how well it did; the con
 shows a leaderboard that fills in live, the learning curves, and the best model, which
 can be downloaded.
 
-It is the useful job the README promises (section 17: "a toy that computes π" kills
+It is the useful job the original design promises ([vision.md](../vision.md), section 17: "a toy that computes π" kills
 the project), and it keeps Рояк's defining property: **every result is checked**.
 
 ## The hard part, and the answer: training that is bit-exact on every device

@@ -50,6 +50,11 @@ path; no WebGPU adapter on any. Each page in `docs/tests/` has the details.
 
 | Date | Lab | PCs | Observed idle hours | Method |
 |---|---|---|---|---|
+| 2026-11-21 | The lab of the 2026-11-04 run | 13 | About 75 % of the week | Estimate by the author from the lab's timetable and opening hours; not logged by the PCs themselves |
+
+Use it in the competition documents as an estimate („около 75 % по разписанието на
+кабинета“), not as a measured number. Logging it on the PCs (the share of each hour a
+worker page could have computed) is still to be done.
 
 ## School network (for spec 0009)
 

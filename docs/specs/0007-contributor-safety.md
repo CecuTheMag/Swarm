@@ -6,7 +6,7 @@ Status: implemented
 
 A device that joins the grid stays the owner's device: it never runs flat out unless
 the owner asks, it stops when the owner looks away or the battery runs low, and the
-owner can see why it is not computing. This is the README's promise ("throttling, never
+owner can see why it is not computing. This is the original design's promise ([vision.md](../vision.md)) ("throttling, never
 full GPU, pauses on battery < 30 %, visibility-aware, clear stop button") and the answer
 to the jury's "will it cook my phone?".
 

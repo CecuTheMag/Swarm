@@ -1,6 +1,6 @@
 # Roadmap
 
-What is left between today's grid and the full README vision, in build order. Each
+What is left between today's grid and the full vision ([vision.md](vision.md)), in build order. Each
 item gets its own spec in `docs/specs/` before work starts; this file only orders them.
 
 Status on 2026-11-08: specs 0001–0008 and 0010–0016 implemented (π and path-tracer
@@ -39,15 +39,21 @@ accounts, devices, the school.
    laptop fallback (`docs/demo-day.md` Plan B); results in `docs/measurements.md`.
    The MacBook's part (Safari, Metal, an iPhone through Web Inspector, the presenting
    laptop) is planned in `docs/macbook.md`.
-4. **Registration material** — the annotation (README section 21) rewritten around what
-   Рояк is now: networks for schools, a school's own programs, timetables, with the
-   measured numbers; **(owner)** the school's written permission and a week of measuring
-   the lab's idle time.
-5. **Defense run sheet** — the 20 minutes rehearsed: the committee joins by QR, a
+4. ~~**Registration material**~~ — done 21 November: the annotation in
+   [registration.md](registration.md), around what Рояк is now, with measured numbers
+   only; the school agreed to the lab run (4 November); the lab's idle time is the
+   author's estimate from its timetable (about 75 %), still to be logged on the PCs.
+5. **Defense run sheet** — written 21 November (`docs/demo-day.md`, „The 20 minutes“);
+   still to rehearse and time: the committee joins by QR, a
    timetable for a real school is searched live on their phones, a cheater is caught,
    a device is switched off mid-job; `docs/demo-day.md` updated and timed.
-6. **README for the jury** — written for a reader who meets the project for the first
-   time, without the catalog metadata at its top.
+6. ~~**README for the jury**~~ — done 21 November, in Bulgarian; the original design
+   moved to [vision.md](vision.md) without the catalog metadata.
+6a. **AI on the swarm** — every capable device runs a whole small model in the browser
+   (a language model, speech recognition), and the swarm spreads many requests over
+   them: a lesson transcribed, 2 000 essays summarised. Spec 0017 first; verification of
+   float outputs (fixed decoding, tolerance on scores, spot checks on trusted devices)
+   and model caching on the school's network are the hard parts.
 7. **More example programs** — a Monte Carlo experiment a physics teacher would run in
    class and a parameter sweep, in `examples/programs`, and a C header for programs not
    written in Rust.
@@ -75,8 +81,7 @@ first time.
 8. **Real devices** — a phone on mobile data, an iPhone, wake lock and losing signal on
    a real phone, the laptop fallback (docs/demo-day.md Plan B); results go into
    docs/measurements.md.
-9. **Registration material** — annotation (README section 21), measured numbers for it,
-   the school's written permission and the lab's idle time (a week of measuring).
+9. ~~**Registration material**~~ — done: [registration.md](registration.md).
 
 ## 2. Full version (December 2026 – February 2027)
 

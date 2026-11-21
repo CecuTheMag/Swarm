@@ -1,14 +1,8 @@
-# 21 · Рояк (Swarm): A Volunteer Supercomputer Built from Idle School Browsers with WebGPU
+# Рояк: the original design (October 2026)
 
-| | |
-|---|---|
-| **Category** | Разпределени приложения (Distributed applications) |
-| **Group** | XI–XII grade |
-| **Team** | 2 students (distributed backend + GPU/web compute) |
-| **Difficulty** | ★★★★★ |
-| **Evaluation score** | 85.0 / 100, rank #1 of 40 (see [EVALUATION.md](../../EVALUATION.md)) |
-| **Budget** | ~10–30 €/month (coordinator VPS) |
-| **Winning angle** | At the defense, the judges scan a QR code. Their phones and laptops join the grid **through the browser** and start computing a real task. A live counter shows the room's combined GFLOPS growing, and the final result renders on the projector. |
+The plan the project started from. What is built, measured and planned since is in the
+[README](../README.md), the [specs](specs/), [measurements](measurements.md) and the
+[roadmap](roadmap.md); where they differ, they win.
 
 ---
 
@@ -17,12 +11,6 @@
 Bulgarian schools have **thousands of computers idle most of the day and all night**, and every student has a phone with a capable GPU. Meanwhile Bulgarian students, teachers and researchers lack compute for **ML experiments, simulations and rendering**. Рояк turns any device with a **modern browser** into a compute node: open a page (or keep a tab open in the computer lab) and it runs **sandboxed WebGPU/WebAssembly tasks**. A **coordinator** splits jobs into work units, schedules them on heterogeneous, unreliable devices, **verifies results** (redundancy + spot checks, because anyone can join and cheat), aggregates them, and exposes a **REST API** where researchers and teachers submit jobs from **approved task templates**: Monte Carlo simulations, path-traced rendering, hyperparameter sweeps for small neural networks, scientific parameter sweeps.
 
 ---
-
-## Why this dominates
-
-- **Pure power projection:** distributed scheduling, fault tolerance, Byzantine (cheating) workers, GPU compute shaders, and a live room-scale demo. Judges in the Distributed category will recognize real distributed-systems problems.
-- **Zero install:** the browser is the runtime. "Your school is already a supercomputer; it just doesn't know it."
-- **Unique:** volunteer computing exists (BOINC), browser grids existed as research, but a **WebGPU** school-scale grid with verification and an education angle is new, and nobody else at НОИТ will have it.
 
 ## 1. The problem
 
@@ -89,7 +77,7 @@ Bulgarian schools have **thousands of computers idle most of the day and all nig
 
 The sketch below is the original plan. The system as built (deployment, worker protocol,
 verification, state machines, browser runtime) is drawn from the code in
-[docs/architecture.html](docs/architecture.html); open it in a browser.
+[docs/architecture.html](architecture.html); open it in a browser.
 
 ```
   Browsers (lab PCs, laptops, phones)
@@ -182,15 +170,6 @@ verification, state machines, browser runtime) is drawn from the code in
 | WebGPU kernels | Unit tests in Playwright (Chromium with WebGPU) | In CI |
 | Security | CSP tests, template signature tests, OWASP ZAP | No high findings |
 
-## 12. How it scores (protocol 6е)
-
-| Block | Pts | How |
-|---|---|---|
-| General | 20 | Original, technically bold, useful for education and research |
-| Design | 25 | Clean distributed architecture: stateless API, leases, verification service, signed templates |
-| Implementation | 35 | Fault tolerance, Byzantine verification, GPU kernels, load + fault tests, CI/CD, feature flags, observability |
-| Defense | 20 | **Live room grid**; speed-up and verification graphs; school lab results |
-
 ## 13. Category traps to avoid
 
 - ❌ "Runs any code anyone uploads" = a security disaster and an easy jury kill. ✅ Signed templates + parameters only.
@@ -210,15 +189,6 @@ verification, state machines, browser runtime) is drawn from the code in
 | **Early Mar 2027** | Regional defense |
 | **Mar–Apr 2027** | Multi-school run; P2P data distribution (stretch); scaling paper-style report |
 | **May 2027** | National round |
-
-## 15. Team split
-
-| Student A: Coordinator & distributed systems | Student B: Worker runtime & GPU |
-|---|---|
-| Job API, scheduler, leases, fair sharing | WebGPU kernels (WGSL), WASM fallback |
-| Verification service, reputation, honeypots | Benchmarking, throttling, device-aware sizing |
-| Load/fault tests, CI/CD, observability | Templates: path tracer, Monte Carlo, CNN sweep |
-| Security, quotas, feature flags | Dashboards, school admin console, docs |
 
 ## 16. Budget
 
@@ -266,26 +236,6 @@ verification, state machines, browser runtime) is drawn from the code in
 - Stickers for lab PCs: "Този компютър е част от Рояк."
 - Short promo video of the image rendering tile by tile from 50 devices
 
-## 21. Registration annotation draft (BG)
-
-> **Име на проекта:** Рояк – разпределен доброволен суперкомпютър от неизползваните училищни и лични устройства чрез браузъра и WebGPU
->
-> **Направление:** Разпределени приложения
->
-> **Анализ на потребностите:** Учениците, учителите и изследователите често нямат достъп до изчислителна мощност за машинно обучение, симулации и изобразяване, а облачните услуги са скъпи. В същото време хиляди училищни компютри и лични устройства стоят неизползвани голяма част от денонощието. Съществуващите системи за доброволни изчисления изискват инсталиране на софтуер с администраторски права, което в училищата е невъзможно.
->
-> **Цел:** Да се създаде разпределена система, в която всяко устройство с модерен браузър се включва с едно отваряне на страница и изпълнява безопасно изчислителни задачи чрез графичния процесор (WebGPU), а координатор разпределя, проверява и обединява резултатите.
->
-> **Задачи:** (1) координатор с програмен интерфейс за задачи, разпределяне на работни единици, срокове и повторения; (2) изчислителна среда в браузъра с WebGPU и WebAssembly и ограничаване на натоварването; (3) проверка на резултатите срещу грешни или злонамерени участници чрез дублиране, контролни задачи и репутация; (4) шаблони за задачи – симулации по метода Монте Карло, изобразяване чрез проследяване на лъчи, търсене на параметри за невронни мрежи; (5) табла за наблюдение и училищен режим; (6) измерване на ускорението и мащабируемостта.
->
-> **Потребители:** ученици, учители, изследователи, училищни администратори, доброволци.
->
-> **Основни очаквани характеристики:** без инсталиране; изпълнение само на подписани и проверени шаблони; устойчивост при прекъсване на устройства; откриване на измамни резултати; програмен интерфейс по REST; автоматични тестове, непрекъсната интеграция, превключватели на функционалности, контейнери; роли за доброволец, училищен администратор, заявител, рецензент и администратор.
->
-> **Съществуващи решения:** системи като BOINC, изискващи инсталиране; облачни услуги срещу заплащане; национални суперкомпютри, недостъпни за ученически проекти. Предложеното решение не изисква инсталиране и използва графичните процесори чрез браузъра.
->
-> **План за реализация:** октомври–ноември 2026 – изчислително ядро с WebGPU и резервен път през процесора, координатор, шаблони за метода Монте Карло и проследяване на лъчи, проверка на резултатите с дублиране, контролни задачи и репутация, натоварващи тестове, защита на доброволците, публичен адрес, собствени мрежи от устройства за училища и клиенти с профили, роли, одобрение на устройствата и работно време, търсене на параметри за невронни мрежи с обучение, побитово еднакво на всяко устройство (изпълнено към ноември); декември–януари – подписани шаблони, разпределяне според устройството, локален възел за кабинета, първо изпитване в компютърен кабинет; февруари – портал за заявители и рецензенти, реални набори от данни и конволюционни мрежи за шаблона за машинно обучение, документация; март–април – изпитване в няколко училища.
-
 ## 22. Compliance checklist
 
 - [ ] GPL-3.0; coordinator, worker runtime, templates, dashboards
@@ -302,7 +252,7 @@ verification, state machines, browser runtime) is drawn from the code in
   Qualcomm or ARM GPUs; Safari 26 on iOS, iPadOS and macOS 26; Firefox 141+ on Windows
   and 145+ on Apple-silicon Macs. Not yet: Chrome on Linux (behind flags), Firefox on
   Linux and Android. Every one of those gets the CPU fallback (spec 0005), so no device
-  is turned away. Our own devices: [measurements](docs/measurements.md#webgpu-support-by-device).
+  is turned away. Our own devices: [measurements](measurements.md#webgpu-support-by-device).
 - [ ] The actual idle time of your school's computer lab (measure for a week).
 - [ ] Your school IT policy for running browser workloads, and written permission (section 22).
 - [x] **Adaptive replication to cite:** D. P. Anderson, "BOINC: A Platform for Volunteer

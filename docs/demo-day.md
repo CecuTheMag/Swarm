@@ -36,8 +36,32 @@ The day before:
   „Включи се“, and watch the device count go up; the phone's page shows the network's
   card with the devices online. Try „Изключи устройство“ and „Добави измамник“ once.
 
-At the defense (README section 18, minutes 3–10), with the live view of a fresh job on
-the projector (**Задачи** → „Пусни“ → „На живо“). Stop any job still running first
+## The 20 minutes
+
+The run sheet. Times are targets: time each block at the rehearsal and write the real
+times next to them. Before the committee comes in: signed in on the presenting laptop,
+the network „Защита“ open, no job running, and a phone already joined as a known device.
+For the school block, have a school imported in **Училища** (from a spreadsheet, checks
+green) if you want to show data entry; otherwise the 40-class example school is enough.
+
+| Min | Block | On the projector | Say |
+|---|---|---|---|
+| 0–2 | The problem | README's first screen | Labs idle about 75 % of the week by their timetable; every student has a GPU in their pocket; BOINC needs an install a school PC cannot have |
+| 2–3 | Join | „На живо“ with the QR code | "Please join." Count the honeycomb cells out loud as they appear |
+| 3–8 | Render and chaos | A render job's live view | The table below: the image fills in, a device switched off, a cheater caught |
+| 8–12 | A school's timetable | **Задачи** → „Разписание“ → „Примерно училище“, 40 classes → „Пусни“, then the job's timetable (or **Училища** → the school → „Търси разписание“) | "Each of your phones is searching this school's timetable right now. The coordinator checks every timetable you send, so a phone cannot lie about its score." Show the best timetable per class, move one hour by hand: the cost of the move shows before it is made. „Печат на паралелката“ |
+| 12–15 | How it works | [architecture.html](architecture.html) | Leases, the queue in PostgreSQL, two copies + known-answer units + reputation, why integers make results bit-exact. The lab numbers: 13 old PCs, 2.1 billion light paths in about 70 s, 0 disagreements |
+| 15–16 | Safety | The worker page on a phone | Only known code runs; programs have no network, files or clock; 75 % power, pauses when hidden or under 30 % battery, „Спри“ |
+| 16–20 | Questions | — | Expected ones: [vision.md](vision.md#19-expected-jury-questions), plus "what next": AI models in the browser, spread over the room |
+
+Stop the render („Спри“ in **Задачи**) before starting the timetable: jobs run in order.
+A timetable search on „Нормално“ is 2 000 000 iterations per unit; how long the room
+takes for it is not yet measured on phones, so time it at the rehearsal and pick
+„Бързо“ if it runs past four minutes.
+
+### The render and chaos block
+
+With the live view of a fresh job on the projector (**Задачи** → „Пусни“ → „На живо“). Stop any job still running first
 („Спри“ in **Задачи**): jobs run in order, and a forgotten one would hold up the new one.
 
 | Say | Do | The room sees |
