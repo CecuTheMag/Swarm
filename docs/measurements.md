@@ -4,11 +4,11 @@ Every number used in the competition documents comes from this log.
 
 ## WebGPU support by device
 
-| Date | Device | GPU | OS | Browser | WebGPU | Notes |
-|---|---|---|---|---|---|---|
-| 2026-10-27 | Dev PC | NVIDIA RTX 4060 | Arch Linux | Chromium 154 (headless) | Only with `--enable-unsafe-webgpu --enable-features=Vulkan`; SwiftShader adapter | Headless does not use the real GPU |
-| 2026-10-28 | Nothing Phone (1) | Adreno 642L (Snapdragon 778G+) | Android 15 | Chrome 156 | Yes | Adapter `qualcomm` / `adreno-6xx`; self-test bit-exact on all vectors |
-| 2026-10-28 | Lenovo ThinkPad T540p (2014) | Intel HD Graphics 4600, driver 20.19.15.5126 (2020) | Windows 10 22H2 | Edge 156 | No | `edge://gpu` reports WebGPU enabled, but `requestAdapter()` returns null for default, high-performance, low-power, compatibility and fallback adapters. Joins through the CPU fallback (spec 0005) |
+| Date       | Device                       | GPU                                                 | OS              | Browser                 | WebGPU                                                                           | Notes                                                                                                                                                                                              |
+| ---------- | ---------------------------- | --------------------------------------------------- | --------------- | ----------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-27 | Dev PC                       | NVIDIA RTX 4060                                     | Arch Linux      | Chromium 154 (headless) | Only with `--enable-unsafe-webgpu --enable-features=Vulkan`; SwiftShader adapter | Headless does not use the real GPU                                                                                                                                                                 |
+| 2026-10-28 | Nothing Phone (1)            | Adreno 642L (Snapdragon 778G+)                      | Android 15      | Chrome 156              | Yes                                                                              | Adapter `qualcomm` / `adreno-6xx`; self-test bit-exact on all vectors                                                                                                                              |
+| 2026-10-28 | Lenovo ThinkPad T540p (2014) | Intel HD Graphics 4600, driver 20.19.15.5126 (2020) | Windows 10 22H2 | Edge 156                | No                                                                               | `edge://gpu` reports WebGPU enabled, but `requestAdapter()` returns null for default, high-performance, low-power, compatibility and fallback adapters. Joins through the CPU fallback (spec 0005) |
 
 ## Browser engines (automated tests)
 

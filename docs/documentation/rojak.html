@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<title>Рояк</title>
+<style>
+/* Документация по Приложение 1 на регламента: A4, Times New Roman, 12 pt, междуредие 1,5. */
+@page {
+  size: A4;
+  margin: 18mm 20mm 16mm 20mm;
+  @bottom-center { content: counter(page) " / " counter(pages); font-family: "Times New Roman", Times, serif; font-size: 10pt; color: #555; }
+}
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; font-family: "Times New Roman", Times, serif; font-size: 12pt; line-height: 1.5; color: #000; text-align: justify; }
+p { margin: 0 0 2pt; text-indent: 1cm; orphans: 2; widows: 2; }
+p.flush { text-indent: 0; }
+h1 { font-size: 20pt; line-height: 1.2; margin: 0; text-align: center; letter-spacing: 0.06em; }
+.subtitle { text-align: center; font-style: italic; margin: 0 0 4pt; }
+h2 { font-size: 12pt; margin: 5pt 0 0; text-transform: uppercase; break-after: avoid; }
+h3 { font-size: 12pt; margin: 5pt 0 0; break-after: avoid; }
+ul { margin: 0 0 2pt; padding-left: 0.8cm; }
+.fill { background: #fff3c4; }
+table { border-collapse: collapse; width: 100%; margin: 3pt 0 4pt; line-height: 1.25; break-inside: avoid; text-align: left; }
+th, td { border: 0.6pt solid #444; padding: 1.5pt 5pt; vertical-align: top; }
+th { background: #eee; }
+figure { margin: 4pt 0 6pt; break-inside: avoid; text-align: center; }
+figure svg, figure img { display: block; width: 100%; height: auto; margin: 0 auto; }
+figcaption { line-height: 1.3; font-style: italic; margin-top: 2pt; text-align: center; }
+img.shot { width: 74% !important; border: 0.6pt solid #999; }
+.shots { display: grid; grid-template-columns: 1.052fr 0.76fr; gap: 8pt; width: 84%; margin: 0 auto; }
+.shots img { border: 0.6pt solid #999; }
+.charts { display: grid; grid-template-columns: 1fr 1fr; gap: 10pt; }
+code { font-family: "Courier New", monospace; font-size: 11pt; }
+svg text { font-family: "Times New Roman", Times, serif; }
+</style>
+</head>
+<body>
+
+<h1>РОЯК</h1>
+<div class="subtitle">Доброволен разпределен суперкомпютър от училищни и лични устройства в уеб браузъра</div>
+
+<h2>1. Тема</h2>
+<p class="flush">Рояк – разпределена система, която превръща неизползваните училищни компютри и личните устройства в общ изчислителен ресурс чрез уеб браузъра (WebGPU и WebAssembly). Направление: Разпределени приложения. Адрес: <b>https://swarmrelay.duckdns.org</b>.</p>
+
+<h2>2. Автори</h2>
+<p class="flush"><span class="fill">[Трите имена]</span>, тел. <span class="fill">[телефон]</span>, <span class="fill">[имейл]</span>, <span class="fill">[училище, населено място]</span>, <span class="fill">[клас]</span> клас</p>
+
+<h2>3. Ръководител</h2>
+<p class="flush"><span class="fill">[Трите имена]</span>, тел. <span class="fill">[телефон]</span>, <span class="fill">[имейл]</span>, <span class="fill">[длъжност]</span></p>
+
+<h2>4. Резюме</h2>
+
+<h3>4.1. Цели</h3>
+<p>Учениците, учителите и изследователите, които работят по проекти с машинно обучение, симулации или компютърна графика, често нямат достатъчна изчислителна мощност: безплатните облачни услуги имат квоти, платените са скъпи, а националните суперкомпютри не са достъпни за училищни проекти. В същото време компютрите в училищните кабинети не се използват вечер, през почивните дни и във ваканциите, а почти всеки ученик носи телефон с графичен процесор.</p>
+<p><b>Целта на проекта</b> е да се създаде система, в която всяко устройство с модерен браузър се включва в общ „рояк“ само с отваряне на връзка или сканиране на QR код – без инсталиране и без администраторски права. Устройството изпълнява безопасно части от голяма изчислителна задача, а координаторът проверява резултатите, преди да ги приеме, защото всеки може да се включи и да опита да измами системата. Училището получава собствена мрежа от устройства и полезни задачи за нея, например търсене на седмичното разписание на часовете.</p>
+<table>
+<tr><th style="width:36%">Съществуващо решение</th><th>Ограничение</th></tr>
+<tr><td>BOINC [1], Folding@home</td><td>Инсталиране с администраторски права – невъзможно в училище.</td></tr>
+<tr><td>Облачни графични процесори, Colab</td><td>Заплащане или дневни квоти.</td></tr>
+<tr><td>Суперкомпютърът „Дискавърър“</td><td>Достъп чрез проектни предложения, не за ученици.</td></tr>
+<tr><td>Браузърни мрежи отпреди WebGPU</td><td>Само процесор, без проверка на резултатите.</td></tr>
+</table>
+
+<h3>4.2. Основни етапи в реализирането на проекта</h3>
+<ul>
+<li><b>27–28 октомври 2026:</b> изчислително ядро за метода Монте Карло на WebGPU и WebAssembly, координатор с програмен интерфейс, симулирани устройства.</li>
+<li><b>29–30 октомври:</b> изобразяване чрез проследяване на лъчи, проверка на резултатите, натоварващи тестове до 1000 устройства, защита на доброволците.</li>
+<li><b>3–4 ноември:</b> профили и мрежи с роли, панел за устойчивост, обучение на невронни мрежи, собствени програми; изпитване в училищен кабинет с 13 компютъра.</li>
+<li><b>5–12 ноември:</b> училищни разписания – въвеждане на данни, търсене, ръчна редакция и печат; мерки за сигурност.</li>
+</ul>
+<p>Роли на авторите: <span class="fill">[Име]</span> – координатор, проверка на резултатите, база данни и внедряване; <span class="fill">[Име]</span> – изчисления в браузъра (WebGPU, WebAssembly) и уеб интерфейс.</p>
+
+<h3>4.3. Ниво на сложност на проекта</h3>
+<ul>
+<li><b>Ненадеждни устройства.</b> Телефон може да загуби връзка, а компютър да бъде изключен по всяко време. Всяка част от задачата (работна единица) се дава под наем с краен срок, който устройството подновява на всеки 10&nbsp;s; неподновените единици се връщат в опашката и се изчисляват другаде.</li>
+<li><b>Измамници.</b> Всеки може да се включи и да върне измислен резултат. Решението съчетава дублиране, контролни задачи с известен отговор и репутация на всяко устройство (фиг. 2).</li>
+<li><b>Еднакви резултати на различен хардуер.</b> Тъй като резултатите се сравняват, един и същ код трябва да дава побитово еднакъв отговор на графичните процесори на телефони и компютри и на процесора. Затова невронните мрежи се обучават само с цели числа.</li>
+<li><b>Ограничения на браузъра.</b> WebGPU работи само на защитени (HTTPS) страници, скритият раздел спира изчисленията, а училищните компютри нямат използваем графичен процесор.</li>
+<li><b>Безопасност за доброволеца.</b> Задачата носи само параметри, а не код, затова мрежата не може да бъде превърната в ботнет или в машина за добив на криптовалута.</li>
+</ul>
+
+<h3>4.4. Логическо и функционално описание на решението</h3>
+<figure>
+<svg viewBox="0 0 1000 372" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Архитектура на Рояк">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#333"/></marker>
+    <marker id="ao" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#b36b00"/></marker>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0057b3"/></marker>
+  </defs>
+  <style>
+    .t { font-size: 20px; font-weight: bold; fill: #000; }
+    .s { font-size: 17.5px; fill: #222; }
+    .l { font-size: 14px; font-weight: bold; letter-spacing: 0.06em; fill: #555; }
+    .bx { fill: #fff; stroke: #444; stroke-width: 1.3; }
+    .core { fill: #fff4e0; stroke: #e08a00; stroke-width: 1.8; }
+    .in { fill: #fff; stroke: #e0a040; stroke-width: 1.1; }
+    .ws { fill: none; stroke: #b36b00; stroke-width: 1.8; }
+    .http { fill: none; stroke: #0057b3; stroke-width: 1.8; }
+    .n { fill: none; stroke: #333; stroke-width: 1.5; }
+  </style>
+  <text x="10" y="16" class="l">УСТРОЙСТВА И ПОТРЕБИТЕЛИ</text>
+  <rect x="10" y="26" width="255" height="70" rx="8" class="bx"/>
+  <text x="22" y="53" class="t">Телефони и лаптопи</text>
+  <text x="22" y="80" class="s">графичен процесор (WebGPU)</text>
+  <rect x="10" y="108" width="255" height="70" rx="8" class="bx"/>
+  <text x="22" y="135" class="t">Компютри в кабинета</text>
+  <text x="22" y="162" class="s">процесор (WebAssembly)</text>
+  <rect x="10" y="190" width="255" height="70" rx="8" class="bx"/>
+  <text x="22" y="217" class="t">Конзола и изглед на живо</text>
+  <text x="22" y="244" class="s">учител, заместник-директор</text>
+  <rect x="10" y="272" width="255" height="70" rx="8" class="bx"/>
+  <text x="22" y="299" class="t">Скрипт на заявител</text>
+  <text x="22" y="326" class="s">ключ за програмния интерфейс</text>
+
+  <path d="M265 61 C302 61 302 142 332 142" class="ws" marker-end="url(#ao)"/>
+  <path d="M265 146 H332" class="ws" marker-end="url(#ao)"/>
+  <path d="M265 225 C302 225 302 158 332 158" class="http" marker-end="url(#ab)"/>
+  <path d="M265 307 C306 307 306 168 332 168" class="http" marker-end="url(#ab)"/>
+
+  <rect x="334" y="104" width="150" height="98" rx="8" class="bx"/>
+  <text x="409" y="134" class="t" text-anchor="middle">HTTPS прокси</text>
+  <text x="409" y="160" class="s" text-anchor="middle">Caddy,</text>
+  <text x="409" y="184" class="s" text-anchor="middle">Let's Encrypt</text>
+  <path d="M484 134 H520" class="n" marker-end="url(#ar)"/>
+  <path d="M484 184 C502 184 502 302 520 302" class="n" marker-end="url(#ar)"/>
+
+  <rect x="522" y="8" width="470" height="250" rx="10" class="core"/>
+  <text x="538" y="35" class="t">Координатор (Rust, axum, tokio)</text>
+  <rect x="538" y="46" width="215" height="44" rx="6" class="in"/><text x="550" y="74" class="s">REST API и WebSocket</text>
+  <rect x="761" y="46" width="215" height="44" rx="6" class="in"/><text x="773" y="74" class="s">разделяне и наемане</text>
+  <rect x="538" y="98" width="438" height="44" rx="6" class="in"/><text x="550" y="126" class="s">проверка: кворум, контролни задачи, репутация</text>
+  <rect x="538" y="150" width="438" height="44" rx="6" class="in"/><text x="550" y="178" class="s">шаблони: π, изображение, невронни мрежи, разписания</text>
+  <rect x="538" y="202" width="438" height="44" rx="6" class="in"/><text x="550" y="230" class="s">обединяване на резултатите, събития на живо</text>
+
+  <rect x="522" y="272" width="212" height="72" rx="8" class="bx"/>
+  <text x="534" y="299" class="t">Уеб приложение</text>
+  <text x="534" y="326" class="s">SvelteKit, Node.js</text>
+  <path d="M820 258 V282" class="n" marker-end="url(#ar)"/>
+  <rect x="746" y="284" width="246" height="60" rx="8" class="bx"/>
+  <text x="758" y="309" class="t">PostgreSQL 18</text>
+  <text x="758" y="333" class="s">задачи, единици, наеми, мрежи</text>
+
+  <line x1="10" y1="362" x2="40" y2="362" class="ws"/><text x="46" y="368" class="s">WebSocket (JSON)</text>
+  <line x1="210" y1="362" x2="240" y2="362" class="http"/><text x="246" y="368" class="s">HTTPS (REST, JSON)</text>
+</svg>
+<figcaption>Фиг. 1. Архитектура: всички устройства влизат през един защитен адрес; работната опашка е таблица в базата данни.</figcaption>
+</figure>
+<ul>
+<li><b>Координатор</b> – сървър на Rust. Приема задачи по REST, разделя ги на работни единици, дава ги под наем на устройствата по WebSocket, проверява и обединява резултатите и изпраща събития на живо към конзолата.</li>
+<li><b>База данни PostgreSQL</b> – задачи, единици, наеми, устройства, профили, мрежи и училища. Всяко решение за единица се взема в една транзакция, затова отделна опашка не е нужна.</li>
+<li><b>Изпълнител в браузъра</b> – отделна нишка (Web Worker), която проверява SHA-256 отпечатъка на изчислителното ядро и го изпълнява на графичния процесор (шейдър на WGSL) или на процесора (WebAssembly). Ядрата имат еталонни реализации на Rust, които координаторът използва за проверка.</li>
+<li><b>Уеб приложение</b> – страници за включване, конзола на мрежата, изглед на живо за проектор и редактор на училищни разписания.</li>
+</ul>
+<figure>
+<svg viewBox="0 0 1000 268" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Проверка на резултат">
+  <defs>
+    <marker id="vr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#333"/></marker>
+    <marker id="vg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#18794e"/></marker>
+    <marker id="vb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#c4161c"/></marker>
+  </defs>
+  <style>
+    .t { font-size: 19px; font-weight: bold; fill: #000; }
+    .s { font-size: 17px; fill: #222; }
+    .d { fill: #fff4e0; stroke: #e08a00; stroke-width: 1.4; }
+    .bx { fill: #fff; stroke: #444; stroke-width: 1.2; }
+    .ok { fill: #e6f4ec; stroke: #18794e; stroke-width: 1.4; }
+    .bad { fill: #fdeaea; stroke: #c4161c; stroke-width: 1.4; }
+    .n { fill: none; stroke: #333; stroke-width: 1.5; }
+    .g { fill: none; stroke: #18794e; stroke-width: 1.6; }
+    .r { fill: none; stroke: #c4161c; stroke-width: 1.6; }
+  </style>
+  <rect x="10" y="10" width="120" height="50" rx="25" class="bx"/><text x="70" y="41" class="t" text-anchor="middle">резултат</text>
+  <path d="M130 35 H160" class="n" marker-end="url(#vr)"/>
+  <polygon points="176,10 330,10 346,35 330,60 176,60 160,35" class="d"/><text x="253" y="41" class="t" text-anchor="middle">верен формат?</text>
+  <path d="M346 35 H376" class="n" marker-end="url(#vr)"/><text x="361" y="27" class="s" text-anchor="middle">да</text>
+  <polygon points="392,10 568,10 584,35 568,60 392,60 376,35" class="d"/><text x="480" y="41" class="t" text-anchor="middle">контролна задача?</text>
+  <path d="M584 35 H614" class="n" marker-end="url(#vr)"/><text x="599" y="27" class="s" text-anchor="middle">не</text>
+  <polygon points="630,10 840,10 856,35 840,60 630,60 614,35" class="d"/><text x="735" y="41" class="t" text-anchor="middle">два резултата съвпадат?</text>
+  <path d="M856 35 H886" class="g" marker-end="url(#vg)"/><text x="871" y="27" class="s" text-anchor="middle">да</text>
+  <rect x="888" y="10" width="104" height="50" rx="8" class="ok"/><text x="940" y="41" class="t" text-anchor="middle">приет</text>
+
+  <path d="M253 60 V90" class="r" marker-end="url(#vb)"/><text x="262" y="81" class="s">не</text>
+  <rect x="160" y="92" width="186" height="50" rx="8" class="bad"/><text x="253" y="123" class="t" text-anchor="middle">отхвърлен</text>
+  <path d="M480 60 V90" class="n" marker-end="url(#vr)"/><text x="489" y="81" class="s">да</text>
+  <rect x="376" y="92" width="208" height="50" rx="8" class="bx"/><text x="480" y="114" class="t" text-anchor="middle">сравнение с</text><text x="480" y="135" class="t" text-anchor="middle">известния отговор</text>
+  <path d="M480 142 V164" class="r" marker-end="url(#vb)"/>
+  <text x="480" y="184" class="s" text-anchor="middle" fill="#c4161c">2 грешни → блокиране;</text>
+  <text x="480" y="204" class="s" text-anchor="middle" fill="#c4161c">приетото от него се смята наново</text>
+  <path d="M735 60 V90" class="n" marker-end="url(#vr)"/><text x="744" y="81" class="s">не</text>
+  <rect x="614" y="92" width="242" height="50" rx="8" class="bx"/><text x="735" y="114" class="t" text-anchor="middle">спорна единица:</text><text x="735" y="135" class="t" text-anchor="middle">още едно копие</text>
+
+  <rect x="10" y="216" width="980" height="46" rx="8" class="bx"/>
+  <text x="24" y="245" class="s"><tspan font-weight="bold">Доверие</tspan> = (верни + 1) / (верни + грешни + 2)</text>
+  <text x="372" y="245" class="s"><tspan font-weight="bold">Ново:</tspan> двама на единица, 20&nbsp;% контролни</text>
+  <text x="690" y="245" class="s"><tspan font-weight="bold">Доверено:</tspan> 90&nbsp;% сам, 5&nbsp;% контролни</text>
+</svg>
+<figcaption>Фиг. 2. Как координаторът решава дали да приеме резултат от непознато устройство.</figcaption>
+</figure>
+
+<h3>4.5. Реализация</h3>
+<table>
+<tr><th style="width:30%">Технология</th><th>Обосновка</th></tr>
+<tr><td>Rust (axum, tokio, sqlx)</td><td>Бърз и безопасен сървър; ядрата се компилират и до WebAssembly.</td></tr>
+<tr><td>WebGPU, WGSL [5]</td><td>Стандартен достъп до графичния процесор от браузъра.</td></tr>
+<tr><td>WebAssembly, Web Workers</td><td>Резервен път без WebGPU, на всички ядра без едно.</td></tr>
+<tr><td>PostgreSQL 18</td><td>Транзакциите правят опашката и проверката надеждни.</td></tr>
+<tr><td>SvelteKit, TypeScript</td><td>Уеб интерфейс; типовете на съобщенията идват от Rust.</td></tr>
+<tr><td>Docker Compose, Caddy</td><td>Стартиране с една команда, HTTPS сертификат.</td></tr>
+<tr><td>GitHub Actions</td><td>Всяка промяна минава автоматичните тестове.</td></tr>
+</table>
+<p><b>Алгоритми:</b> метод Монте Карло (пресмятане на π); проследяване на лъчи за реалистично изображение [4]; обучение на невронни мрежи само с цели числа върху ръкописните цифри MNIST и търсене на най-добрите им параметри; търсене на седмично разписание със закъсняло приемане (late acceptance hill climbing) [3]; проверка на резултатите с кворум и контролни задачи [2] и репутация като средна стойност на бета разпределение.</p>
+<p><b>Тестване:</b> около 260 теста на Rust, модулни тестове на интерфейса (Vitest) и браузърни тестове (Playwright) в Chromium с и без WebGPU, Firefox и WebKit (браузърната машина на Safari) при всяка промяна. На 4 ноември 2026 г. 13 компютъра в училищен кабинет (Intel i3, 4&nbsp;GB, Windows 10) дадоха побитово еднакви резултати със сървъра: 107 милиарда проби по метода Монте Карло за 43&nbsp;s, изображение 1920×1080 за около 70&nbsp;s и 240 обучения на невронна мрежа за 112&nbsp;s с точност 93,7&nbsp;% върху ръкописни цифри. Измамник беше блокиран 3,4&nbsp;s след включването си, а във всички изпитания с измамници крайният резултат беше верен.</p>
+<figure>
+<div class="charts">
+<svg viewBox="0 0 480 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Цена на най-доброто разписание спрямо броя търсения">
+  <style>
+    .ax { stroke: #000; stroke-width: 1.2; }
+    .gr { stroke: #ccc; stroke-width: 0.8; }
+    .tk { font-size: 16px; fill: #000; }
+    .lb { font-size: 17px; fill: #000; font-weight: bold; }
+    .s20 { fill: none; stroke: #0057b3; stroke-width: 2.6; }
+    .s40 { fill: none; stroke: #e08a00; stroke-width: 2.6; }
+    .s60 { fill: none; stroke: #c4161c; stroke-width: 2.6; }
+  </style>
+  <text x="262" y="18" class="lb" text-anchor="middle">Най-доброто намерено разписание</text>
+  <line x1="70" y1="40" x2="70" y2="250" class="ax"/><line x1="70" y1="250" x2="455" y2="250" class="ax"/>
+  <line x1="70" y1="198" x2="455" y2="198" class="gr"/><line x1="70" y1="145" x2="455" y2="145" class="gr"/><line x1="70" y1="93" x2="455" y2="93" class="gr"/><line x1="70" y1="40" x2="455" y2="40" class="gr"/>
+  <text x="62" y="255" class="tk" text-anchor="end">0</text><text x="62" y="203" class="tk" text-anchor="end">40</text><text x="62" y="150" class="tk" text-anchor="end">80</text><text x="62" y="98" class="tk" text-anchor="end">120</text><text x="62" y="45" class="tk" text-anchor="end">160</text>
+  <text x="70" y="270" class="tk" text-anchor="middle">1</text><text x="146" y="270" class="tk" text-anchor="middle">2</text><text x="222" y="270" class="tk" text-anchor="middle">4</text><text x="298" y="270" class="tk" text-anchor="middle">8</text><text x="374" y="270" class="tk" text-anchor="middle">16</text><text x="450" y="270" class="tk" text-anchor="middle">32</text>
+  <text x="262" y="294" class="tk" text-anchor="middle">брой паралелни търсения</text>
+  <text x="20" y="145" class="tk" text-anchor="middle" transform="rotate(-90 20 145)">наказателни точки</text>
+  <polyline points="70,237 146,243 222,250 298,250 374,250 450,250" class="s20"/>
+  <polyline points="70,171 146,204 222,204 298,204 374,204 450,204" class="s40"/>
+  <polyline points="70,53 146,53 222,53 298,86 374,86 450,86" class="s60"/>
+  <text x="446" y="240" class="tk" text-anchor="end" fill="#0057b3">20 паралелки</text>
+  <text x="446" y="194" class="tk" text-anchor="end" fill="#b36b00">40 паралелки</text>
+  <text x="446" y="77" class="tk" text-anchor="end" fill="#c4161c">60 паралелки</text>
+</svg>
+<svg viewBox="0 0 480 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Резултати в секунда при 100 и 1000 устройства">
+  <style>
+    .ax { stroke: #000; stroke-width: 1.2; }
+    .gr { stroke: #ccc; stroke-width: 0.8; }
+    .tk { font-size: 16px; fill: #000; }
+    .lb { font-size: 17px; fill: #000; font-weight: bold; }
+    .id { fill: #ddd; stroke: #777; stroke-width: 1; }
+    .me { fill: #e08a00; }
+    .wh { stroke: #000; stroke-width: 1.6; }
+  </style>
+  <text x="270" y="18" class="lb" text-anchor="middle">Мащабиране на координатора</text>
+  <line x1="80" y1="40" x2="80" y2="250" class="ax"/><line x1="80" y1="250" x2="460" y2="250" class="ax"/>
+  <line x1="80" y1="200" x2="460" y2="200" class="gr"/><line x1="80" y1="150" x2="460" y2="150" class="gr"/><line x1="80" y1="100" x2="460" y2="100" class="gr"/><line x1="80" y1="50" x2="460" y2="50" class="gr"/>
+  <text x="72" y="255" class="tk" text-anchor="end">0</text><text x="72" y="205" class="tk" text-anchor="end">250</text><text x="72" y="155" class="tk" text-anchor="end">500</text><text x="72" y="105" class="tk" text-anchor="end">750</text><text x="72" y="55" class="tk" text-anchor="end">1000</text>
+  <text x="20" y="150" class="tk" text-anchor="middle" transform="rotate(-90 20 150)">резултати в секунда</text>
+  <rect x="120" y="230" width="55" height="20" class="id"/><rect x="180" y="231.6" width="55" height="18.4" class="me"/>
+  <text x="207" y="222" class="tk" text-anchor="middle">92</text>
+  <rect x="300" y="50" width="55" height="200" class="id"/><rect x="360" y="59" width="55" height="191" class="me"/>
+  <line x1="387" y1="54" x2="387" y2="64" class="wh"/><line x1="380" y1="54" x2="394" y2="54" class="wh"/><line x1="380" y1="64" x2="394" y2="64" class="wh"/>
+  <text x="387" y="84" class="tk" text-anchor="middle" fill="#fff" font-weight="bold">930–980</text>
+  <text x="177" y="272" class="tk" text-anchor="middle">100 устройства</text>
+  <text x="357" y="272" class="tk" text-anchor="middle">1000 устройства</text>
+  <rect x="110" y="283" width="14" height="12" class="id"/><text x="130" y="294" class="tk">идеално</text>
+  <rect x="230" y="283" width="14" height="12" class="me"/><text x="250" y="294" class="tk">измерено, 0 отпаднали</text>
+</svg>
+</div>
+<figcaption>Фиг. 3. Вляво: повече паралелни търсения дават по-добро разписание (по-малко наказателни точки) за примерни гимназии. Вдясно: 1000 симулирани устройства с по 1&nbsp;s на единица се обслужват почти без загуба.</figcaption>
+</figure>
+<p class="flush" style="text-align:left"><b>Литература:</b> [1] D. P. Anderson, BOINC: A System for Public-Resource Computing and Storage, GRID 2004; [2] L. F. G. Sarmenta, Sabotage-Tolerance Mechanisms for Volunteer Computing Systems, Future Generation Computer Systems, 2002; [3] E. K. Burke, Y. Bykov, The Late Acceptance Hill-Climbing Heuristic, European Journal of Operational Research, 2017; [4] J. T. Kajiya, The Rendering Equation, SIGGRAPH 1986; [5] W3C, WebGPU, https://www.w3.org/TR/webgpu/.</p>
+
+<h3>4.6. Описание на приложението</h3>
+<p><b>Доброволец</b> (без профил): сканира QR кода или отваря връзката на мрежата и натиска „Включи се“. Избира мощност от 25 до 100&nbsp;% и спира с един бутон. Изчисленията спират сами, когато разделът е скрит или батерията е под 30&nbsp;% (в браузърите, които дават тези данни).</p>
+<p><b>Училище</b> (собственик или администратор на мрежа): влиза в конзолата, създава мрежа („Кабинет 12“), задава правила – одобрение на всяко устройство, работно време и най-висока мощност – и показва QR кода. В „Задачи“ пуска изображение, обучение на невронни мрежи, разписание или собствена програма и следи изгледа на живо (фиг. 4). Наблюдателят вижда мрежата, без да може да я променя.</p>
+<figure>
+<img class="shot" src="img/live.jpg" alt="Изглед на живо на мрежата: изображението, което се изчислява, устройствата като пчелна пита и панелът за устойчивост">
+<figcaption>Фиг. 4. Изглед на живо за проектора: три устройства изчисляват изображението 2,9 пъти по-бързо от най-бързото от тях; вдясно са QR кодът и устройствата.</figcaption>
+</figure>
+<p><b>Заместник-директор:</b> в „Училища“ внася учебния план от таблица (CSV), въвежда учители, паралелки, стаи и отсъствия, а системата проверява данните преди търсене. Устройствата на училището търсят разписанието паралелно; резултатът се разглежда по паралелки и по учители, часовете могат да се местят ръчно, като цената на всяка промяна се показва предварително, а готовото разписание се отпечатва (фиг. 5).</p>
+<figure>
+<div class="shots">
+<img src="img/timetable.png" alt="Намерено разписание на паралелка 8А в конзолата">
+<img src="img/phone.png" alt="Телефон, включен в мрежата, с избор на мощност">
+</div>
+<figcaption>Фиг. 5. Вляво: разписание на паралелка, намерено от устройствата на училището. Вдясно: телефон, който изчислява, с бутон за спиране.</figcaption>
+</figure>
+<p><b>Стартиране и поддръжка.</b> Потребителите не инсталират нищо – нужен е само браузър. Сървърът се стартира с една команда (<code>just stack</code>, т.е. <code>docker compose</code>) на всяка машина с Docker и има нужда от HTTPS адрес; <code>just deploy</code> обновява работещия сървър. Тестови профили за всяка роля – администратор на платформата, собственик, администратор и наблюдател на мрежа – се предоставят на журито заедно с документацията.</p>
+
+<h3>4.7. Заключение</h3>
+<p>Основният резултат е работещ прототип на разпределен изчислителен ресурс на публичен адрес: устройства без инсталиране изчисляват части от обща задача, резултатите им се проверяват, а измамниците се откриват и блокират. Системата е изпитана в училищен компютърен кабинет и с 1000 симулирани устройства, а училищните разписания са първото ѝ практическо приложение за самото училище.</p>
+<p>Възможностите за развитие са: данни на реално училище и обратна връзка от заместник-директора; разпределяне на единиците според скоростта на всяко устройство; подписани шаблони; вход с училищен профил на Google или Microsoft; по-големи модели за машинно обучение; измерване на консумираната енергия; английски интерфейс и изпитване в няколко училища едновременно.</p>
+
+</body>
+</html>
