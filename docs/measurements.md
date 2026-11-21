@@ -478,20 +478,50 @@ page's worker found the cache empty and downloaded the files again; a Safari pro
 a real device is still to be checked.
 
 **On a phone (2026-11-21).** Nothing Phone (1) (Adreno 642L, Android 15, Chrome 157, on
-a charger), on the Mac's dev server through `adb reverse`; the same 50 prompts. The page
-reports WebGPU with `shader-f16` and a 1 GiB largest buffer, so it qualifies for
-SmolLM2. Results:
+a charger), on the Mac's dev server through `adb reverse`. The page reports WebGPU with
+`shader-f16` and a 1 GiB largest buffer, so it qualifies for SmolLM2.
+
+*With ONNX Runtime's defaults (the first run, the same 50 prompts):*
 
 - **Wrong answers.** Every answer parted from the Mac's at the first token, 14 of 14, and
   the text is not language („together_mond_des+oles-268same-splitn_18…“). The near-tie
-  rule agreed with none of them, so against a Mac these answers are refused. Two phones
-  with the same GPU could agree with each other on such answers: a model must not run on
-  a device where it computes wrongly (to fix before phones take language-model units).
+  rule agreed with none of them, so against a Mac these answers were refused, but two
+  phones with the same GPU could have agreed with each other.
 - **Speed.** 15.0 s per answer after a first unit of 33.8 s (download over USB, hash,
-  set-up): 4.25 tokens/s, 16× slower than the M1 Max.
-- **GPU lost.** After 14 answers (3.5 minutes) the page reported „GPU device lost: A
-  valid external Instance reference no longer exists“ and stopped; its two units in hand
-  went back to the queue. Battery 40 °C, CPU 57 °C, thermal status normal.
+  set-up): 4.25 tokens/s.
+- **GPU lost.** After 14 answers the page reported „GPU device lost“ and stopped; its two
+  units in hand went back to the queue. Battery 40 °C, thermal status normal.
 
-The `q4f16` build keeps activations in 16-bit floats; whether the `q4` build (32-bit
-activations, 388 MB) computes correctly on the Adreno is the next check.
+*Cause, found one setting at a time* (the prompt „What is the capital of France?“, the
+model alone in a worker, the Mac's answer „The capital of France is Paris.“ as the
+reference):
+
+- With the runtime's own GPU device the Adreno's kernel log shows `gpu timeout` and
+  `gpu fault`, and Chrome restarts its GPU process, for `q4f16` and `q4` alike. With a
+  device made without the `subgroups` feature nothing hangs.
+- Without subgroups the first token is right (logit 17.31 against the Mac's 17.44 for
+  `q4f16`; 17.325 for `q4` on both) and every later token is wrong, differently from run
+  to run: the prompt is computed right, decoding one token at a time is not. `q4` (32-bit
+  activations) is just as wrong, so 16-bit floats are not the cause.
+- Run on the CPU, one operator kind at a time: attention, the rotary embedding and the
+  final matrix product leave the answer wrong; the layer norms
+  (`SkipSimplifiedLayerNormalization`) make it right. In decoding the runtime fuses each
+  layer norm with the 4-bit matrix product after it into one kernel; graph optimisation
+  `basic` (no fusions) gives the right answer for `q4f16` and `q4`, `extended` does not.
+- On the M1 Max the two settings cost 8 % (68.7 → 61.2 and 69.1 → 63.6 tokens/s over
+  two runs of 96 tokens).
+
+*With the runner's settings* (no subgroups, level `basic`, now for every GPU):
+
+- **Known-answer check** („List the first five planets of the solar system, one per
+  line.“, 20 tokens, every margin at least 0.80): the same 20 tokens on the phone, in
+  Chrome, WebKit and the CPU path on the M1 Max; 7.1 s on the phone.
+- **The phone and the Mac on the same units** (verification on, two answers per unit,
+  30 English prompts, at most 64 new tokens): 30 of 30 agreed, 9 identical to the last
+  token, 21 parted at a near-tie both devices reported (margins at most 0.23, at token 6
+  to 52). 3.2 tokens/s on the phone, 19.4 s per answer (median; 14.1 to 34.1 s), 9.5
+  minutes for the job, no GPU fault in the kernel log, battery 42 °C at the end.
+- **A device that computes wrongly is refused.** With the fused kernels put back on the
+  phone only for the test: its check failed, the two units it held went back without
+  being charged a try, the coordinator gave it nothing more of the job, the page said so,
+  and the Mac answered all 10 prompts.

@@ -126,6 +126,21 @@ before it is trusted.
   honest device was that unsure of its first token for 16 of 150 answers, so a made-up
   answer would pass that often, while every honest parting came at token 5 or later.
   Faking the first token takes running the model.
+- **A known answer at every load.** Each catalog model carries a check: a prompt, the
+  tokens a device known to compute correctly gives (Chrome on the M1 Max), and their
+  margins. A device that loads the model answers it first; an answer that parts from the
+  known one other than at a near-tie (the same rule as two devices' answers) means the
+  model computes wrongly there. The device then sends `failed` with `unfit`: the unit goes
+  back to the queue without being charged a try, the coordinator records the job in the
+  worker's `unfit_jobs` and gives that connection none of its units again, and the worker
+  page says so. Other templates keep running on it. SmolLM2's check is „List the first five
+  planets of the solar system, one per line.“: 20 tokens, every margin at least 0.8.
+- **Runtime settings for every GPU.** ONNX Runtime gets a GPU device made by the runner,
+  without the `subgroups` feature, and graph optimisation `basic`. On the Adreno 642L the
+  subgroup kernels hang the GPU, and the fused kernels of the higher levels (layer norm
+  fused with the following 4-bit matrix product, used when decoding one token at a time)
+  compute wrong tokens. Every device runs the same kernels this way; on the M1 Max it costs
+  about 8 % (69 → 62 tokens/s).
 - **No honeypots of language models yet.** A known answer computed on another kind of GPU
   can part at a near-tie, and two wrong answers to known units ban a device. Devices
   answering language-model units still get honeypots of the other templates.
@@ -137,12 +152,10 @@ before it is trusted.
   shows each answer as it is decided and downloads them as CSV or text.
 
 **Found.** SmolLM2-360M does not answer Bulgarian (it repeats the question). A model for
-Bulgarian prompts is still to be chosen. On a Nothing Phone (1) (Adreno 642L) the `q4f16`
-build gives wrong answers from the first token, at 4 tokens/s, and the GPU device was
-lost after 14 answers. Against a Mac such answers are refused, but two such phones would
-agree: before phones take language-model units, a device must prove the model computes
-correctly on it (a known answer checked when the model loads), and the build or settings
-that are right on the Adreno must be found. Measurements: [measurements.md](../measurements.md#language-models-on-the-swarm-spec-0017).
+Bulgarian prompts is still to be chosen. On a Nothing Phone (1) (Adreno 642L) the first
+runs gave wrong answers from the first token and lost the GPU; the cause was two
+runtime defaults (above), not the `q4f16` build: with the runner's settings the phone
+answers like the Mac. Measurements: [measurements.md](../measurements.md#language-models-on-the-swarm-spec-0017).
 
 ## Acceptance (phase 1)
 
@@ -152,6 +165,9 @@ that are right on the Adreno must be found. Measurements: [measurements.md](../m
   on that device without a result.
 - A second load of the same model reads it from the cache (no network request for it).
 - A device that cannot hold the model is never given its units.
+- A device that computes the model wrongly (its answer to the model's check is wrong)
+  takes none of the job's units, and its refusals do not fail the job (Rust test; on the
+  phone by hand, with the runtime's defaults put back).
 - „Спри“ stops a generation mid-token and the unit returns to the queue.
 - A simulated cheater returning made-up text is outvoted and banned (Rust test).
 - CI: the browser test uses a tiny test model (a few MB, random weights) in Chromium
