@@ -270,9 +270,14 @@ in the lab" in measurements.md is still empty):
 - [ ] `just deploy` works from macOS.
 - [ ] measurements.md has the M1 Max in Safari, Chrome, Edge and Firefox: support,
       bit-exactness (π, path tracer, neural network, timetable) and benchmarks.
-- [ ] Spec 0011's Apple-silicon claim is measured, or corrected.
+      21 November: Chrome, Edge, WebKit 27.2 and Playwright's Firefox measured; the
+      timetable natively. Still open: the released Safari 26 (needs "Allow remote
+      automation" for `safaridriver`) and the released Firefox 160 (needs `geckodriver`).
+- [x] Spec 0011's Apple-silicon claim is measured, or corrected (holds: bit-exact in
+      Tint, WebKit's compiler and naga, 21 November).
 - [ ] Energy per job, measured with `powermetrics`, in measurements.md and the README.
-- [ ] Safari's missing battery API is written down as a known limit.
+- [x] Safari's missing battery API is written down as a known limit (Firefox has none
+      either).
 - [ ] At least one iPhone row, from a real iPhone on mobile data.
 - [ ] Plan B and Plan C rehearsed on the Mac. A recording of Plan A on the Mac and a USB
       stick.

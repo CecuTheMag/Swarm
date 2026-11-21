@@ -4,11 +4,15 @@ Every number used in the competition documents comes from this log.
 
 ## WebGPU support by device
 
-| Date       | Device                       | GPU                                                 | OS              | Browser                 | WebGPU                                                                           | Notes                                                                                                                                                                                              |
-| ---------- | ---------------------------- | --------------------------------------------------- | --------------- | ----------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-10-27 | Dev PC                       | NVIDIA RTX 4060                                     | Arch Linux      | Chromium 154 (headless) | Only with `--enable-unsafe-webgpu --enable-features=Vulkan`; SwiftShader adapter | Headless does not use the real GPU                                                                                                                                                                 |
-| 2026-10-28 | Nothing Phone (1)            | Adreno 642L (Snapdragon 778G+)                      | Android 15      | Chrome 156              | Yes                                                                              | Adapter `qualcomm` / `adreno-6xx`; self-test bit-exact on all vectors                                                                                                                              |
-| 2026-10-28 | Lenovo ThinkPad T540p (2014) | Intel HD Graphics 4600, driver 20.19.15.5126 (2020) | Windows 10 22H2 | Edge 156                | No                                                                               | `edge://gpu` reports WebGPU enabled, but `requestAdapter()` returns null for default, high-performance, low-power, compatibility and fallback adapters. Joins through the CPU fallback (spec 0005) |
+| Date       | Device                       | GPU                                                 | OS              | Browser                                       | WebGPU                                                                           | Notes                                                                                                                                                                                                                                                   |
+| ---------- | ---------------------------- | --------------------------------------------------- | --------------- | --------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-27 | Dev PC                       | NVIDIA RTX 4060                                     | Arch Linux      | Chromium 154 (headless)                       | Only with `--enable-unsafe-webgpu --enable-features=Vulkan`; SwiftShader adapter | Headless does not use the real GPU                                                                                                                                                                                                                      |
+| 2026-10-28 | Nothing Phone (1)            | Adreno 642L (Snapdragon 778G+)                      | Android 15      | Chrome 156                                    | Yes                                                                              | Adapter `qualcomm` / `adreno-6xx`; self-test bit-exact on all vectors                                                                                                                                                                                   |
+| 2026-10-28 | Lenovo ThinkPad T540p (2014) | Intel HD Graphics 4600, driver 20.19.15.5126 (2020) | Windows 10 22H2 | Edge 156                                      | No                                                                               | `edge://gpu` reports WebGPU enabled, but `requestAdapter()` returns null for default, high-performance, low-power, compatibility and fallback adapters. Joins through the CPU fallback (spec 0005)                                                      |
+| 2026-11-21 | MacBook Pro, Apple M1 Max    | Apple M1 Max, 24-core GPU (Metal)                   | macOS 26.3.1    | Chrome 158                                    | Yes                                                                              | Adapter `apple` / `metal-3`, `maxBufferSize` 4 GiB; self-test bit-exact on all vectors, the path tracer and the neural network included (3 runs)                                                                                                        |
+| 2026-11-21 | MacBook Pro, Apple M1 Max    | Apple M1 Max, 24-core GPU (Metal)                   | macOS 26.3.1    | Edge 157                                      | Yes                                                                              | As Chrome: adapter `apple` / `metal-3`; bit-exact on all vectors (3 runs)                                                                                                                                                                               |
+| 2026-11-21 | MacBook Pro, Apple M1 Max    | Apple M1 Max, 24-core GPU (Metal)                   | macOS 26.3.1    | WebKit 27.2 (Playwright, in a window)         | Yes                                                                              | Safari's engine and WGSL compiler; adapter `apple` / `apple`, `maxBufferSize` 2 GiB; bit-exact on all vectors (3 runs)                                                                                                                                  |
+| 2026-11-21 | MacBook Pro, Apple M1 Max    | Apple M1 Max, 24-core GPU (Metal)                   | macOS 26.3.1    | Firefox 157 (Playwright's build, in a window) | Yes, slowly                                                                      | Firefox's WGSL compiler (naga); the adapter reports no vendor; bit-exact on all vectors, but π at 38 M samples/s, about 150× slower than the other engines. Playwright's patched build, not the released Firefox 160, so not a number for Firefox users |
 
 ## Browser engines (automated tests)
 
@@ -29,8 +33,16 @@ test the CPU fallback, which is what a browser without WebGPU gets.
 | 2026-11-11 | WebKit 27.2, Safari's engine (headless, natively on macOS) | Playwright 1.64.1 | **WebGPU on the real GPU** (adapter `apple` / `apple`, Metal on the M1 Max) | All pass; self-test bit-exact on the GPU; screen wake lock works. The first automated run on real GPU hardware |
 
 Not yet tested on real devices: Safari on an iPhone (iOS 26 ships WebGPU, so it would
-take the GPU path) and Firefox with WebGPU (Windows, macOS). Safari's engine on Apple's
+take the GPU path) and the released Firefox with WebGPU (Windows, macOS). Safari's engine on Apple's
 GPU passes in WebKit on macOS above, which is the same WebGPU stack the iPhone uses.
+
+**Three shader compilers, one GPU (2026-11-21).** On the M1 Max the same WGSL goes to
+Metal through Tint (Chrome, Edge), WebKit's compiler and naga (Playwright's Firefox).
+All three give the reference's results bit for bit: π, the neural network's accuracy,
+loss curve and SHA-256 of the final weights for all six vectors, and the path tracer's
+five tiles exactly, not only within the GPU tolerance. Spec 0011's sentence about Apple
+silicon holds. The Rust workspace's 263 tests also pass natively on `aarch64-apple-darwin`,
+so the shared vectors are checked on a second processor architecture.
 
 ## School lab, 2026-11-04
 
@@ -74,6 +86,19 @@ worker page could have computed) is still to be done.
 | 2026-10-29 | magserver (Xeon E5-1620, 4C/8T, 2012), 8 native sim-workers | path tracer, 1280×720, 32² tiles, 16 spp × 16 passes | 310 | — | 14 720 units (2.36·10⁸ paths, 256 spp) in 47.5 s. 1.42 M paths/s per worker while computing, 5.0 M paths/s overall: units of ~11 ms are dominated by per-unit overhead on a server that also runs the coordinator and Postgres. Larger tiles or more samples per unit are needed for efficiency |
 | 2026-10-29 | Dev laptop, headless Chromium | path tracer self-test, 64² tile × 16 spp | — | — | SwiftShader (software WebGPU): 2.98 M paths/s, bit-exact with the reference. CPU fallback (WebAssembly): 8.19 M paths/s, bit-exact |
 | 2026-10-29 | Dev laptop, headless Chromium, through the public address (Tailscale Funnel) | path tracer, 160×90, 32² tiles, 8 spp × 2 passes | 1.5 | — | 30 units in 20.3 s although each computes in milliseconds: ~0.67 s round trip per unit through Funnel's relay. Units for remote devices must carry seconds of work |
+| 2026-11-21 | MacBook Pro M1 Max, Chrome 158, WebGPU (Metal) | π, 2²⁸ samples/unit, 128 units | 14.4 | — | 66 ms average, 75 ms p95: 4.07 G samples/s while computing, 3.86 G/s for the 8.9 s job. 5× the phone's 335 ms per unit |
+| 2026-11-21 | MacBook Pro M1 Max, Edge 157, WebGPU (Metal) | π, 2²⁸ samples/unit, 128 units | 14.4 | — | 64 ms average, 73 ms p95: 4.19 G samples/s while computing; same engine as Chrome, same speed |
+| 2026-11-21 | MacBook Pro M1 Max, WebKit 27.2 (Safari's engine), WebGPU (Metal) | π, 2²⁸ samples/unit, 128 units | 24.6 | — | 37 ms average, 39 ms p95: 7.26 G samples/s while computing, 6.61 G/s for the 5.2 s job. 1.8× Chrome on the same GPU: WebKit's compiler produces the faster kernel |
+| 2026-11-21 | MacBook Pro M1 Max, Chrome 158, WebGPU (Metal) | π, 2²⁸ samples/unit, 10 min | 15.4 | — | Sustained-load run on mains power, Low Power Mode off: 9 236 units (2.48·10¹² samples), 63 ms average, 77 ms p95; 62 ms in the first minute, 63 ms in the last: no throttling. 4.13 G samples/s wall-clock including coordinator round trips |
+| 2026-11-21 | MacBook Pro M1 Max, WebKit 27.2, WebGPU (Metal) | π, 2²⁸ samples/unit, 10 min | 27.6 | — | Sustained-load run as above: 16 571 units (4.45·10¹² samples), 35.6 ms average, 38 ms p95, the same in every minute: no throttling. 7.41 G samples/s wall-clock, 98 % of the time computing |
+| 2026-11-21 | MacBook Pro M1 Max, Chrome 158, CPU fallback (9 threads) | π, 2²⁸ samples/unit, 128 units | 12.3 | — | 74 ms average, 83 ms p95: 3.63 G samples/s. π is light integer work, so eight performance cores come close to the GPU in Chrome |
+| 2026-11-21 | MacBook Pro M1 Max, WebKit 27.2, CPU fallback | π, 2²⁸ samples/unit, 128 units | 11.5 | — | 77 ms average, 78 ms p95: 3.49 G samples/s |
+| 2026-11-21 | MacBook Pro M1 Max, Chrome 158, WebGPU (Metal) | path tracer, 1280×768, 128² tiles × 64 spp × 2 passes | 40.0 | — | 22 ms average, 26 ms p95: 47.7 M paths/s while computing, 41.9 M/s for the 3.0 s job. 4.9× the phone (9.66 M/s) |
+| 2026-11-21 | MacBook Pro M1 Max, Edge 157, WebGPU (Metal) | path tracer, as above | 41.4 | — | 21 ms average, 26 ms p95: 49.9 M paths/s while computing |
+| 2026-11-21 | MacBook Pro M1 Max, WebKit 27.2, WebGPU (Metal) | path tracer, as above | 63.2 | — | 15 ms average, 17 ms p95: 69.9 M paths/s while computing, 66.2 M/s for the 1.9 s job |
+| 2026-11-21 | MacBook Pro M1 Max, Chrome 158, CPU fallback (9 threads) | path tracer, as above | 15.0 | — | 63 ms average, 68 ms p95: 16.6 M paths/s; the GPU is 2.9× faster here, where the work is floating point |
+| 2026-11-21 | MacBook Pro M1 Max, WebKit 27.2, CPU fallback | path tracer, as above | 13.8 | — | 69 ms average, 74 ms p95: 15.2 M paths/s |
+| 2026-11-21 | MacBook Pro M1 Max, 10 native sim-workers | path tracer, 1280×720, 32² tiles, 16 spp × 16 passes | 646 | — | The magserver job above: 14 720 units in 22.8 s (47.5 s on magserver), 5.8 ms per unit, 2.82 M paths/s per worker while computing, 10.3 M paths/s overall; coordinator (release build) and PostgreSQL on the same Mac |
 
 Throughput through the public address (2026-10-29): one browser worker on the dev laptop
 (CPU fallback, 15 threads), connecting through Tailscale Funnel, path-tracer units of
@@ -294,6 +319,13 @@ Back in Chrome, the page rejoined within 4 s and computed 5.8 units/s again. The
 pause is covered by unit tests only (the phone's battery state cannot be lowered without
 overriding system settings).
 
+**Known limit: the battery pause works only in Chromium browsers** (2026-11-21, M1 Max).
+`navigator.getBattery` exists in Chrome 158 and Edge 157 (both report the Mac's charge),
+but not in WebKit 27.2, Safari's engine, nor in Firefox 157: neither engine offers the
+Battery Status API to web pages. In Safari (on a Mac or an iPhone) and in Firefox the
+pause below 30 % therefore never fires; the power level, the pause on a hidden page and
+„Спри“ still apply. The Screen Wake Lock API is present in all four.
+
 ## Random number generator validation (π template)
 
 Method: 16 units × 2²² samples per run (67.1M samples), independent seeds per
@@ -341,6 +373,13 @@ Chromium's WebGPU (SwiftShader) give the same accuracy, loss curve and SHA-256 o
 final weights for every vector. A local sweep of 48 trainings on 12 simulated devices
 finished in seconds; the best setting reached 82.8 % (1 × 128, learning rate 0.4).
 
+The same sweep natively on one core of the M1 Max (2026-11-21, `aarch64-apple-darwin`):
+every integer accuracy is identical to the table above, while the `f32` column differs on
+two rows by 0.1 point (128 × 1 at lr 0.1: 75.1 %; 256 × 1: 75.7 %). Floating point
+differs between x86-64 and ARM; the integer training does not. Times: 52 ms to 3 455 ms
+(the table's 54–4 010 ms). On the M1 Max's GPU the shared vectors are bit-exact in Chrome,
+Edge, WebKit and Firefox ([above](#browser-engines-automated-tests)).
+
 ## School timetables (spec 0013)
 
 Example high schools from `timetable::sample` (grades 8–12, 31 hours a week per class,
@@ -353,6 +392,10 @@ for 40 (1 240), 0.41 s for 60 (1 860): an iteration costs the same whatever the 
 costs are updated incrementally. The WebAssembly build that browsers run (Node 24, same
 machine) takes 0.45–0.48 s for the 40-class school and gives exactly the native costs
 (60, 35, 50 for searches 0–2).
+
+MacBook Pro M1 Max, one thread, natively on ARM (2026-11-21): 0.46 s for 20 classes,
+0.49 s for 40, 0.48 s for 60, with exactly the same costs as the dev PC (10, 60, 150 for
+one search; 60, 35, 50 for searches 0–2 of the 40-class school).
 
 History length `L` of late acceptance, 40 classes, six searches each (cost; every
 timetable valid, so costs are soft only):

@@ -26,7 +26,7 @@ The device pauses when:
 | Reason | Condition | Resumes when |
 |---|---|---|
 | hidden | the page is hidden (another tab or app, screen off) | the page is visible again |
-| battery | the battery is below 30 % and not charging (Battery Status API, where available) | it charges, or is above 30 % again |
+| battery | the battery is below 30 % and not charging (Battery Status API: Chrome and Edge have it; Safari and Firefox do not, so there the pause never fires) | it charges, or is above 30 % again |
 
 Pausing finishes the unit being computed and sends its result, then closes the
 connection: units fetched in advance go back to the queue at once instead of waiting
