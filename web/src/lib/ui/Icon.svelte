@@ -2,6 +2,11 @@
 	// Line icons on a 24 px grid, drawn with the current text colour.
 	const paths = {
 		arrow: 'M5 12h14M13 6l6 6-6 6',
+		home: 'M4 10.5L12 4l8 6.5V20h-5.5v-5.5h-5V20H4z',
+		user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4.5 20.5c1.4-3.6 4.2-5.5 7.5-5.5s6.1 1.9 7.5 5.5',
+		grid: 'M4 4h7v7H4z M13 4h7v7h-7z M4 13h7v7H4z M13 13h7v7h-7z',
+		chevron: 'M9.5 6l6 6-6 6',
+		key: 'M14.5 4a5.5 5.5 0 1 1-4.9 8L4 17.6V20h2.5v-2h2v-2h2l1.1-1.1A5.5 5.5 0 0 1 14.5 4z M16 8.5v.01',
 		power: 'M12 3v8M6.3 6.6a8 8 0 1 0 11.4 0',
 		shield: 'M12 3l7 3v5c0 4.6-3 8.3-7 10-4-1.7-7-5.4-7-10V6z M9 12l2 2 4-4',
 		battery: 'M3 8h15v8H3z M21 11v2 M6 11v2',

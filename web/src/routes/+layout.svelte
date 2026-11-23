@@ -8,7 +8,7 @@
 	import '../app.css';
 	import favicon from '#lib/assets/favicon.svg';
 	import Logo from '#lib/ui/Logo.svelte';
-	import Icon from '#lib/ui/Icon.svelte';
+	import TabBar from '#lib/ui/TabBar.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
@@ -23,14 +23,12 @@
 	onMount(() => void account.check().catch(() => null));
 	const here = (p: string | null) => (p && path.startsWith(p) ? 'page' : undefined);
 
-	let menuOpen = $state(false);
 	const path = $derived(page.url.pathname);
 	// The projector page: dark, edge to edge, no footer.
 	const stage = $derived(path.startsWith('/render/') || /^\/app\/n\/[^/]+\/live$/.test(path));
 
 	// Page changes cross-fade where the browser supports View Transitions.
 	onNavigate((navigation) => {
-		menuOpen = false;
 		if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) {
 			return;
 		}
@@ -41,10 +39,6 @@
 			});
 		});
 	});
-
-	function onKey(event: KeyboardEvent) {
-		if (event.key === 'Escape') menuOpen = false;
-	}
 </script>
 
 <svelte:head>
@@ -52,13 +46,11 @@
 	<title>Рояк — суперкомпютър от устройствата около нас</title>
 </svelte:head>
 
-<svelte:window onkeydown={onKey} />
-
 <div class="app" class:theme-dark={stage} class:stage>
 	<a class="skip" href="#content">Към съдържанието</a>
 	<div class="ambient" aria-hidden="true"></div>
 
-	<header class="bar" class:open={menuOpen}>
+	<header class="bar">
 		<nav class="glass inner" aria-label="Основна навигация">
 			<a class="brand" href={resolve('/')} aria-label="Рояк, начало">
 				<Logo size={26} />
@@ -75,31 +67,7 @@
 			</ul>
 
 			<a class="button sm cta" href={resolve('/worker')}>Включи се</a>
-
-			<button
-				class="ghost toggle"
-				aria-expanded={menuOpen}
-				aria-controls="mobile-menu"
-				aria-label={menuOpen ? 'Затвори менюто' : 'Меню'}
-				onclick={() => (menuOpen = !menuOpen)}
-			>
-				<Icon name={menuOpen ? 'close' : 'menu'} size={22} />
-			</button>
 		</nav>
-
-		<div id="mobile-menu" class="sheet glass" hidden={!menuOpen}>
-			<ul>
-				{#each links as link, i (link.href)}
-					<li style:--i={i}>
-						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() builds the path; only a #section is added -->
-						<a href={link.href} onclick={() => (menuOpen = false)}>{link.label}</a>
-					</li>
-				{/each}
-			</ul>
-			<a class="button lg" href={resolve('/worker')} onclick={() => (menuOpen = false)}>
-				Включи се <Icon name="arrow" size={18} />
-			</a>
-		</div>
 	</header>
 
 	<div id="content" class="content" tabindex="-1">
@@ -107,6 +75,7 @@
 	</div>
 
 	{#if !stage}
+		<TabBar />
 		<footer class="foot">
 			<div class="foot-inner">
 				<div class="foot-brand">
@@ -213,71 +182,28 @@
 		color: var(--text);
 		background: rgb(118 118 128 / 0.14);
 	}
-	.toggle {
-		display: none;
-		width: 44px;
-		padding: 0;
-		color: var(--text);
-	}
-
-	/* ---------- Phone menu ---------- */
-	.sheet {
-		max-width: var(--page);
-		margin: 8px auto 0;
-		padding: var(--s-4);
-		border-radius: var(--radius-lg);
-		display: grid;
-		gap: var(--s-4);
-		background: var(--glass-strong);
-		animation: drop var(--base) var(--ease);
-	}
-	.sheet[hidden] {
-		display: none;
-	}
-	.sheet ul {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-	}
-	.sheet li {
-		animation: rise var(--slow) var(--ease) both;
-		animation-delay: calc(var(--i) * 40ms + 40ms);
-	}
-	.sheet li a {
-		display: block;
-		padding: 14px 8px;
-		color: var(--text);
-		text-decoration: none;
-		font-size: 1.375rem;
-		font-weight: 650;
-		letter-spacing: -0.02em;
-		border-bottom: 1px solid var(--border);
-	}
-	@keyframes drop {
-		from {
-			opacity: 0;
-			transform: translateY(-8px) scale(0.98);
-		}
-	}
-	@keyframes rise {
-		from {
-			opacity: 0;
-			transform: translateY(8px);
-		}
-	}
-
+	/* ---------- Phone: the tab bar navigates; the header keeps only the mark ---------- */
 	@media (max-width: 760px) {
 		.links,
 		.cta {
 			display: none;
 		}
-		.toggle {
-			display: inline-flex;
+		.bar {
+			padding: max(8px, env(safe-area-inset-top)) var(--gutter) 0;
 		}
-	}
-	@media (min-width: 761px) {
-		.sheet {
-			display: none !important;
+		.inner {
+			padding: 6px 14px;
+			min-height: 44px;
+		}
+		.brand {
+			font-size: 1.0625rem;
+		}
+		/* Room for the floating tab bar and the home indicator. */
+		.content {
+			padding-bottom: calc(84px + env(safe-area-inset-bottom));
+		}
+		.foot {
+			display: none;
 		}
 	}
 
@@ -329,8 +255,7 @@
 	.stage .bar {
 		padding-top: 8px;
 	}
-	.stage .inner,
-	.stage .sheet {
+	.stage .inner {
 		max-width: min(1800px, 100%);
 	}
 </style>

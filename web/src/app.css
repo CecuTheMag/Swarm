@@ -854,6 +854,36 @@ th {
 	transform: none;
 }
 
+/* Phones behave like an app: content is simply there, it does not fade up as it
+   scrolls in (docs/design-system.md, „Рояк в джоба“). */
+@media (max-width: 760px) {
+	.js [data-reveal] {
+		opacity: 1;
+		transform: none;
+		transition: none;
+	}
+}
+
+/* Phones: sign-in, invitation and join forms are full screens, not floating cards. */
+@media (max-width: 760px) {
+	main.auth {
+		padding-top: var(--s-4);
+	}
+	main.auth > .card {
+		background: transparent;
+		border: 0;
+		box-shadow: none;
+		padding: var(--s-4) 0;
+	}
+	main.auth > .card.form > h1 {
+		font-size: 2rem;
+	}
+	main.auth button[type='submit'],
+	main.auth .button {
+		width: 100%;
+	}
+}
+
 /* Page changes cross-fade (View Transitions, where the browser has them). */
 ::view-transition-old(root),
 ::view-transition-new(root) {
