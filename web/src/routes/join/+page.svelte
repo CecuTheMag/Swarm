@@ -33,7 +33,7 @@
 </svelte:head>
 
 <main class="auth">
-	<form class="card glass form" onsubmit={submit}>
+	<form class="card form" onsubmit={submit}>
 		<Logo size={40} />
 		<h1>Включи се с код</h1>
 		<p class="muted">Въведете кода на мрежата, който ви е дал собственикът ѝ.</p>

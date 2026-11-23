@@ -58,7 +58,7 @@
 	--text-lg: 1.25rem;
 	--text-xl: clamp(1.5rem, 1.1rem + 1.6vw, 2.125rem);
 	--text-2xl: clamp(2rem, 1.3rem + 3vw, 3.25rem);
-	--text-display: clamp(2.4rem, 0.8rem + 4vw, 4.4rem);
+	--text-display: clamp(2.125rem, 1rem + 3.4vw, 4rem);
 
 	/* Space (4 px steps) */
 	--s-1: 4px;
@@ -87,6 +87,7 @@
 	/* Motion: quick and soft, like a spring that settles without overshoot. */
 	--ease: cubic-bezier(0.22, 1, 0.36, 1);
 	--ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+	--press: 120ms;
 	--fast: 160ms;
 	--base: 280ms;
 	--slow: 560ms;
@@ -224,6 +225,9 @@ h3 {
 	letter-spacing: -0.025em;
 	font-weight: 700;
 	text-wrap: balance;
+	/* Long Bulgarian words break rather than push a phone page sideways. */
+	overflow-wrap: break-word;
+	hyphens: manual;
 }
 
 h1 {
@@ -263,12 +267,25 @@ code {
 }
 
 ::selection {
-	background: var(--brand-soft);
+	background: color-mix(in srgb, var(--brand) 32%, transparent);
+	color: var(--text);
 }
 
+html {
+	scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+	accent-color: var(--brand-strong);
+	caret-color: var(--brand-ink);
+}
+
+/* --brand-ink, not the fill amber: the ring must stand 3:1 off the page in both themes. */
 :focus-visible {
-	outline: 3px solid var(--brand-strong);
+	outline: 2px solid var(--brand-ink);
 	outline-offset: 3px;
+}
+
+/* Counters never jitter as their digits change. */
+.tnum {
+	font-variant-numeric: tabular-nums;
 }
 
 .muted {
@@ -339,8 +356,9 @@ code {
 
 /* ---------- Glass ---------- */
 
-.glass,
-.card {
+/* Depth has three levels (docs/design-system.md): the page; cards, solid, for content
+   that sits on the page; glass, blurred, only for layers that float over moving content. */
+.glass {
 	background: var(--glass);
 	border: 1px solid var(--glass-border);
 	border-radius: var(--radius-lg);
@@ -353,19 +371,21 @@ code {
 
 .card {
 	padding: var(--s-5);
+	background: var(--bg-elevated);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	box-shadow: var(--shadow-sm);
 }
 
 /* Without blur, or when the user asks for less transparency: solid surfaces. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-	.glass,
-	.card {
+	.glass {
 		background: var(--bg-elevated);
 	}
 }
 
 @media (prefers-reduced-transparency: reduce) {
-	.glass,
-	.card {
+	.glass {
 		background: var(--bg-elevated);
 		-webkit-backdrop-filter: none;
 		backdrop-filter: none;
@@ -428,19 +448,22 @@ button,
 	color: var(--on-brand);
 	box-shadow:
 		inset 0 1px 0 rgb(255 255 255 / 0.35),
-		0 6px 18px -8px rgb(224 142 11 / 0.7);
+		0 4px 14px -6px rgb(224 142 11 / 0.55);
 	transition:
-		transform var(--fast) var(--ease),
+		transform var(--press) var(--ease),
 		background-color var(--fast) var(--ease),
-		box-shadow var(--base) var(--ease),
+		border-color var(--fast) var(--ease),
+		color var(--fast) var(--ease),
 		opacity var(--fast) var(--ease);
 	-webkit-tap-highlight-color: transparent;
 	touch-action: manipulation;
 }
 
-button:hover,
-.button:hover {
-	background: var(--brand-strong);
+@media (hover: hover) {
+	button:hover,
+	.button:hover {
+		background: var(--brand-strong);
+	}
 }
 
 button:active,
@@ -454,14 +477,6 @@ button.secondary,
 	color: var(--text);
 	border-color: var(--border-strong);
 	box-shadow: var(--shadow-sm);
-	-webkit-backdrop-filter: blur(12px);
-	backdrop-filter: blur(12px);
-}
-
-button.secondary:hover,
-.button.secondary:hover {
-	background: var(--bg-elevated);
-	border-color: var(--faint);
 }
 
 button.ghost,
@@ -471,22 +486,31 @@ button.ghost,
 	box-shadow: none;
 }
 
-button.ghost:hover,
-.button.ghost:hover {
-	background: var(--brand-soft);
+@media (hover: hover) {
+	button.secondary:hover,
+	.button.secondary:hover {
+		background: var(--bg-elevated);
+		border-color: var(--faint);
+	}
+
+	button.ghost:hover,
+	.button.ghost:hover {
+		background: var(--brand-soft);
+	}
 }
 
 button.danger,
 .button.danger {
 	background: var(--bad);
 	color: var(--on-bad);
-	box-shadow: 0 6px 18px -8px rgb(196 22 28 / 0.6);
+	box-shadow: 0 4px 14px -6px rgb(196 22 28 / 0.5);
 }
 
-button.danger:hover,
-.button.danger:hover {
-	filter: brightness(1.08);
-	background: var(--bad);
+@media (hover: hover) {
+	button.danger:hover,
+	.button.danger:hover {
+		background: color-mix(in srgb, var(--bad) 88%, var(--text));
+	}
 }
 
 .button.lg,
@@ -546,13 +570,15 @@ button:disabled,
 		color var(--fast) var(--ease);
 }
 
-.segmented button:hover {
-	background: rgb(118 118 128 / 0.12);
-}
+@media (hover: hover) {
+	.segmented button:hover {
+		background: rgb(118 118 128 / 0.12);
+	}
 
-.segmented button[aria-pressed='true']:hover,
-.segmented button[aria-checked='true']:hover {
-	background: var(--text);
+	.segmented button[aria-pressed='true']:hover,
+	.segmented button[aria-checked='true']:hover {
+		background: var(--text);
+	}
 }
 
 .segmented button[aria-pressed='true'],
@@ -563,6 +589,7 @@ button:disabled,
 	box-shadow:
 		0 1px 2px rgb(0 0 0 / 0.08),
 		0 3px 10px -2px rgb(0 0 0 / 0.12);
+	font-variant-numeric: tabular-nums;
 }
 
 /* Phones: long labels wrap onto two lines instead of running into each other, so
@@ -621,8 +648,14 @@ input:focus,
 select:focus,
 textarea:focus {
 	outline: none;
-	border-color: var(--brand);
+	border-color: var(--brand-ink);
 	box-shadow: 0 0 0 4px var(--brand-soft);
+}
+
+input::placeholder,
+textarea::placeholder {
+	color: var(--faint);
+	opacity: 1;
 }
 
 input[type='checkbox'] {
@@ -686,6 +719,7 @@ label {
 	background: rgb(118 118 128 / 0.12);
 	color: var(--muted);
 	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
 }
 
 .badge.ok {
@@ -704,6 +738,7 @@ label {
 }
 
 .dot {
+	position: relative;
 	width: 8px;
 	height: 8px;
 	border-radius: 50%;
@@ -711,17 +746,25 @@ label {
 	flex: none;
 }
 
-.dot.pulse {
-	animation: pulse 2s var(--ease-in-out) infinite;
+.dot.pulse::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: 50%;
+	background: currentColor;
+	opacity: 0;
+	animation: pulse 2.4s var(--ease) infinite;
 }
 
 @keyframes pulse {
-	0%,
-	100% {
-		box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent);
+	0% {
+		opacity: 0.5;
+		transform: scale(1);
 	}
-	50% {
-		box-shadow: 0 0 0 6px transparent;
+	70%,
+	100% {
+		opacity: 0;
+		transform: scale(2.6);
 	}
 }
 
@@ -799,10 +842,10 @@ th {
    JavaScript (app.html sets .js): without it everything simply shows. */
 .js [data-reveal] {
 	opacity: 0;
-	transform: translateY(24px);
+	transform: translateY(12px);
 	transition:
-		opacity var(--slower) var(--ease),
-		transform var(--slower) var(--ease);
+		opacity var(--slow) var(--ease),
+		transform var(--slow) var(--ease);
 	transition-delay: var(--reveal-delay, 0ms);
 }
 
