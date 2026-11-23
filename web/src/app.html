@@ -8,6 +8,11 @@
 			name="description"
 			content="Рояк превръща телефоните и компютрите около нас в суперкомпютър: включвате се с едно докосване, без инсталиране."
 		/>
+		<!-- On a phone's home screen Рояк opens as an app, without browser chrome. -->
+		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
+		<link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-title" content="Рояк" />
 		<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)" />
 		<meta name="theme-color" content="#0b0b0d" media="(prefers-color-scheme: dark)" />
 		<script nonce="%sveltekit.nonce%">

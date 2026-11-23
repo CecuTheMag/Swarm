@@ -1,0 +1,20 @@
+{
+	"name": "Рояк",
+	"short_name": "Рояк",
+	"description": "Суперкомпютър от устройствата около нас: включвате се с едно докосване, без инсталиране.",
+	"lang": "bg",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"background_color": "#f5f5f7",
+	"theme_color": "#f5f5f7",
+	"icons": [
+		{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+		{ "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+		{ "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+	],
+	"shortcuts": [
+		{ "name": "Включи се", "url": "/worker", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+		{ "name": "Включи се с код", "url": "/join" }
+	]
+}
