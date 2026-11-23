@@ -32,3 +32,6 @@ playwright-report/
 
 # Model files (spec 0017): `just models` downloads them
 /models/
+
+# Presentation build (docs/presentation/src: npm run build)
+/docs/presentation/build/

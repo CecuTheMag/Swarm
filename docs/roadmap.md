@@ -44,6 +44,9 @@ accounts, devices, the school.
    only; the school agreed to the lab run (4 November); the lab's idle time is the
    author's estimate from its timetable (about 75 %), still to be logged on the PCs.
 5. **Defense run sheet** — written 21 November (`docs/demo-day.md`, „The 20 minutes“);
+   the deck and the full script were added 23 November (`docs/presentation/`: `Рояк.pptx`
+   with Morph transitions, `Рояк.pdf` as a fallback, `сценарий.md` timed to the regulation's
+   20 minutes and mapped to its scoring protocol);
    still to rehearse and time: the committee joins by QR, a
    timetable for a real school is searched live on their phones, a cheater is caught,
    a device is switched off mid-job; `docs/demo-day.md` updated and timed.
