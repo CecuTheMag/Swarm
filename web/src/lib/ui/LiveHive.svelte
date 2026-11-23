@@ -143,7 +143,7 @@
 		ctx.globalAlpha = 1;
 		const cost = performance.now() - started;
 		frameMs = frameMs === 0 ? cost : frameMs * 0.9 + cost * 0.1;
-		if (started - reported > 1000) {
+		if (reported === 0 || started - reported > 1000) {
 			reported = started;
 			host.dataset.frameMs = frameMs.toFixed(2);
 		}
