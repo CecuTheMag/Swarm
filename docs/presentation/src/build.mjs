@@ -89,9 +89,10 @@ function setSection(title) {
   pres.addSection({ title });
 }
 
-function newSlide(layout, { transition = { type: "morph", dur: 1400 } } = {}) {
+// `hidden` slides are skipped by the slideshow but still open by number (type it, Enter).
+function newSlide(layout, { transition = { type: "morph", dur: 1400 }, hidden = false } = {}) {
   const s = pres.addSlide({ masterName: layout, sectionTitle: section });
-  const plan = { transition, groups: [] };
+  const plan = { transition, groups: [], hidden };
   plans.push(plan);
   const counters = {};
   const groupNames = {};
@@ -769,7 +770,7 @@ const RESERVE = [
 
 // 18 — Reserve index
 {
-  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 } });
+  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 }, hidden: true });
   x.eyebrow("РЕЗЕРВ", C.muted);
   x.title("Въпроси");
   RESERVE.forEach(([n, q], i) => {
@@ -784,7 +785,7 @@ const RESERVE = [
 
 // 19 — Why not BOINC
 {
-  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 } });
+  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 }, hidden: true });
   x.eyebrow("РЕЗЕРВ · 19", C.muted);
   x.title("Защо не BOINC?");
   const rows = [
@@ -816,7 +817,7 @@ const RESERVE = [
 
 // 20 — Timetable: more searches, better timetables
 {
-  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 } });
+  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 }, hidden: true });
   x.eyebrow("РЕЗЕРВ · 20", C.muted);
   x.title("Повече търсения — по-добро разписание");
   x.chart("tt", pres.ChartType.line, [
@@ -838,7 +839,7 @@ const RESERVE = [
 
 // 21 — Coordinator capacity
 {
-  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 } });
+  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 }, hidden: true });
   x.eyebrow("РЕЗЕРВ · 21", C.muted);
   x.title("Капацитет на координатора");
   x.chart("cap", pres.ChartType.bar, [{ name: "Резултата в секунда", labels: ["10", "100", "300", "1 000"], values: [508, 564, 718, 841] }], {
@@ -863,7 +864,7 @@ const RESERVE = [
 
 // 22 — Contributor power, measured on a phone
 {
-  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 } });
+  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 }, hidden: true });
   x.eyebrow("РЕЗЕРВ · 22", C.muted);
   x.title("Мощността, измерена на телефон");
   x.chart("pw", pres.ChartType.bar, [{ name: "Дял от времето в изчисление", labels: ["25 %", "50 %", "75 % (по подразбиране)", "100 %"], values: [25, 50, 79, 98] }], {
@@ -888,7 +889,7 @@ const RESERVE = [
 
 // 23 — Comparing language-model answers
 {
-  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 } });
+  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 }, hidden: true });
   x.eyebrow("РЕЗЕРВ · 23", C.muted);
   x.title("Как се сравняват отговори на езиков модел");
   const nums = [
@@ -911,7 +912,7 @@ const RESERVE = [
 
 // 24 — The REST API
 {
-  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 } });
+  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 }, hidden: true });
   x.eyebrow("РЕЗЕРВ · 24", C.muted);
   x.title("REST програмен интерфейс");
   const groups = [
@@ -932,7 +933,7 @@ const RESERVE = [
 
 // 25 — Honest limits and energy
 {
-  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 } });
+  const x = newSlide(L("plain"), { transition: { type: "fade", dur: 700 }, hidden: true });
   x.eyebrow("РЕЗЕРВ · 25", C.muted);
   x.title("Какво още предстои");
   const todo = [

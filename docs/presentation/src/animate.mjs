@@ -2,7 +2,7 @@
 // animations inside them. Works on the packed .pptx with JSZip and plain strings.
 //
 // A slide's plan:
-//   { transition: { type: "morph" | "fade", dur: ms },
+//   { hidden: bool, transition: { type: "morph" | "fade", dur: ms },
 //     groups: [ { trigger: "auto" | "click", items: [ { name, fx, delay, dur } ] } ] }
 // "auto" plays right after the slide appears (or after the previous group), "click"
 // waits for the presenter. Items in a group start together, each after its own delay.
@@ -176,6 +176,7 @@ export async function animate(buffer, plans, theme) {
     const file = `ppt/slides/slide${i + 1}.xml`;
     let xml = await zip.file(file).async("string");
     const plan = plans[i] ?? {};
+    if (plan.hidden) xml = xml.replace(/<p:sld(?=[\s>])/, '<p:sld show="0"');
     const { ids, kinds } = shapesByName(xml);
     const extra = transitionXml(plan.transition) + timingXml(plan.groups, ids, kinds, i + 1);
     if (extra) {
