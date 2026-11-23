@@ -31,9 +31,10 @@ terms („части“, „устройство“, „Включи се“, �
 - *Depth: three levels, one rule each.* Page (background, ambient light). Card: a solid
   surface with a hairline border and a small shadow, for content that sits on the page.
   Glass: blur, highlight and the larger shadow, only for layers that float over moving
-  content (the sticky header, the phone menu, the hero's live field, the worker's
-  console). Cards no longer blur: it explained nothing and cost the GPU on the worker
-  page, where it matters most.
+  content (the sticky header, the phone menu, the hero's live field). Cards no longer
+  blur: it explained nothing and cost the GPU on the worker page, where it matters
+  most. The worker's console is a card too: its ring turns, and blur behind moving
+  content would be redrawn every frame.
 - *Type.* Tracking no tighter than −0.04 em; heading sizes step clearly (display, 2xl,
   xl, lg); every counter uses tabular numerals so live numbers do not jitter; numbers
   are written the Bulgarian way (`5,6`, `1 000`).
@@ -91,11 +92,26 @@ terms („части“, „устройство“, „Включи се“, �
 | Neutrals | `--bg`, `--bg-elevated`, `--text`, `--muted`, `--faint`, `--border`, `--border-strong` | `--faint` is the smallest allowed contrast for text (≥ 4.5:1) |
 | Glass | `--glass`, `--glass-strong`, `--glass-border`, `--glass-highlight`, `--glass-blur` | |
 | Semantic | `--ok`, `--bad`, `--info` and their `-soft` fills, `--on-bad` | |
-| Type | `--font` (Inter Variable, self-hosted, Cyrillic), `--text-xs` … `--text-display` | Body 17 px; headings tight (−0.025 em) |
+| Type | `--font` (Inter Variable, self-hosted, Cyrillic), `--text-xs` … `--text-display` | Body 17 px; headings tight (−0.025 em), display −0.04 em at most; `.tnum` for counters |
 | Space | `--s-1` … `--s-10` (4 px steps), `--gutter`, `--page` | |
 | Shape | `--radius-sm` 10, `--radius` 16, `--radius-lg` 24, `--radius-xl` 32, `--pill` | |
 | Depth | `--shadow-sm`, `--shadow`, `--shadow-lg` | |
-| Motion | `--ease`, `--ease-in-out`; `--fast` 160, `--base` 280, `--slow` 560, `--slower` 900 ms | |
+| Motion | `--ease`, `--ease-in-out`; `--press` 120, `--fast` 160, `--base` 280, `--slow` 560, `--slower` 900 ms | `--press` is for press feedback |
+
+### Value changes (2026-11-23)
+
+| Token or rule | Was | Now | Why |
+|---|---|---|---|
+| `--text-display` | `clamp(2.4rem, 0.8rem + 4vw, 4.4rem)` | `clamp(2.125rem, 1rem + 3.4vw, 4rem)` | „Суперкомпютър“ broke mid-word in the hero column; now fits from 320 px up |
+| Display tracking | −0.045 em | −0.04 em | Tracking floor |
+| `--press` | — | 120 ms | New: press feedback is quicker than a state change |
+| Focus ring | 3 px `--brand-strong` | 2 px `--brand-ink` | `--brand-strong` was 2.7:1 against the light page; `--brand-ink` is above 5:1 in both themes |
+| Field focus border | `--brand` | `--brand-ink` | Same 3:1 rule for the focused field's edge |
+| `.card` | glass (blur, translucent) | `--bg-elevated`, `--border`, `--shadow-sm` | Depth levels: blur only where something floats over moving content |
+| Button glow | `0 6px 18px -8px` at 0.7 | `0 4px 14px -6px` at 0.55 | Quieter; the fill carries the action |
+| Reveal on scroll | 24 px, `--slower` | 12 px, `--slow` | Settles sooner, travels less |
+| Live dot pulse | animated `box-shadow` | `::after` ring, `transform` + `opacity` | Runs on the compositor |
+| Device kinds (projector, network card) | amber, blue `#4f9be8`, violet `#9b8fe0` | amber solid, amber light with amber edge, neutral | One brand colour; hues are for status |
 
 Light and dark follow the system; `.theme-dark` forces dark (the projector page).
 
@@ -105,21 +121,26 @@ Light and dark follow the system; `.theme-dark` forces dark (the projector page)
 |---|---|---|
 | `button`, `.button` | default (amber), `.secondary` (glass), `.ghost`, `.danger`; `.sm`, `.lg` | hover, press (scale 0.97), focus ring, disabled; ≥ 44 px tall on touch screens |
 | `.segmented` | — | selected item (`aria-pressed`/`aria-checked`) is a dark pill, ≥ 3:1 against the track |
-| `.glass`, `.card` | — | frosted panel; `.card` adds padding |
-| `input`, `select`, `label` | — | 16 px text (no zoom on iPhone), amber focus halo; labels wrap their field |
+| `.glass` | — | frosted layer, only over moving content (header, phone menu, home hero) |
+| `.card` | — | solid surface with hairline border and small shadow; padded |
+| `input`, `select`, `label` | — | 16 px text (no zoom on iPhone), `--brand-ink` focus edge with amber halo; labels wrap their field |
 | `.notice` | info, `.warn`, `.bad`, `.ok` | icon + one sentence: what happened and what happens next |
 | `.badge` | `.live`, `.ok`, `.bad` | with `.dot` (`.pulse` for live) |
 | `.stat` | — | `.value` + `.label` |
 | `.progress` | — | eases to its new width |
-| `.eyebrow`, `.page-head` | — | section label; page title and lead |
+| `.eyebrow`, `.page-head` | — | label for a value or a group (console); not a kicker above a heading; page title and lead |
 
 ## Motion
 
 - Sections fade up on first view: `use:reveal={delay}` (`#lib/ui/reveal.ts`); hidden
   only when JavaScript runs (`html.js`), so nothing is lost without it.
 - Pages cross-fade (View Transitions) where supported.
-- The worker's ring turns while the device takes part, faster while it computes; the
-  start button breathes.
+- The worker's ring turns while the device takes part, faster while it computes, as a
+  whole SVG layer on the compositor; before that nothing on the page moves (the start
+  button's halo is still).
+- The home hero's live field (`#lib/ui/LiveHive.svelte`, model in `hive-field.ts`): see
+  the refinement brief above. Measured in docs/measurements.md.
+- Hover effects apply only with `(hover: hover)`; cards that are not links do not move.
 
 ## Accessibility (checked 2026-11-03)
 

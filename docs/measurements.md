@@ -525,3 +525,31 @@ reference):
   phone only for the test: its check failed, the two units it held went back without
   being charged a try, the coordinator gave it nothing more of the job, the page said so,
   and the Mac answered all 10 prompts.
+
+## Interface cost (design refinement, 2026-11-23)
+
+Dev laptop (MacBook Pro M1 Max, macOS 26.3.1), headless Chromium 156 from Playwright 1.64.1
+with WebGPU on SwiftShader, local coordinator and dev server, 18 simulated devices
+computing π units in the background.
+
+Worker page while this browser computes (390×844, power 100 %, 20 s windows, two runs
+each, Chrome DevTools Protocol `Performance.getMetrics`):
+
+| Page | Main-thread time | Style recalculations | Layouts |
+|---|---|---|---|
+| Before: the circle inside the ring's SVG turns, the live dot pulses with `box-shadow` | 57.4 / 56.5 ms per s | 60 per s | 60 per s |
+| After: the whole SVG turns, the dot's ring scales and fades | 3.3 / 6.3 ms per s | 2.8 / 7.0 per s | 0.3 / 0.8 per s |
+| After, with reduced motion (nothing moves) | 3.0 / 1.9 ms per s | 1.1 / 0.8 per s | 0.9 / 0.7 per s |
+
+The "before" row injects the previous ring and dot styles into the current page. Units
+per second are not compared: this browser shared one queue with 18 simulated devices,
+so its share varied more between runs than any effect of the page.
+
+Home page live field (1440×900):
+
+| Devices | Drawing cost per frame | Frames drawn |
+|---|---|---|
+| 19 (18 simulated + this browser) | 0.05–0.06 ms (moving average) | 91 in 3 s while visible (30 per s cap) |
+| 319 (300 more simulated) | 0.32 ms | — |
+| 19, tab hidden | — | 0 in 3 s |
+| 19, scrolled off screen | — | 0 in 3 s |
