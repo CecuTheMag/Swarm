@@ -200,9 +200,14 @@
 			color var(--fast) var(--ease),
 			background-color var(--fast) var(--ease);
 	}
-	.links a:hover {
-		color: var(--text);
-		background: rgb(118 118 128 / 0.1);
+	@media (hover: hover) {
+		.links a:hover {
+			color: var(--text);
+			background: rgb(118 118 128 / 0.1);
+		}
+		.foot-links a:hover {
+			color: var(--text);
+		}
 	}
 	.links a[aria-current='page'] {
 		color: var(--text);
@@ -307,9 +312,6 @@
 	.foot-links a {
 		color: var(--muted);
 		text-decoration: none;
-	}
-	.foot-links a:hover {
-		color: var(--text);
 	}
 	.legal {
 		grid-column: 1 / -1;

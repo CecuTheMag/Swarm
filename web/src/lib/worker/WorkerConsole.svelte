@@ -473,15 +473,14 @@
 			inset 0 2px 0 rgb(255 255 255 / 0.45),
 			0 20px 50px -16px rgb(224 142 11 / 0.75);
 	}
-	/* The halo breathes, not the button: a control must hold still to be easy to hit. */
+	/* A still halo: nothing on this page moves until the device is working. */
 	.power-btn.start::before {
 		content: '';
 		position: absolute;
 		inset: -10px;
 		border-radius: 50%;
-		background: radial-gradient(closest-side, rgb(245 165 36 / 0.35), transparent);
+		background: radial-gradient(closest-side, rgb(245 165 36 / 0.28), transparent);
 		z-index: -1;
-		animation: breathe 3.2s var(--ease-in-out) infinite;
 		pointer-events: none;
 	}
 	@media (hover: hover) {
@@ -505,19 +504,7 @@
 		box-shadow: var(--shadow);
 	}
 	.power-btn:disabled::before {
-		animation: none;
 		opacity: 0;
-	}
-	@keyframes breathe {
-		0%,
-		100% {
-			opacity: 0.55;
-			transform: scale(0.96);
-		}
-		50% {
-			opacity: 1;
-			transform: scale(1.06);
-		}
 	}
 
 	.state {
