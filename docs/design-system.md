@@ -135,9 +135,14 @@ Light and dark follow the system; `.theme-dark` forces dark (the projector page)
 - Sections fade up on first view: `use:reveal={delay}` (`#lib/ui/reveal.ts`); hidden
   only when JavaScript runs (`html.js`), so nothing is lost without it.
 - Pages cross-fade (View Transitions) where supported.
-- The worker's ring turns while the device takes part, faster while it computes, as a
-  whole SVG layer on the compositor; before that nothing on the page moves (the start
-  button's halo is still).
+- The worker's ring turns while the device takes part, at one speed (1.8 s a turn; a
+  running animation's duration is never changed, or the angle would jump), as a whole
+  SVG layer on the compositor. Computing shows as a longer arc. The page keeps saying
+  „Помагате в момента“ through gaps under 3 s (an empty queue answers "ask again in
+  2 s"), so it does not flicker between jobs. Before the device joins nothing on the
+  page moves (the start button's halo is still), and the status line keeps its height.
+- A returned result lights its cell in amber with an ink edge for 560 ms, on the home
+  field and the projector's map alike; never a white flash, which reads as leaving.
 - The home hero's live field (`#lib/ui/LiveHive.svelte`, model in `hive-field.ts`): see
   the refinement brief above. Measured in docs/measurements.md.
 - Hover effects apply only with `(hover: hover)`; cards that are not links do not move.
