@@ -144,8 +144,21 @@
 
 	const active = $derived(!['stopped', 'unsupported'].includes(session.status));
 	const ownerNotice = $derived(active ? controlText(session.control) : null);
-	const busy = $derived(session.status === 'computing');
-	const status = $derived(statusText[session.status]);
+	// When the queue runs dry the coordinator says to ask again in 2 s, so even a short
+	// gap between jobs reads "waiting" for at least that long. The page keeps saying it
+	// is computing for 3 s: a gap the next request fills never shows, an empty queue does.
+	const HOLD_MS = 3000;
+	let shown = $state<SessionStatus>(untrack(() => session.status));
+	$effect(() => {
+		const now = session.status;
+		if (now === 'waiting' && untrack(() => shown) === 'computing') {
+			const hold = setTimeout(() => (shown = 'waiting'), HOLD_MS);
+			return () => clearTimeout(hold);
+		}
+		shown = now;
+	});
+	const busy = $derived(shown === 'computing');
+	const status = $derived(statusText[shown]);
 	// A phone's screen stays on while it computes; a paused one may sleep.
 	$effect(() => {
 		void awake.set(active && session.status !== 'paused');
@@ -432,13 +445,12 @@
 	.active .turn {
 		opacity: 1;
 		will-change: transform;
-		animation: spin 1.6s linear infinite;
+		/* One speed: changing a running animation's duration would jump the angle. Busy
+		   and waiting differ by the arc's length. */
+		animation: spin 1.8s linear infinite;
 	}
 	.active .arc {
 		stroke-dasharray: 22 78;
-	}
-	.busy .turn {
-		animation-duration: 1.1s;
 	}
 	.busy .arc {
 		stroke-dasharray: 36 64;
@@ -518,9 +530,16 @@
 		letter-spacing: -0.03em;
 		margin: 0;
 	}
+	/* Room for the longest status line, so the card does not grow when the device starts. */
 	.state p {
 		margin: 0;
 		font-size: var(--text-md);
+		min-height: 2lh;
+	}
+	@media (max-width: 480px) {
+		.state p {
+			min-height: 3lh;
+		}
 	}
 	.notice {
 		text-align: left;
