@@ -20,7 +20,7 @@
 
 	onMount(async () => {
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- `next` is a resolved console path
-		if (await account.refresh().catch(() => null)) await goto(next, { replaceState: true });
+		if (await account.check().catch(() => null)) await goto(next, { replaceState: true });
 	});
 
 	async function submit(event: SubmitEvent) {
@@ -46,7 +46,7 @@
 </svelte:head>
 
 <main class="auth">
-	<form class="card glass form" onsubmit={submit}>
+	<form class="card form" onsubmit={submit}>
 		<Logo size={40} />
 		<h1>Вход</h1>
 		<p class="muted">Влезте, за да управлявате своите мрежи от устройства.</p>

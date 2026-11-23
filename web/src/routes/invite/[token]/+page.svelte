@@ -34,7 +34,7 @@
 		} catch {
 			missing = true;
 		}
-		await account.refresh().catch(() => null);
+		await account.check().catch(() => null);
 	});
 
 	async function accept(event: SubmitEvent) {
@@ -65,14 +65,14 @@
 
 <main class="auth">
 	{#if missing}
-		<div class="card glass form">
+		<div class="card form">
 			<span class="icon bad"><Icon name="alert" size={26} /></span>
 			<h1>Поканата не е валидна</h1>
 			<p class="muted">Вече е използвана или е изтекла. Помолете за нова.</p>
 			<a class="button secondary" href={resolve('/login')}>Към входа</a>
 		</div>
 	{:else if info}
-		<form class="card glass form" onsubmit={accept}>
+		<form class="card form" onsubmit={accept}>
 			<Logo size={40} />
 			<h1>
 				{info.network_name ? `Покана за „${info.network_name}“` : 'Покана за Рояк'}

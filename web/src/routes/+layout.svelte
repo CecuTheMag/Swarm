@@ -20,7 +20,7 @@
 			? { href: resolve('/app'), label: 'Конзола', path: '/app' }
 			: { href: resolve('/login'), label: 'Вход', path: '/login' }
 	]);
-	onMount(() => void account.refresh().catch(() => null));
+	onMount(() => void account.check().catch(() => null));
 	const here = (p: string | null) => (p && path.startsWith(p) ? 'page' : undefined);
 
 	let menuOpen = $state(false);
