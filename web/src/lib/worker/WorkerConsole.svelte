@@ -153,10 +153,14 @@
 </script>
 
 <main class="worker">
-	<section class="console glass" class:active class:busy aria-labelledby="status-title">
+	<section class="console card" class:active class:busy aria-labelledby="status-title">
 		<div class="ring-wrap">
 			<svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
 				<circle class="track" cx="60" cy="60" r="54" />
+			</svg>
+			<!-- Its own layer: the whole SVG turns, so the compositor does it and a device
+			     that is computing spends no main-thread time on it. -->
+			<svg class="ring turn" viewBox="0 0 120 120" aria-hidden="true">
 				<circle class="arc" cx="60" cy="60" r="54" pathLength="100" />
 			</svg>
 			{#if active}
@@ -358,13 +362,18 @@
 	.consent input {
 		width: 20px;
 		height: 20px;
-		margin-top: 2px;
+		margin-top: 3px;
 		flex: none;
-		accent-color: var(--brand);
 	}
 	.consent > span {
 		display: grid;
 		gap: 4px;
+		font-size: var(--text-sm);
+		line-height: 1.5;
+	}
+	.consent strong {
+		color: var(--text);
+		font-size: var(--text-md);
 	}
 	.approved {
 		margin-top: var(--s-3);
@@ -414,24 +423,32 @@
 		stroke-width: 4;
 		stroke-linecap: round;
 		stroke-dasharray: 0 100;
-		transform-origin: center;
-		transition:
-			stroke-dasharray var(--slow) var(--ease),
-			opacity var(--base) var(--ease);
+		transition: stroke-dasharray var(--slow) var(--ease);
+	}
+	.turn {
 		opacity: 0;
+		transition: opacity var(--base) var(--ease);
+	}
+	.active .turn {
+		opacity: 1;
+		will-change: transform;
+		animation: spin 1.6s linear infinite;
 	}
 	.active .arc {
-		opacity: 1;
 		stroke-dasharray: 22 78;
-		animation: spin 1.6s linear infinite;
+	}
+	.busy .turn {
+		animation-duration: 1.1s;
 	}
 	.busy .arc {
 		stroke-dasharray: 36 64;
-		animation-duration: 1.1s;
 	}
 	@keyframes spin {
+		from {
+			transform: rotate(-90deg);
+		}
 		to {
-			transform: rotate(360deg);
+			transform: rotate(270deg);
 		}
 	}
 
@@ -467,21 +484,25 @@
 		animation: breathe 3.2s var(--ease-in-out) infinite;
 		pointer-events: none;
 	}
-	.power-btn.start:hover {
-		transform: scale(1.03);
+	@media (hover: hover) {
+		.power-btn.start:hover {
+			transform: scale(1.02);
+		}
+		.power-btn.stop:hover {
+			background: var(--bg-elevated);
+			color: var(--bad);
+		}
 	}
+	.power-btn:active,
 	.power-btn.start:active {
-		transform: scale(0.96);
+		transform: scale(0.97);
+		transition-duration: var(--press);
 	}
 	.power-btn.stop {
 		background: var(--glass-strong);
 		color: var(--text);
 		border: 1px solid var(--border-strong);
 		box-shadow: var(--shadow);
-	}
-	.power-btn.stop:hover {
-		background: var(--bg-elevated);
-		color: var(--bad);
 	}
 	.power-btn:disabled::before {
 		animation: none;
@@ -507,6 +528,7 @@
 	}
 	.state h1 {
 		font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.25rem);
+		letter-spacing: -0.03em;
 		margin: 0;
 	}
 	.state p {

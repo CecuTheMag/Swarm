@@ -2,6 +2,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { wsUrl } from '#lib/net.ts';
 	import Icon from '#lib/ui/Icon.svelte';
+	import { rate } from '#lib/ui/format.ts';
 	import type { NetworkSummary } from '#lib/protocol/NetworkSummary.ts';
 
 	// The network this device joined, live (spec 0010): who else is in it, how fast it
@@ -70,9 +71,7 @@
 		</div>
 		<div class="figure">
 			<span class="num">
-				{summary && summary.units_per_second > 0
-					? summary.units_per_second.toFixed(summary.units_per_second < 10 ? 1 : 0)
-					: '—'}
+				{summary && summary.units_per_second > 0 ? rate(summary.units_per_second) : '—'}
 			</span>
 			<span class="muted">части в секунда</span>
 		</div>
@@ -130,7 +129,7 @@
 	}
 	.num {
 		font-size: var(--text-xl);
-		font-weight: 750;
+		font-weight: 700;
 		letter-spacing: -0.03em;
 		font-variant-numeric: tabular-nums;
 		line-height: 1.1;
@@ -152,11 +151,14 @@
 	.gpu {
 		background: var(--brand);
 	}
+	/* Device kinds by amber weight, as on the home page and the projector. */
 	.cpu {
-		background: #5b8cff;
+		background: color-mix(in srgb, var(--brand) 38%, transparent);
+		box-shadow: inset 0 0 0 1px var(--brand);
 	}
 	.srv {
-		background: #a78bfa;
+		background: color-mix(in srgb, var(--muted) 34%, transparent);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--muted) 70%, transparent);
 	}
 	.job {
 		display: grid;
