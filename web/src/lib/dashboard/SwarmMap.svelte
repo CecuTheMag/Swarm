@@ -164,11 +164,13 @@
 		stroke: color-mix(in srgb, var(--muted) 70%, transparent);
 		stroke-width: 0.05;
 	}
+	/* A returned result lights the cell in amber, as on the home page's field. */
 	.flash {
-		fill: #fff4dc !important;
-		stroke: none !important;
+		fill: color-mix(in srgb, var(--brand) 55%, transparent) !important;
+		stroke: var(--brand-ink) !important;
+		stroke-width: 0.08 !important;
 		opacity: 0;
-		animation: flash 0.9s var(--ease);
+		animation: flash 560ms var(--ease);
 	}
 	.caught polygon {
 		fill: var(--bad);
@@ -226,7 +228,7 @@
 	}
 	@keyframes flash {
 		from {
-			opacity: 0.75;
+			opacity: 1;
 		}
 		to {
 			opacity: 0;

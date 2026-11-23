@@ -400,12 +400,22 @@
 		gap: 6px;
 		font-size: 0.9375rem;
 	}
+	/* Kind of event: a leading dot and a tinted edge all round, not a side bar. */
 	.feed li {
-		padding: 8px 10px;
+		padding: 8px 12px;
 		border-radius: 10px;
 		background: var(--glass);
-		border: 1px solid var(--glass-border);
-		border-left: 4px solid var(--c, var(--border));
+		border: 1px solid color-mix(in srgb, var(--c, var(--border)) 35%, var(--glass-border));
+	}
+	.feed li::before {
+		content: '';
+		display: inline-block;
+		width: 8px;
+		height: 8px;
+		margin-right: 8px;
+		border-radius: 50%;
+		background: var(--c, var(--muted));
+		vertical-align: 0.05em;
 	}
 	.feed .joined {
 		--c: var(--ok);
@@ -416,6 +426,7 @@
 	.feed .banned {
 		--c: var(--bad);
 		font-weight: 600;
+		background: color-mix(in srgb, var(--bad) 12%, var(--glass));
 	}
 	.when {
 		float: right;
