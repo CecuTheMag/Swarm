@@ -616,15 +616,135 @@
 		color: var(--brand-ink);
 	}
 
-	@media (max-width: 600px) {
+	/* ---------- Phones: the app's main screen (docs/design-system.md) ---------- */
+	@media (max-width: 760px) {
+		.worker {
+			padding-top: var(--s-3);
+			gap: var(--s-3);
+		}
+		/* The control is the screen: no card around it. */
+		.console {
+			background: transparent;
+			border: 0;
+			box-shadow: none;
+			padding: var(--s-5) 0 var(--s-4);
+			gap: var(--s-4);
+		}
+		.ring-wrap {
+			width: min(68vw, 280px);
+		}
+		.power-btn {
+			font-size: 1.375rem;
+		}
+		.state h1 {
+			font-size: 1.75rem;
+		}
+
+		/* The figures: one widget, hairlines between, not three boxes. */
 		.stats {
 			grid-template-columns: 1fr 1fr;
+			gap: 0;
+			background: var(--bg-elevated);
+			border: 1px solid var(--border);
+			border-radius: var(--radius-lg);
+			box-shadow: var(--shadow-sm);
+			overflow: hidden;
+		}
+		.stats .card {
+			background: none;
+			border: 0;
+			border-radius: 0;
+			box-shadow: none;
+			padding: var(--s-4);
+		}
+		.stats .card:first-child {
+			border-right: 1px solid var(--border);
 		}
 		.stats .card:last-child {
 			grid-column: 1 / -1;
+			border-top: 1px solid var(--border);
+		}
+		.stats :global(.value) {
+			font-size: 1.5rem;
+		}
+
+		/* Community programs: a settings row with a switch on the right. */
+		.consent {
+			justify-content: space-between;
+		}
+		.consent input {
+			order: 2;
+			appearance: none;
+			-webkit-appearance: none;
+			width: 51px;
+			height: 31px;
+			margin: 0;
+			border: 0;
+			border-radius: var(--pill);
+			background:
+				radial-gradient(circle at 15.5px 50%, #fff 12.5px, transparent 13.5px) no-repeat,
+				rgb(118 118 128 / 0.24);
+			background-position:
+				0 0,
+				0 0;
+			cursor: pointer;
+			transition:
+				background-color var(--base) var(--ease),
+				background-position var(--base) var(--ease);
+			box-shadow: none;
+		}
+		.consent input:checked {
+			background-color: var(--brand-strong);
+			background-position:
+				20px 0,
+				0 0;
+		}
+		.consent input:disabled {
+			opacity: 0.5;
+		}
+
+		.other {
+			padding: var(--s-2) 0;
+		}
+
+		/* On a phone your own figures come before the settings. */
+		.power-card {
+			order: 1;
+		}
+		.stats {
+			order: 2;
+		}
+		.worker > :global(.network) {
+			order: 3;
+		}
+		.other {
+			order: 4;
+		}
+		.consent-card {
+			order: 5;
 		}
 		.promises {
+			order: 6;
+		}
+
+		/* The promises: a grouped list. */
+		.promises {
 			grid-template-columns: 1fr;
+			gap: 0;
+			margin-top: var(--s-2);
+			background: var(--bg-elevated);
+			border: 1px solid var(--border);
+			border-radius: var(--radius-lg);
+			overflow: hidden;
+			color: var(--text);
+		}
+		.promises li {
+			min-height: 52px;
+			padding: 0 var(--s-4);
+			gap: var(--s-3);
+		}
+		.promises li + li {
+			border-top: 1px solid var(--border);
 		}
 	}
 </style>
