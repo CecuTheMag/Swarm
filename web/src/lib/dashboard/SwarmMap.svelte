@@ -103,7 +103,11 @@
 				<title>{deviceLabel(worker.device)} · {worker.units_done} единици</title>
 				<polygon points={hex(x, y)} />
 				{#if bad}
-					<text {x} {y} dy="0.36">✕</text>
+					<path
+						class="cross"
+						d="M{x - 0.32} {y - 0.32}L{x + 0.32} {y + 0.32}M{x + 0.32} {y - 0.32}L{x - 0.32} {y +
+							0.32}"
+					/>
 				{:else}
 					<!-- Re-created, so it flashes again, whenever the device finishes work. -->
 					{#key worker.units_done}
@@ -122,10 +126,11 @@
 </figure>
 
 <style>
+	/* Device kinds by amber weight, as on the home page's field: red stays for status. */
 	.swarm {
-		--gpu: var(--accent);
-		--cpu: #4f9be8;
-		--server: #9b8fe0;
+		--gpu: var(--brand);
+		--cpu: color-mix(in srgb, var(--brand) 38%, transparent);
+		--server: color-mix(in srgb, var(--muted) 34%, transparent);
 		margin: 0;
 	}
 	svg {
@@ -144,34 +149,39 @@
 		transform-origin: center;
 	}
 	.cell > polygon:first-of-type {
-		animation: appear 0.5s cubic-bezier(0.2, 1.6, 0.4, 1);
+		animation: appear var(--slow) var(--ease);
 	}
 	.gpu polygon {
 		fill: var(--gpu);
 	}
 	.cpu polygon {
 		fill: var(--cpu);
+		stroke: var(--brand);
+		stroke-width: 0.05;
 	}
 	.server polygon {
 		fill: var(--server);
+		stroke: color-mix(in srgb, var(--muted) 70%, transparent);
+		stroke-width: 0.05;
 	}
 	.flash {
-		fill: #fff !important;
+		fill: #fff4dc !important;
+		stroke: none !important;
 		opacity: 0;
-		animation: flash 0.7s ease-out;
+		animation: flash 0.9s var(--ease);
 	}
 	.caught polygon {
 		fill: var(--bad);
-		animation: caught 0.6s ease-in-out 3;
+		stroke: none;
+		animation: caught 0.8s var(--ease-in-out) 3;
 	}
 	.caught.gone {
 		opacity: 0.45;
 	}
-	text {
-		fill: #fff;
-		font-size: 1.1px;
-		font-weight: 800;
-		text-anchor: middle;
+	.cross {
+		stroke: var(--on-bad);
+		stroke-width: 0.14;
+		stroke-linecap: round;
 		pointer-events: none;
 	}
 	figcaption {
@@ -197,6 +207,9 @@
 	.key.cpu {
 		--c: var(--cpu);
 	}
+	.key.cpu::before {
+		box-shadow: inset 0 0 0 1px var(--brand);
+	}
 	.key.server {
 		--c: var(--server);
 	}
@@ -207,10 +220,8 @@
 	}
 	@keyframes appear {
 		from {
-			transform: scale(0);
-		}
-		to {
-			transform: scale(1);
+			opacity: 0;
+			transform: scale(0.7);
 		}
 	}
 	@keyframes flash {
@@ -227,7 +238,7 @@
 			transform: scale(1);
 		}
 		50% {
-			transform: scale(1.25);
+			transform: scale(0.86);
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {

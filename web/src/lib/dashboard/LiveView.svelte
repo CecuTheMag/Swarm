@@ -15,6 +15,7 @@
 	import type { JobSummary } from '#lib/protocol/JobSummary.ts';
 	import type { PtJobParams } from '#lib/protocol/PtJobParams.ts';
 	import { renderSVG } from 'uqr';
+	import { rate } from '#lib/ui/format.ts';
 
 	// The live view of one path-tracer job, for a screen or projector: the image as it
 	// fills in and sharpens, the devices making it happen (joining, leaving, and caught
@@ -251,12 +252,12 @@
 
 		<div class="stats">
 			<div class="stat">
-				<div class="value">{pathsPerSecond > 0 ? (pathsPerSecond / 1e6).toFixed(1) : '—'}</div>
+				<div class="value">{pathsPerSecond > 0 ? rate(pathsPerSecond / 1e6) : '—'}</div>
 				<div class="label">млн. пътя на светлината в секунда</div>
 			</div>
 			<div class="stat">
 				<div class="value" data-testid="speed-up">
-					{together ? `×${together.toFixed(together < 10 ? 1 : 0)}` : '—'}
+					{together ? `×${rate(together)}` : '—'}
 				</div>
 				<div class="label">по-бързо от най-бързото устройство само</div>
 			</div>
