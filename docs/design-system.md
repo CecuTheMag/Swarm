@@ -84,6 +84,50 @@ terms („части“, „устройство“, „Включи се“, �
 | Projector (`/render/…`, `…/live`) | Swarm map without bounce or glyph icons, amber-weight device kinds, tabular counters; still fits 1920×1080 and 1600×900 |
 | Console (`/app/…`) | Inherits the token, card and focus refinements |
 
+## Phone experience: „Рояк в джоба“ (2026-11-23)
+
+On a phone Рояк is an app, not a shrunken website. Below 761 px the same routes, copy
+and data take native forms; from 761 px up nothing changes.
+
+**Why.** The phone page was a 12-screen document (8 000 px at 320 px): text stacked in
+one rhythm, the live swarm squeezed into a card, navigation behind a hamburger. Judges
+and volunteers meet Рояк on a phone first, from a QR code.
+
+**The idea.** The swarm is the screen. The phone shows the network itself, edge to
+edge, and one thumb-reach action: join it. Everything else is a gesture away, not a
+scroll away.
+
+**Shell.**
+- *Tab bar* at the bottom, floating over content (glass: it is a layer over moving
+  content), clear of the home indicator: Начало · **Включи се** · Вход (Конзола when
+  signed in). The middle tab is a raised amber hexagon with the power glyph, the
+  product's one action, where the thumb rests. The top bar keeps only the mark.
+- No hamburger, no footer on phones; the footer's links live in a list at the end of
+  the home page.
+- Large titles: each page opens with its title at display size, left aligned, like a
+  native screen.
+
+**Patterns, chosen per content, not one rhythm for all.**
+- *Full-bleed live field* — the home hero: the honeycomb fills the first screen, with
+  the live device count large over it.
+- *Swipe rails* (scroll-snap, the next card peeking) for sequences and sets meant to be
+  browsed: the measured figures, the three steps, the three kinds of work.
+- *Grouped lists* (inset, hairline-separated rows, like system settings) for options
+  and facts: the worker's settings and figures, organisation features, „Още“ links.
+- *Expanding rows* (`<details>`) where the title is enough at a glance and the
+  explanation is there on a tap: the six safety promises.
+- *Switches* instead of checkboxes for on/off settings.
+
+**Motion.** Press feedback on every tappable row and tab (scale 0.97, `--press`).
+Rails scroll natively (momentum, snap); nothing animates on its own. Expanding rows
+open with the browser's native disclosure. Reduced motion changes nothing here
+because nothing here moves by itself.
+
+**Constraints kept.** All copy and terms, every number from measurements or live state,
+the 44 px targets and 16 px inputs, focus rings, landmarks, the worker page's light
+weight (no blur behind the ring, no canvas), no horizontal page scroll (rails scroll
+inside themselves).
+
 ## Tokens
 
 | Group | Tokens | Notes |
