@@ -13,7 +13,7 @@ import type { WorkerSummary } from '#lib/protocol/WorkerSummary.ts';
 /** A device that has finished nothing for this long is idle. */
 export const IDLE_MS = 10_000;
 export const APPEAR_MS = 640;
-export const FLASH_MS = 900;
+export const FLASH_MS = 560;
 export const LEAVE_MS = 420;
 /** How long dimming to idle (or waking from it) takes. */
 export const DIM_MS = 600;

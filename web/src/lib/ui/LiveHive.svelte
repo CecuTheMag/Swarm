@@ -28,7 +28,9 @@
 		emptyLine: string;
 		kind: Record<Kind, string>;
 		line: Record<Kind, string>;
+		/** A returned result: the cell lights in amber, never towards the background. */
 		flash: string;
+		flashLine: string;
 		bad: string;
 	}
 	let palette: Palette | null = null;
@@ -61,7 +63,8 @@
 				cpu: brand,
 				server: rgba(muted, 0.7)
 			},
-			flash: dark ? '#fff4dc' : '#ffffff',
+			flash: rgba(brand, 0.42),
+			flashLine: v('--brand-ink'),
 			bad: v('--bad')
 		};
 	}
@@ -126,8 +129,8 @@
 			if (!at || cell.alpha <= 0) continue;
 			const r = field.r * 0.9 * cell.scale;
 			hexPath(ctx, at.x, at.y, r);
-			// Idle devices stay visible, at a little over a third.
-			ctx.globalAlpha = cell.alpha * (0.38 + 0.62 * cell.activity);
+			// Idle devices stay clearly above the empty cells, at half strength.
+			ctx.globalAlpha = cell.alpha * (0.5 + 0.5 * cell.activity);
 			ctx.fillStyle = cell.caught ? palette.bad : palette.kind[cell.kind];
 			ctx.fill();
 			if (!cell.caught && cell.kind !== 'gpu') {
@@ -135,9 +138,15 @@
 				ctx.stroke();
 			}
 			if (cell.flash > 0 && !cell.caught) {
-				ctx.globalAlpha = cell.alpha * cell.flash * 0.75;
-				ctx.fillStyle = palette.flash;
-				ctx.fill();
+				ctx.globalAlpha = cell.alpha * cell.flash;
+				if (cell.kind !== 'gpu') {
+					ctx.fillStyle = palette.flash;
+					ctx.fill();
+				}
+				ctx.lineWidth = 1.5;
+				ctx.strokeStyle = palette.flashLine;
+				ctx.stroke();
+				ctx.lineWidth = 1;
 			}
 		}
 		ctx.globalAlpha = 1;
