@@ -2,18 +2,22 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { LiveDashboard } from '#lib/dashboard/live.svelte.ts';
-	import { unitsPerSecond } from '#lib/dashboard/state.ts';
-	import HeroHive from '#lib/ui/HeroHive.svelte';
+	import { caughtDevices, unitsPerSecond } from '#lib/dashboard/state.ts';
+	import LiveHive from '#lib/ui/LiveHive.svelte';
 	import Icon, { type IconName } from '#lib/ui/Icon.svelte';
 	import { reveal } from '#lib/ui/reveal.ts';
+	import { rate as rateFormat } from '#lib/ui/format.ts';
 
 	// The public face of the project: what it is, how to join, why it is safe. The hero
-	// shows the grid as it is right now.
+	// shows the network as it is right now: every cell is a connected device.
 	const live = new LiveDashboard();
 	onMount(() => live.start());
 	onDestroy(() => live.stop());
-	const devices = $derived(Object.keys(live.state.workers).length);
+	const workers = $derived(Object.values(live.state.workers));
+	const devices = $derived(workers.length);
+	const caught = $derived(new Set(caughtDevices(live.state, live.now).map((c) => c.worker.id)));
 	const rate = $derived(unitsPerSecond(live.state, live.now));
+	const rateText = $derived(rate > 0 ? rateFormat(rate) : '—');
 
 	const devicesText = (n: number) => (n === 1 ? '1 устройство' : `${n} устройства`);
 
@@ -136,7 +140,7 @@
 	<!-- Hero -->
 	<section class="hero">
 		<div class="hero-copy">
-			<span class="badge live" data-testid="home-live">
+			<span class="badge live tnum" data-testid="home-live">
 				<span class="dot pulse"></span>
 				{live.connected
 					? devices > 0
@@ -159,25 +163,25 @@
 			</div>
 		</div>
 
-		<div class="hero-visual glass">
-			<div class="hive-wrap"><HeroHive /></div>
-			<div class="hero-card glass">
+		<figure class="hero-visual glass">
+			<div class="hive-wrap"><LiveHive {workers} {caught} /></div>
+			<figcaption class="hero-card">
 				<div class="hero-stat">
 					<span class="num" data-testid="home-devices">{devices}</span>
 					<span class="muted">{devices === 1 ? 'устройство' : 'устройства'} на линия</span>
 				</div>
 				<div class="hero-stat">
-					<span class="num">{rate > 0 ? rate.toFixed(rate < 10 ? 1 : 0) : '—'}</span>
+					<span class="num">{rateText}</span>
 					<span class="muted">изчислени части в секунда</span>
 				</div>
-			</div>
-		</div>
+			</figcaption>
+		</figure>
 	</section>
 
 	<!-- Proof -->
 	<section class="proof" aria-label="Измерено">
 		{#each proof as p, i (p.label)}
-			<div class="proof-item" use:reveal={i * 70}>
+			<div class="proof-item" use:reveal={i * 50}>
 				<span class="proof-value">{p.value}</span>
 				<span class="muted">{p.label}</span>
 			</div>
@@ -187,7 +191,6 @@
 	<!-- How -->
 	<section id="how" class="section">
 		<div class="section-head" use:reveal>
-			<span class="eyebrow">Как работи</span>
 			<h2>Три стъпки. Никакви настройки.</h2>
 			<p class="muted">
 				Голямата задача се разделя на хиляди малки части. Всяко включено устройство взема по
@@ -196,9 +199,8 @@
 		</div>
 		<ol class="steps">
 			{#each steps as s, i (s.title)}
-				<li class="card step" use:reveal={i * 90}>
-					<span class="step-no">{i + 1}</span>
-					<span class="icon-tile"><Icon name={s.icon} size={22} /></span>
+				<li class="step" use:reveal={i * 70}>
+					<span class="step-no" aria-hidden="true">{i + 1}</span>
 					<h3>{s.title}</h3>
 					<p class="muted">{s.text}</p>
 				</li>
@@ -209,13 +211,12 @@
 	<!-- Uses -->
 	<section class="section">
 		<div class="section-head" use:reveal>
-			<span class="eyebrow">Какво изчисляваме</span>
 			<h2>Истинска работа, а не демонстрация.</h2>
 		</div>
 		<div class="uses">
 			{#each uses as u, i (u.title)}
-				<article class="card use" use:reveal={i * 90}>
-					<span class="icon-tile"><Icon name={u.icon} size={22} /></span>
+				<article class="card use" use:reveal={i * 70}>
+					<Icon name={u.icon} size={22} />
 					<h3>
 						{u.title}
 						{#if u.soon}<span class="badge">скоро</span>{/if}
@@ -228,18 +229,17 @@
 
 	<!-- Safety -->
 	<section id="safety" class="section">
-		<div class="safety glass" use:reveal>
+		<div class="safety card" use:reveal>
 			<div class="section-head">
-				<span class="eyebrow">Безопасност</span>
 				<h2>Вашето устройство остава ваше.</h2>
 				<p class="muted">
 					Рояк взема само толкова, колкото позволите, и спира в момента, в който поискате.
 				</p>
 			</div>
 			<ul class="safety-grid">
-				{#each safety as s, i (s.title)}
-					<li use:reveal={i * 60}>
-						<span class="icon-tile sm"><Icon name={s.icon} size={20} /></span>
+				{#each safety as s (s.title)}
+					<li>
+						<Icon name={s.icon} size={20} />
 						<div>
 							<h3>{s.title}</h3>
 							<p class="muted">{s.text}</p>
@@ -253,7 +253,6 @@
 	<!-- Trust -->
 	<section class="section split">
 		<div use:reveal>
-			<span class="eyebrow">Честни резултати</span>
 			<h2>Никой не може да подправи резултата.</h2>
 			<p class="muted">
 				Всеки може да се включи — значи всеки може и да опита да мами. Затова всяка част се
@@ -262,7 +261,7 @@
 				наново.
 			</p>
 		</div>
-		<div class="card verdict" use:reveal={120}>
+		<div class="card verdict" use:reveal={100}>
 			<div class="verdict-row">
 				<span class="badge ok"><Icon name="check" size={14} /> съвпада</span>
 				<span>Телефон · Видеокарта</span>
@@ -282,22 +281,20 @@
 	<!-- Organisations -->
 	<section id="organisations" class="section">
 		<div class="section-head" use:reveal>
-			<span class="eyebrow">За организации</span>
 			<h2>Вашата собствена мрежа от устройства.</h2>
 			<p class="muted">
 				Училища, лаборатории и изследователски екипи създават своя мрежа, добавят устройства и ги
 				управляват от една конзола.
 			</p>
 		</div>
-		<div class="uses">
-			{#each features as f, i (f.title)}
-				<article class="card use" use:reveal={i * 60}>
-					<span class="icon-tile"><Icon name={f.icon} size={22} /></span>
-					<h3>{f.title}</h3>
+		<ul class="features" use:reveal>
+			{#each features as f (f.title)}
+				<li>
+					<h3><Icon name={f.icon} size={18} /> {f.title}</h3>
 					<p class="muted">{f.text}</p>
-				</article>
+				</li>
 			{/each}
-		</div>
+		</ul>
 		<div class="org-cta" use:reveal>
 			<a class="button lg" href={resolve('/login')}
 				>Вход в конзолата <Icon name="arrow" size={18} /></a
@@ -309,9 +306,8 @@
 	<!-- Schools -->
 	<section class="section">
 		<div class="schools card" use:reveal>
-			<span class="icon-tile"><Icon name="school" size={24} /></span>
+			<Icon name="school" size={26} />
 			<div>
-				<span class="eyebrow">За училищата</span>
 				<h2>Компютърният кабинет работи и след последния час.</h2>
 				<p class="muted">
 					Хиляди училищни компютри стоят изключени по-голямата част от денонощието. Рояк ги превръща
@@ -323,7 +319,7 @@
 
 	<!-- CTA -->
 	<section class="section">
-		<div class="cta glass" use:reveal>
+		<div class="cta" use:reveal>
 			<h2>Включете се сега.</h2>
 			<p class="muted">Отнема секунда. Можете да спрете по всяко време.</p>
 			<a class="button lg" href={resolve('/worker')}>
@@ -347,19 +343,16 @@
 		padding: var(--s-7) 0 var(--s-8);
 	}
 	.hero-copy {
-		animation: enter var(--slower) var(--ease) both;
+		animation: enter var(--slow) var(--ease) both;
 	}
 	.display {
 		font-size: var(--text-display);
 		line-height: 1.02;
-		letter-spacing: -0.045em;
+		letter-spacing: -0.04em;
 		margin: var(--s-4) 0 var(--s-5);
 	}
 	.accent {
-		background: linear-gradient(100deg, var(--grad-a), var(--grad-b));
-		-webkit-background-clip: text;
-		background-clip: text;
-		color: transparent;
+		color: var(--grad-a);
 	}
 	.lead {
 		font-size: clamp(1.0625rem, 1rem + 0.4vw, 1.3rem);
@@ -375,44 +368,50 @@
 	}
 	.hero-visual {
 		position: relative;
+		margin: 0;
 		aspect-ratio: 5 / 4;
 		border-radius: var(--radius-xl);
 		overflow: hidden;
-		animation: enter var(--slower) var(--ease) 120ms both;
+		animation: enter var(--slow) var(--ease) 80ms both;
 	}
 	.hive-wrap {
 		position: absolute;
 		inset: 0;
-		mask-image: radial-gradient(85% 85% at 50% 45%, #000 45%, transparent 100%);
+		mask-image: radial-gradient(90% 85% at 50% 40%, #000 50%, transparent 100%);
 	}
 	.hero-card {
 		position: absolute;
-		left: var(--s-5);
-		right: var(--s-5);
-		bottom: var(--s-5);
+		left: var(--s-4);
+		right: var(--s-4);
+		bottom: var(--s-4);
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: var(--s-4);
 		padding: var(--s-4) var(--s-5);
-		border-radius: var(--radius-lg);
+		border-radius: var(--radius);
 		background: var(--glass-strong);
+		border: 1px solid var(--glass-border);
+		box-shadow:
+			inset 0 1px 0 var(--glass-highlight),
+			var(--shadow-sm);
 	}
 	.hero-stat {
 		display: grid;
 		gap: 2px;
+		min-width: 0;
 		font-size: var(--text-xs);
 	}
 	.num {
 		font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem);
-		font-weight: 750;
-		letter-spacing: -0.035em;
+		font-weight: 700;
+		letter-spacing: -0.03em;
 		font-variant-numeric: tabular-nums;
 		line-height: 1.05;
 	}
 	@keyframes enter {
 		from {
 			opacity: 0;
-			transform: translateY(20px);
+			transform: translateY(12px);
 		}
 	}
 
@@ -427,13 +426,17 @@
 	}
 	.proof-item {
 		display: grid;
-		gap: 4px;
+		align-content: start;
+		gap: 6px;
 		font-size: var(--text-sm);
+		line-height: 1.4;
 	}
 	.proof-value {
 		font-size: var(--text-xl);
-		font-weight: 750;
-		letter-spacing: -0.035em;
+		font-weight: 700;
+		letter-spacing: -0.03em;
+		line-height: 1.1;
+		font-variant-numeric: tabular-nums;
 	}
 
 	/* ---------- Sections ---------- */
@@ -444,68 +447,55 @@
 		max-width: 640px;
 		margin-bottom: var(--s-6);
 	}
-	.section-head h2 {
+	.section-head h2,
+	.split h2,
+	.cta h2 {
 		font-size: var(--text-2xl);
 		letter-spacing: -0.035em;
+		margin-bottom: var(--s-4);
 	}
 	.section-head p {
 		font-size: var(--text-lg);
 		line-height: 1.5;
-	}
-	.icon-tile {
-		display: inline-grid;
-		place-items: center;
-		width: 48px;
-		height: 48px;
-		border-radius: 14px;
-		background: var(--brand-soft);
-		color: var(--brand-ink);
-		margin-bottom: var(--s-4);
-		flex: none;
-	}
-	.icon-tile.sm {
-		width: 40px;
-		height: 40px;
-		border-radius: 12px;
 		margin: 0;
 	}
 
+	/* The three steps: a sequence on one rule, not three boxes. */
 	.steps {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: var(--s-4);
+		gap: var(--s-6);
+		border-top: 1px solid var(--border-strong);
 	}
-	.step,
-	.use {
+	.step {
 		position: relative;
-		padding: var(--s-6) var(--s-5);
-		transition:
-			transform var(--base) var(--ease),
-			box-shadow var(--base) var(--ease);
+		padding-top: var(--s-6);
 	}
-	.step:hover,
-	.use:hover {
-		transform: translateY(-4px);
-		box-shadow:
-			inset 0 1px 0 var(--glass-highlight),
-			var(--shadow-lg);
+	.step-no {
+		position: absolute;
+		top: -14px;
+		left: 0;
+		display: grid;
+		place-items: center;
+		width: 28px;
+		height: 28px;
+		border-radius: 50%;
+		background: var(--bg);
+		border: 1px solid var(--border-strong);
+		color: var(--brand-ink);
+		font-size: var(--text-xs);
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+	.step h3 {
+		margin-bottom: var(--s-2);
 	}
 	.step p,
 	.use p {
 		margin: 0;
-	}
-	.step-no {
-		position: absolute;
-		top: var(--s-5);
-		right: var(--s-5);
-		font-size: 3rem;
-		font-weight: 800;
-		line-height: 1;
-		letter-spacing: -0.05em;
-		color: rgb(118 118 128 / 0.14);
 	}
 
 	.uses {
@@ -513,11 +503,23 @@
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: var(--s-4);
 	}
+	.use {
+		display: grid;
+		align-content: start;
+		gap: var(--s-2);
+		padding: var(--s-6) var(--s-5);
+	}
+	.use > :global(svg),
+	.schools > :global(svg) {
+		color: var(--brand-ink);
+		margin-bottom: var(--s-3);
+	}
 	.use h3 {
 		display: flex;
 		align-items: center;
 		gap: var(--s-2);
 		flex-wrap: wrap;
+		margin: 0;
 	}
 
 	.safety {
@@ -530,20 +532,29 @@
 		padding: 0;
 		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: var(--s-6) var(--s-5);
+		gap: var(--s-6) var(--s-6);
 	}
 	.safety-grid li {
 		display: flex;
-		gap: var(--s-4);
+		gap: var(--s-3);
 		align-items: flex-start;
 	}
-	.safety-grid h3 {
+	.safety-grid li > :global(svg) {
+		flex: none;
+		margin-top: 2px;
+		color: var(--brand-ink);
+	}
+	.safety-grid h3,
+	.features h3 {
 		font-size: var(--text-md);
+		letter-spacing: -0.01em;
 		margin-bottom: 4px;
 	}
-	.safety-grid p {
+	.safety-grid p,
+	.features p {
 		margin: 0;
 		font-size: var(--text-sm);
+		line-height: 1.5;
 	}
 
 	.split {
@@ -552,36 +563,53 @@
 		gap: var(--s-7);
 		align-items: center;
 	}
-	.split h2 {
-		font-size: var(--text-2xl);
-		letter-spacing: -0.035em;
-	}
 	.split p {
 		font-size: var(--text-lg);
 		line-height: 1.55;
 	}
 	.verdict {
 		display: grid;
-		gap: var(--s-3);
-		padding: var(--s-5);
+		padding: var(--s-3) var(--s-5) var(--s-4);
 	}
 	.verdict-row {
 		display: flex;
 		align-items: center;
 		gap: var(--s-3);
-		padding: var(--s-3) var(--s-4);
-		border-radius: var(--radius);
-		background: var(--bg-elevated);
+		padding: var(--s-4) 0;
+		border-bottom: 1px solid var(--border);
 		font-size: var(--text-sm);
 		font-weight: 500;
-		box-shadow: var(--shadow-sm);
 	}
 	.verdict-row.caught {
-		outline: 1px solid color-mix(in srgb, var(--bad) 35%, transparent);
+		color: var(--bad);
 	}
-	.small {
+	.verdict .small {
 		font-size: var(--text-xs);
-		margin: var(--s-2) 0 0;
+		line-height: 1.45;
+		margin: var(--s-3) 0 0;
+	}
+
+	/* What an organisation gets: a list on hairlines. */
+	.features {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		column-gap: var(--s-6);
+	}
+	.features li {
+		padding: var(--s-5) 0;
+		border-top: 1px solid var(--border);
+	}
+	.features h3 {
+		display: flex;
+		align-items: center;
+		gap: var(--s-2);
+	}
+	.features h3 :global(svg) {
+		flex: none;
+		color: var(--brand-ink);
 	}
 
 	.org-cta {
@@ -598,6 +626,10 @@
 		padding: clamp(var(--s-5), 5vw, var(--s-7));
 		border-radius: var(--radius-xl);
 	}
+	.schools > :global(svg) {
+		flex: none;
+		margin: 6px 0 0;
+	}
 	.schools h2 {
 		font-size: var(--text-xl);
 	}
@@ -609,11 +641,6 @@
 	.cta {
 		text-align: center;
 		padding: clamp(var(--s-6), 7vw, var(--s-9)) var(--s-5);
-		border-radius: var(--radius-xl);
-	}
-	.cta h2 {
-		font-size: var(--text-2xl);
-		letter-spacing: -0.035em;
 	}
 	.cta p {
 		font-size: var(--text-lg);
@@ -634,7 +661,8 @@
 			grid-template-columns: 1fr;
 			gap: var(--s-5);
 		}
-		.safety-grid {
+		.safety-grid,
+		.features {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 	}
@@ -642,10 +670,25 @@
 		.proof {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
-		.steps,
 		.uses,
-		.safety-grid {
+		.safety-grid,
+		.features {
 			grid-template-columns: 1fr;
+		}
+		/* The sequence turns vertical: the rule runs down the left, numbers on it. */
+		.steps {
+			grid-template-columns: 1fr;
+			gap: var(--s-5);
+			border-top: 0;
+			border-left: 1px solid var(--border-strong);
+			margin-left: 14px;
+		}
+		.step {
+			padding: 0 0 0 var(--s-5);
+		}
+		.step-no {
+			top: 0;
+			left: -14px;
 		}
 		.section {
 			padding-top: var(--s-8);
@@ -659,11 +702,20 @@
 		.actions .button {
 			width: 100%;
 		}
+		.hero-visual {
+			aspect-ratio: 1;
+		}
 		.hero-card {
 			left: var(--s-3);
 			right: var(--s-3);
 			bottom: var(--s-3);
 			padding: var(--s-3) var(--s-4);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.hero-copy,
+		.hero-visual {
+			animation: none;
 		}
 	}
 </style>
