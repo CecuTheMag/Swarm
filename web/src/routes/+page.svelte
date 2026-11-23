@@ -12,14 +12,35 @@
 	// shows the network as it is right now: every cell is a connected device.
 	const live = new LiveDashboard();
 	onMount(() => live.start());
+
+	// Phones show the safety promises as rows that open on a tap; from 761 px they are
+	// a grid that is always open (and open without JavaScript too).
+	let wide = $state(true);
+	onMount(() => {
+		const query = matchMedia('(min-width: 761px)');
+		const sync = () => (wide = query.matches);
+		sync();
+		query.addEventListener('change', sync);
+		return () => query.removeEventListener('change', sync);
+	});
+	function keepOpen(event: Event) {
+		const details = event.currentTarget as HTMLDetailsElement;
+		if (wide && !details.open) details.open = true;
+	}
 	onDestroy(() => live.stop());
 	const workers = $derived(Object.values(live.state.workers));
 	const devices = $derived(workers.length);
 	const caught = $derived(new Set(caughtDevices(live.state, live.now).map((c) => c.worker.id)));
 	const rate = $derived(unitsPerSecond(live.state, live.now));
-	const rateText = $derived(rate > 0 ? rateFormat(rate) : '—');
-
 	const devicesText = (n: number) => (n === 1 ? '1 устройство' : `${n} устройства`);
+	const rateText = $derived(rate > 0 ? rateFormat(rate) : '—');
+	const statusText = $derived(
+		live.connected
+			? devices > 0
+				? `${devicesText(devices)} в мрежата сега`
+				: 'Мрежата е на линия'
+			: 'Свързване с мрежата…'
+	);
 
 	const proof = [
 		{ value: '1 000', label: 'устройства наведнъж в натоварващите тестове' },
@@ -140,13 +161,9 @@
 	<!-- Hero -->
 	<section class="hero">
 		<div class="hero-copy">
-			<span class="badge live tnum" data-testid="home-live">
+			<span class="badge live tnum copy-status" data-testid="home-live">
 				<span class="dot pulse"></span>
-				{live.connected
-					? devices > 0
-						? `${devicesText(devices)} в мрежата сега`
-						: 'Мрежата е на линия'
-					: 'Свързване с мрежата…'}
+				{statusText}
 			</span>
 			<h1 class="display">
 				Суперкомпютър от устройствата <span class="accent">около нас</span>.
@@ -165,6 +182,11 @@
 
 		<figure class="hero-visual glass">
 			<div class="hive-wrap"><LiveHive {workers} {caught} /></div>
+			<!-- Phones: the status sits on the field itself (the copy's badge is hidden). -->
+			<span class="badge live tnum field-status">
+				<span class="dot pulse"></span>
+				{live.connected ? 'На живо' : 'Свързване…'}
+			</span>
 			<figcaption class="hero-card">
 				<div class="hero-stat">
 					<span class="num" data-testid="home-devices">{devices}</span>
@@ -239,11 +261,14 @@
 			<ul class="safety-grid">
 				{#each safety as s (s.title)}
 					<li>
-						<Icon name={s.icon} size={20} />
-						<div>
-							<h3>{s.title}</h3>
+						<details open={wide} ontoggle={keepOpen}>
+							<summary>
+								<Icon name={s.icon} size={20} />
+								<h3>{s.title}</h3>
+								<span class="chev" aria-hidden="true"><Icon name="chevron" size={18} /></span>
+							</summary>
 							<p class="muted">{s.text}</p>
-						</div>
+						</details>
 					</li>
 				{/each}
 			</ul>
@@ -327,6 +352,37 @@
 			</a>
 		</div>
 	</section>
+	<!-- Phones: what the footer holds elsewhere -->
+	<nav class="more" aria-label="Още">
+		<h2>Още</h2>
+		<ul class="rows">
+			<li>
+				<a href={resolve('/join')}
+					><Icon name="key" size={20} /><span>Включи се с код</span><Icon
+						name="chevron"
+						size={18}
+					/></a
+				>
+			</li>
+			<li>
+				<a href={resolve('/selftest')}
+					><Icon name="check" size={20} /><span>Самопроверка</span><Icon
+						name="chevron"
+						size={18}
+					/></a
+				>
+			</li>
+			<li>
+				<a href={resolve('/app')}
+					><Icon name="grid" size={20} /><span>Конзола</span><Icon name="chevron" size={18} /></a
+				>
+			</li>
+		</ul>
+		<p class="muted fine">
+			Доброволен суперкомпютър в браузъра. Отворен код, без инсталиране, без лични данни. ©
+			{new Date().getFullYear()} Рояк · GPL-3.0
+		</p>
+	</nav>
 </main>
 
 <style>
@@ -534,15 +590,35 @@
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: var(--s-6) var(--s-6);
 	}
-	.safety-grid li {
+	.safety-grid summary {
 		display: flex;
 		gap: var(--s-3);
 		align-items: flex-start;
+		list-style: none;
 	}
-	.safety-grid li > :global(svg) {
+	.safety-grid summary::-webkit-details-marker {
+		display: none;
+	}
+	.safety-grid summary > :global(svg) {
 		flex: none;
 		margin-top: 2px;
 		color: var(--brand-ink);
+	}
+	.safety-grid details > p {
+		padding-left: 32px;
+	}
+	.chev {
+		display: none;
+	}
+	.more,
+	.field-status {
+		display: none;
+	}
+	/* From 761 px the promises are always open: the summary is a plain heading. */
+	@media (min-width: 761px) {
+		.safety-grid summary {
+			pointer-events: none;
+		}
 	}
 	.safety-grid h3,
 	.features h3 {
@@ -666,50 +742,299 @@
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 	}
+	/* ---------- Phones: „Рояк в джоба“ (docs/design-system.md) ---------- */
 	@media (max-width: 760px) {
-		.proof {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
+		.home {
+			padding-top: 0;
 		}
-		.uses,
-		.safety-grid,
-		.features {
-			grid-template-columns: 1fr;
-		}
-		/* The sequence turns vertical: the rule runs down the left, numbers on it. */
-		.steps {
-			grid-template-columns: 1fr;
-			gap: var(--s-5);
-			border-top: 0;
-			border-left: 1px solid var(--border-strong);
-			margin-left: 14px;
-		}
-		.step {
-			padding: 0 0 0 var(--s-5);
-		}
-		.step-no {
-			top: 0;
-			left: -14px;
-		}
-		.section {
-			padding-top: var(--s-8);
-		}
-		.schools {
+
+		/* The swarm is the screen: the live field first, edge to edge. */
+		.hero {
+			display: flex;
 			flex-direction: column;
+			align-items: stretch;
+			gap: var(--s-5);
+			padding: 0;
+		}
+		.hero-visual {
+			order: -1;
+			aspect-ratio: auto;
+			height: min(56svh, 470px);
+			margin: 0 calc(-1 * var(--gutter));
+			border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+			border-top: 0;
+			border-left: 0;
+			border-right: 0;
+		}
+		.hive-wrap {
+			mask-image: linear-gradient(#000 70%, transparent 100%);
+		}
+		.copy-status {
+			display: none;
+		}
+		.field-status {
+			display: inline-flex;
+			position: absolute;
+			top: var(--s-4);
+			left: var(--gutter);
+			background: var(--glass-strong);
+			border: 1px solid var(--glass-border);
+			-webkit-backdrop-filter: blur(12px);
+			backdrop-filter: blur(12px);
+		}
+		.hero-card {
+			left: var(--gutter);
+			right: var(--gutter);
+			bottom: var(--s-4);
+			padding: var(--s-4);
+			gap: var(--s-3);
+		}
+		.num {
+			font-size: 2.5rem;
+		}
+		.display {
+			font-size: 2.125rem;
+			margin: var(--s-3) 0 var(--s-3);
+		}
+		.lead {
+			font-size: var(--text-md);
+			margin: 0;
+		}
+		.actions {
+			margin-top: var(--s-5);
+			display: grid;
 			gap: var(--s-2);
 		}
-	}
-	@media (max-width: 420px) {
 		.actions .button {
 			width: 100%;
 		}
-		.hero-visual {
-			aspect-ratio: 1;
+		.actions .secondary {
+			background: transparent;
+			border-color: transparent;
+			box-shadow: none;
+			color: var(--brand-ink);
 		}
-		.hero-card {
-			left: var(--s-3);
-			right: var(--s-3);
-			bottom: var(--s-3);
-			padding: var(--s-3) var(--s-4);
+
+		/* Rails: swipe sideways, the next card peeking; the page itself never scrolls
+		   sideways. */
+		.proof,
+		.steps,
+		.uses {
+			display: flex;
+			gap: var(--s-3);
+			margin: 0 calc(-1 * var(--gutter));
+			padding: 0 var(--gutter);
+			overflow-x: auto;
+			overscroll-behavior-x: contain;
+			scroll-snap-type: x mandatory;
+			scroll-padding-inline: var(--gutter);
+			scrollbar-width: none;
+		}
+		.proof::-webkit-scrollbar,
+		.steps::-webkit-scrollbar,
+		.uses::-webkit-scrollbar {
+			display: none;
+		}
+		.proof > *,
+		.steps > *,
+		.uses > * {
+			flex: 0 0 auto;
+			scroll-snap-align: start;
+		}
+
+		.proof {
+			margin-top: var(--s-6);
+			padding-top: 0;
+			padding-bottom: var(--s-1);
+			border: 0;
+		}
+		.proof-item {
+			width: 9.5rem;
+			padding: var(--s-4);
+			border-radius: var(--radius);
+			background: var(--bg-elevated);
+			border: 1px solid var(--border);
+			font-size: var(--text-xs);
+		}
+		.proof-value {
+			font-size: 1.75rem;
+		}
+
+		.section {
+			padding-top: var(--s-7);
+		}
+		.section-head {
+			margin-bottom: var(--s-4);
+		}
+		.section-head h2,
+		.split h2,
+		.cta h2 {
+			font-size: 1.75rem;
+			margin-bottom: var(--s-2);
+		}
+		.section-head p,
+		.split p {
+			font-size: var(--text-md);
+		}
+
+		.steps {
+			border: 0;
+			list-style: none;
+		}
+		.step {
+			width: 80%;
+			padding: var(--s-5);
+			border-radius: var(--radius-lg);
+			background: var(--bg-elevated);
+			border: 1px solid var(--border);
+			box-shadow: var(--shadow-sm);
+		}
+		.step-no {
+			position: static;
+			width: 32px;
+			height: 32px;
+			margin-bottom: var(--s-6);
+			background: var(--brand);
+			border: 0;
+			color: var(--on-brand);
+			font-size: var(--text-sm);
+		}
+		.uses .use {
+			width: 80%;
+			padding: var(--s-5);
+		}
+
+		/* Safety: a grouped list; each promise opens on a tap. */
+		.safety {
+			padding: var(--s-5) 0 var(--s-2);
+			border-radius: var(--radius-lg);
+		}
+		.safety .section-head {
+			padding: 0 var(--s-5);
+		}
+		.safety-grid {
+			display: block;
+		}
+		.safety-grid li {
+			border-top: 1px solid var(--border);
+		}
+		.safety-grid summary {
+			align-items: center;
+			min-height: 56px;
+			padding: var(--s-3) var(--s-5);
+			cursor: pointer;
+			-webkit-tap-highlight-color: transparent;
+			transition: background-color var(--fast) var(--ease);
+		}
+		.safety-grid summary:active {
+			background: rgb(118 118 128 / 0.1);
+		}
+		.safety-grid summary > :global(svg) {
+			margin: 0;
+		}
+		.safety-grid h3 {
+			flex: 1;
+			margin: 0;
+		}
+		.chev {
+			display: inline-flex;
+			color: var(--faint);
+			transition: transform var(--base) var(--ease);
+		}
+		details[open] .chev {
+			transform: rotate(90deg);
+		}
+		.safety-grid details > p {
+			padding: 0 var(--s-5) var(--s-4) calc(var(--s-5) + 32px);
+		}
+
+		.split {
+			grid-template-columns: 1fr;
+			gap: var(--s-4);
+		}
+
+		/* What an organisation gets: an inset grouped list. */
+		.features {
+			display: block;
+			background: var(--bg-elevated);
+			border: 1px solid var(--border);
+			border-radius: var(--radius-lg);
+		}
+		.features li {
+			padding: var(--s-4) var(--s-5);
+		}
+		.features li:first-child {
+			border-top: 0;
+		}
+		.org-cta .button {
+			width: 100%;
+		}
+
+		.schools {
+			flex-direction: column;
+			gap: var(--s-2);
+			padding: var(--s-5);
+		}
+		.schools h2 {
+			font-size: var(--text-lg);
+		}
+		.cta {
+			padding: var(--s-6) 0 0;
+		}
+		.cta .button {
+			width: 100%;
+		}
+
+		/* The footer's links, as a native list. */
+		.more {
+			display: block;
+			padding-top: var(--s-7);
+		}
+		.more h2 {
+			font-size: var(--text-sm);
+			font-weight: 600;
+			letter-spacing: 0;
+			color: var(--muted);
+			margin: 0 0 var(--s-2) var(--s-4);
+		}
+		.rows {
+			list-style: none;
+			margin: 0;
+			padding: 0;
+			background: var(--bg-elevated);
+			border: 1px solid var(--border);
+			border-radius: var(--radius-lg);
+			overflow: hidden;
+		}
+		.rows li + li {
+			border-top: 1px solid var(--border);
+		}
+		.rows a {
+			display: flex;
+			align-items: center;
+			gap: var(--s-3);
+			min-height: 52px;
+			padding: 0 var(--s-4);
+			color: var(--text);
+			text-decoration: none;
+			-webkit-tap-highlight-color: transparent;
+			transition: background-color var(--fast) var(--ease);
+		}
+		.rows a:active {
+			background: rgb(118 118 128 / 0.1);
+		}
+		.rows a > :global(svg:first-child) {
+			color: var(--brand-ink);
+		}
+		.rows a > :global(svg:last-child) {
+			color: var(--faint);
+		}
+		.rows span {
+			flex: 1;
+		}
+		.fine {
+			margin: var(--s-4) var(--s-4) 0;
+			font-size: var(--text-xs);
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
