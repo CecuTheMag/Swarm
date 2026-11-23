@@ -301,4 +301,66 @@
 		width: 6px;
 		height: 6px;
 	}
+
+	/* Phones: each device is a list row, not a table squeezed sideways. */
+	@media (max-width: 760px) {
+		table,
+		tbody {
+			display: block;
+		}
+		thead {
+			display: none;
+		}
+		tr {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 6px var(--s-3);
+			padding: var(--s-3) 0;
+			border-bottom: 1px solid var(--border);
+		}
+		tbody tr:last-child {
+			border-bottom: 0;
+		}
+		td {
+			padding: 0;
+			border: 0;
+		}
+		td.check {
+			width: auto;
+		}
+		/* Line one: name and state; line two: parts and when. */
+		td:has(.dev),
+		td:has(form) {
+			flex: 1 1 50%;
+			min-width: 0;
+		}
+		td.num,
+		td.num + td {
+			font-size: var(--text-xs);
+			color: var(--muted);
+		}
+		tr:has(td.check) td.num {
+			margin-left: 32px;
+		}
+		td.num::after {
+			content: ' части';
+		}
+		td.num + td::before {
+			content: '· ';
+		}
+		/* A row's actions appear when it is selected, like a list in edit mode; without
+		   selection the list stays a list. */
+		td.row-acts {
+			display: none;
+			flex-basis: 100%;
+			justify-content: flex-start;
+		}
+		tr:has(td.check input:checked) td.row-acts {
+			display: flex;
+		}
+		tr:has(td.check) td.row-acts {
+			padding-left: 32px;
+		}
+	}
 </style>

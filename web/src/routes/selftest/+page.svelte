@@ -387,4 +387,11 @@
 			grid-template-columns: 1fr;
 		}
 	}
+
+	/* Phones: the large title carries the screen; no label above it. */
+	@media (max-width: 760px) {
+		.eyebrow {
+			display: none;
+		}
+	}
 </style>

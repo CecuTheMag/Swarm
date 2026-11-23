@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
+	import Icon from '#lib/ui/Icon.svelte';
 	import { CurrentNetwork, can, provideNetwork } from '#lib/console/networks.svelte.ts';
 	import type { LayoutProps } from './$types';
 
@@ -61,6 +62,7 @@
 		<a class="button secondary" href={resolve('/app')}>Към мрежите</a>
 	</div>
 {:else if current.view}
+	<a class="back" href={resolve('/app')}><Icon name="chevron" size={18} /> Мрежи</a>
 	<header class="net-head">
 		<div>
 			<span class="eyebrow">{current.view.public ? 'Общата мрежа' : 'Мрежа'}</span>
@@ -129,5 +131,51 @@
 		background: var(--text);
 		color: var(--bg);
 		font-weight: 650;
+	}
+	.back {
+		display: none;
+	}
+
+	/* Phones: a native screen with a back link, a large title, and the sections as a
+	   bar that stays under the header while the page scrolls. */
+	@media (max-width: 760px) {
+		.back {
+			display: inline-flex;
+			align-items: center;
+			gap: 2px;
+			min-height: 44px;
+			margin: calc(-1 * var(--s-3)) 0 0 -6px;
+			color: var(--brand-ink);
+			text-decoration: none;
+			font-weight: 500;
+		}
+		.back :global(svg) {
+			transform: scaleX(-1);
+		}
+		.net-head .eyebrow {
+			display: none;
+		}
+		.net-head h1 {
+			font-size: 2rem;
+		}
+		.tabs {
+			position: sticky;
+			top: calc(max(8px, env(safe-area-inset-top)) + 52px);
+			z-index: 10;
+			width: auto;
+			margin: 0 calc(-1 * var(--gutter)) var(--s-4);
+			padding: 6px var(--gutter);
+			border-radius: 0;
+			background: color-mix(in srgb, var(--bg) 86%, transparent);
+			-webkit-backdrop-filter: blur(16px);
+			backdrop-filter: blur(16px);
+			scroll-snap-type: x proximity;
+		}
+		.tabs a {
+			scroll-snap-align: start;
+			min-height: 40px;
+			display: inline-flex;
+			align-items: center;
+		}
 	}
 </style>

@@ -39,7 +39,7 @@
 		{@render children()}
 	{:else}
 		<div class="console">
-			<aside class="side glass" aria-label="Мрежи">
+			<aside class="side glass" class:index={path === resolve('/app')} aria-label="Мрежи">
 				<div class="side-head">
 					<span class="eyebrow">Моите мрежи</span>
 				</div>
@@ -221,6 +221,32 @@
 		}
 		.who {
 			display: none;
+		}
+	}
+
+	/* Phones: the networks are the console's first screen and each network screen has a
+	   back link, so the panel only carries the account, at the end of the first screen. */
+	@media (max-width: 760px) {
+		.side {
+			display: none;
+		}
+		.side.index {
+			display: grid;
+			order: 2;
+			margin-top: var(--s-6);
+		}
+		.side.index .side-head,
+		.side.index .nets,
+		.side.index .new {
+			display: none;
+		}
+		.side.index .me {
+			border-top: 0;
+			margin: 0;
+			padding: 0;
+		}
+		.side.index .who {
+			display: block;
 		}
 	}
 </style>

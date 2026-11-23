@@ -950,4 +950,35 @@
 			grid-column: 1 / -1;
 		}
 	}
+
+	/* Phones: what to compute is a rail of chips to swipe, not six stacked rows. */
+	@media (max-width: 760px) {
+		.kinds {
+			display: flex;
+			gap: 6px;
+			margin: 0 calc(-1 * var(--s-5));
+			padding: 0 var(--s-5);
+			overflow-x: auto;
+			scroll-snap-type: x proximity;
+			scroll-padding-inline: var(--s-5);
+			scrollbar-width: none;
+			background: none;
+			border-radius: 0;
+		}
+		.kinds::-webkit-scrollbar {
+			display: none;
+		}
+		.kinds button {
+			flex: none;
+			scroll-snap-align: start;
+			min-height: 44px;
+			padding: 8px 16px;
+			border-radius: var(--pill);
+			white-space: nowrap;
+			background: rgb(118 118 128 / 0.12);
+		}
+		.kinds button :global(svg) {
+			display: inline;
+		}
+	}
 </style>
