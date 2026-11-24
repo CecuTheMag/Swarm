@@ -68,9 +68,14 @@ models *args:
 
 # Only what changed is sent; run `just models` first.
 # Copy the model files to the server (the coordinator serves them from ~/swarm-models).
+# The files are made world-readable: the coordinator container runs as `nobody`, and the
+# downloaded files are mode 600. If Docker created ~/swarm-models as root before the first
+# copy, remove that empty folder on the server first (`rmdir ~/swarm-models`), then
+# restart the coordinator so it sees the new folder.
 deploy-models server=env_var_or_default("SWARM_SERVER", ""):
     @test -n "{{server}}" || { echo "usage: just deploy-models user@host (or set SWARM_SERVER)"; exit 1; }
     rsync -a --delete --exclude 'hf-internal-testing/' models/ {{server}}:swarm-models/
+    ssh {{server}} 'chmod -R a+rX ~/swarm-models'
 
 # The platform admin on the deployed server (spec 0010): prints a new random password
 # once, on the server's terminal only. Run it again to reset a forgotten password.
