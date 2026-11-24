@@ -162,6 +162,10 @@
 	let argsHex = $state(false);
 	let inputsFile = $state<File | null>(null);
 	let quorum = $state(2);
+	/** The verification chosen for an image, π or sweep job; empty is the server's own rule. */
+	let check = $state('');
+	/** What those jobs carry: only a choice the owner made, never the public network's. */
+	const checked = $derived(network.view?.public || !check ? {} : { quorum: Number(check) });
 	let onPublic = $state(false);
 	const canGoPublic = $derived(program?.review === 'approved' && !network.view?.public);
 
@@ -256,7 +260,7 @@
 							: template === 'tt'
 								? await timetableJob()
 								: template === 'pi'
-									? { template, params: { units, samples_per_unit: samples, seed } }
+									? { template, params: { units, samples_per_unit: samples, seed }, ...checked }
 									: template === 'nn'
 										? {
 												template,
@@ -269,9 +273,10 @@
 													batch: list(nnBatch),
 													seeds: nnSeeds,
 													seed
-												}
+												},
+												...checked
 											}
-										: { template, params: { width, height, tile, spp, passes, seed } }
+										: { template, params: { width, height, tile, spp, passes, seed }, ...checked }
 			});
 		} catch (e) {
 			error = failureText(e);
@@ -734,6 +739,16 @@
 						<label>Проходи <input type="number" min="1" max="256" bind:value={passes} /></label>
 					{/if}
 					<label>Начално число <input type="number" min="0" bind:value={seed} /></label>
+					{#if !network.view?.public}
+						<label
+							>Проверка
+							<select bind:value={check} data-testid="job-check">
+								<option value="">Както е по правилата на сървъра</option>
+								<option value="1">1 резултат: върви и с едно устройство</option>
+								<option value="2">2 съвпадащи резултата: нужни са две устройства</option>
+							</select></label
+						>
+					{/if}
 				</div>
 			</details>
 			{#if error}<p class="notice bad" role="alert">{error}</p>{/if}
@@ -826,6 +841,13 @@
 							testid="stop-job"
 						/>
 					{/if}
+					{#if (job.status === 'queued' || job.status === 'running') && !network.view?.public && job.quorum > (network.view?.devices_online ?? 0)}
+						<p class="muted small needs-more" data-testid="needs-more" role="status">
+							Всяка част се проверява от {job.quorum} устройства, а на линия има {network.view
+								?.devices_online ?? 0}. Включете още едно или спрете задачата и я пуснете с проверка
+							от 1 резултат.
+						</p>
+					{/if}
 				</li>
 			{/each}
 		</ul>
@@ -899,6 +921,11 @@
 		padding: 14px 0;
 		border-bottom: 1px solid var(--border);
 		font-size: var(--text-sm);
+	}
+	.needs-more {
+		grid-column: 1 / -1;
+		margin: 0;
+		color: var(--warn, var(--muted));
 	}
 	.job:last-child {
 		border-bottom: 0;
