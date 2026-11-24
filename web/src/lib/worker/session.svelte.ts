@@ -1,6 +1,7 @@
 import { ComputeClient } from './compute-client.ts';
 import { UnfitError } from '#lib/ai/check.ts';
 import { cpuThreads } from '#lib/cpu/pool.ts';
+import { announced } from '#lib/device-name.ts';
 import { DEFAULT_POWER, restMs, type PauseReason } from './pacing.ts';
 import type { Backend } from '#lib/protocol/Backend.ts';
 import type { CoordinatorMessage } from '#lib/protocol/CoordinatorMessage.ts';
@@ -180,7 +181,7 @@ export class WorkerSession {
 		this.status = 'starting';
 		this.compute ??= new ComputeClient((reason) => this.fail(`GPU device lost: ${reason}`));
 		try {
-			this.device ??= await this.compute.init(this.backend);
+			this.device ??= announced(await this.compute.init(this.backend), navigator);
 		} catch (e) {
 			this.running = false;
 			this.status = 'unsupported';

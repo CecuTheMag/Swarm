@@ -58,3 +58,34 @@ export function deviceDetail(device: DeviceInfo): string {
 		? gpuName(device.vendor, device.architecture)
 		: `${device.vendor} · ${device.architecture}`;
 }
+
+/** What a browser says about the device it runs on. */
+export interface NavigatorFacts {
+	userAgent: string;
+	maxTouchPoints?: number;
+	userAgentData?: { mobile?: boolean };
+}
+
+/**
+ * Whether this is a phone or a tablet. Language models are for computers: a handheld
+ * would spend minutes downloading 275 MB and then heat up, so it computes images, π and
+ * timetables but is given no model (spec 0017).
+ */
+export function isHandheld(nav: NavigatorFacts): boolean {
+	if (nav.userAgentData?.mobile) return true;
+	if (/Android|iPhone|iPad|iPod|Mobile/i.test(nav.userAgent)) return true;
+	// iPadOS Safari asks for the desktop site and says it is a Mac; a Mac has no touch screen.
+	return /Macintosh/i.test(nav.userAgent) && (nav.maxTouchPoints ?? 0) > 1;
+}
+
+/**
+ * What a device tells the coordinator about itself. A handheld leaves out the size of its
+ * GPU's buffers: the coordinator gives language-model units only to devices that report
+ * one big enough.
+ */
+export function announced(device: DeviceInfo, nav: NavigatorFacts): DeviceInfo {
+	if (!isHandheld(nav)) return device;
+	const rest = { ...device };
+	delete rest.max_buffer_size;
+	return rest;
+}

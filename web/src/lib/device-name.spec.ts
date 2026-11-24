@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { deviceDetail, gpuName, platformName, reportedGpu } from './device-name.ts';
+import {
+	announced,
+	deviceDetail,
+	gpuName,
+	isHandheld,
+	platformName,
+	reportedGpu
+} from './device-name.ts';
 
 const PIXEL =
 	'Mozilla/5.0 (Linux; Android 16; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Mobile Safari/537.36';
@@ -73,5 +80,47 @@ describe('deviceDetail', () => {
 		expect(deviceDetail({ backend: 'wasm', vendor: 'cpu', architecture: '4 threads' })).toBe(
 			'cpu · 4 threads'
 		);
+	});
+});
+
+describe('isHandheld', () => {
+	const IPHONE =
+		'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+
+	it('is true for phones and tablets', () => {
+		expect(isHandheld({ userAgent: PIXEL })).toBe(true);
+		expect(isHandheld({ userAgent: IPHONE })).toBe(true);
+		expect(isHandheld({ userAgent: 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)' })).toBe(true);
+		expect(isHandheld({ userAgent: MAC, maxTouchPoints: 5 })).toBe(true); // iPad as a Mac
+		expect(isHandheld({ userAgent: 'x', userAgentData: { mobile: true } })).toBe(true);
+	});
+
+	it('is false for computers, Brave and Chrome on a Mac included', () => {
+		expect(isHandheld({ userAgent: MAC })).toBe(false);
+		expect(isHandheld({ userAgent: MAC, maxTouchPoints: 0 })).toBe(false);
+		expect(isHandheld({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' })).toBe(false);
+		expect(isHandheld({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64)', maxTouchPoints: 10 })).toBe(
+			false
+		);
+		expect(isHandheld({ userAgent: MAC, userAgentData: { mobile: false } })).toBe(false);
+	});
+});
+
+describe('announced', () => {
+	const gpu = {
+		backend: 'webgpu',
+		vendor: 'apple',
+		architecture: 'metal-3',
+		max_buffer_size: 4e9
+	} as const;
+
+	it('keeps the buffer size of a computer, so it can take a language model', () => {
+		expect(announced(gpu, { userAgent: MAC })).toEqual(gpu);
+	});
+
+	it('leaves it out for a phone, so none is given', () => {
+		const phone = announced(gpu, { userAgent: PIXEL });
+		expect(phone).toEqual({ backend: 'webgpu', vendor: 'apple', architecture: 'metal-3' });
+		expect('max_buffer_size' in phone).toBe(false);
 	});
 });

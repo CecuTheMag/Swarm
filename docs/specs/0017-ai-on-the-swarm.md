@@ -5,8 +5,8 @@ Status: phase 1 built 21 November 2026, with the near-tie rule of phase 3 (see
 
 ## Goal
 
-A school asks a question it cannot afford to ask a cloud: *transcribe every recorded
-lesson of the term*, *summarise 2 000 essays*, *label 50 000 photos of the herbarium*.
+A school asks a question it cannot afford to ask a cloud: _transcribe every recorded
+lesson of the term_, _summarise 2 000 essays_, _label 50 000 photos of the herbarium_.
 Рояк answers it with the devices the school already has. Every capable device runs a
 whole small model in its browser, on its graphics card, and the swarm spreads the
 requests over them. Nothing leaves the school's devices and the server: no cloud API,
@@ -28,6 +28,18 @@ is good at.
   `maxBufferSize` and `maxStorageBufferBindingSize`); the coordinator gives AI units
   only to devices that can hold the job's model. Lab PCs without WebGPU do not get
   language-model units by default (too slow on a 2011 i3; measured in phase 1).
+
+## Computers only
+
+Language models run on computers, not on phones or tablets. A handheld would spend minutes
+downloading 275 MB over mobile data and then heat up, and a room of phones joining at once
+would send the server gigabytes. A phone or tablet (`lib/device-name.ts::isHandheld`: the
+browser says it is mobile, an Android, iPhone or iPad user agent, or a "Mac" with a touch
+screen) leaves the size of its GPU's buffers out of what it tells the coordinator, so the
+coordinator never gives it a model's units; it still computes images, π, neural sweeps,
+timetables and programs. Checked 24 November 2026 with an iPhone 15 (WebKit) and a Pixel 7
+(Brave) emulated beside a Mac: both rendered an image, and in an AI job every unit went to
+the Mac.
 
 ## Models are known code too
 

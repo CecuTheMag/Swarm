@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { devices, expect, test, type Page } from '@playwright/test';
 import { createNetwork, deleteNetwork } from './submit.ts';
 
 // Spec 0017 in the browser: a network's device runs a whole language model (the catalog's
@@ -133,4 +133,42 @@ test('a model file whose hash differs is refused and nothing is answered', async
 
 	await context.close();
 	await deleteNetwork(page, networkUrl);
+});
+
+test('a phone does not announce the GPU memory that language models are given by', async ({
+	page,
+	browser
+}) => {
+	test.setTimeout(120_000);
+	await createNetwork(page, 'Телефон и компютър');
+	const link = await page.getByTestId('join-link').inputValue();
+
+	// The coordinator gives a language model's units only to a device that announces a GPU
+	// buffer big enough (a real model needs 256 MB; the tiny test model needs none, so it
+	// cannot show this). A computer announces its size; a phone, here Chromium saying it is
+	// a Pixel with the same GPU, leaves it out.
+	async function announces(context: import('@playwright/test').BrowserContext) {
+		const hellos: string[] = [];
+		const device = await context.newPage();
+		device.on('websocket', (ws) =>
+			ws.on('framesent', (f) => {
+				if (typeof f.payload === 'string' && f.payload.includes('"device"')) hellos.push(f.payload);
+			})
+		);
+		await join(device, link);
+		await expect.poll(() => hellos.length).toBeGreaterThan(0);
+		const hello = JSON.parse(hellos[0]) as {
+			device: { backend: string; max_buffer_size?: number };
+		};
+		await context.close();
+		return hello.device;
+	}
+
+	const computer = await announces(await browser.newContext());
+	expect(computer.backend).toBe('webgpu');
+	expect(computer.max_buffer_size).toBeGreaterThan(256 * 1024 * 1024);
+
+	const phone = await announces(await browser.newContext({ ...devices['Pixel 7'] }));
+	expect(phone.backend).toBe('webgpu');
+	expect(phone.max_buffer_size).toBeUndefined();
 });
