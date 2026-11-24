@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import { api, failureText } from '#lib/api.ts';
 	import { can, useNetwork } from '#lib/console/networks.svelte.ts';
+	import { deviceDetail } from '#lib/device-name.ts';
 	import ConfirmButton from '#lib/ui/ConfirmButton.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
 	import type { DeviceView } from '#lib/protocol/DeviceView.ts';
@@ -91,7 +92,9 @@
 		<ul class="list">
 			{#each pending as d (d.id)}
 				<li data-testid="pending-device">
-					<span class="who"><Icon name="phone" size={18} /> {kind[d.backend]} · {d.vendor}</span>
+					<span class="who"
+						><Icon name="phone" size={18} /> {kind[d.backend]} · {deviceDetail(d)}</span
+					>
 					{#if admin}
 						<div class="acts">
 							<button
@@ -189,7 +192,7 @@
 								{:else}
 									<div class="dev">
 										<strong>{d.name ?? kind[d.backend]}</strong>
-										<span class="muted">{d.vendor} · {d.architecture}</span>
+										<span class="muted">{deviceDetail(d)}</span>
 									</div>
 								{/if}
 							</td>

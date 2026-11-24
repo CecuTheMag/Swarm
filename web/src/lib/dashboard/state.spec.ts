@@ -249,6 +249,10 @@ describe('dashboard state', () => {
 		expect(deviceLabel({ backend: 'wasm', vendor: 'cpu', architecture: '3 threads' })).toBe(
 			'процесор (3 нишки)'
 		);
+		// A browser that hides its card is a card all the same, never "видеокарта unknown".
+		expect(deviceLabel({ backend: 'webgpu', vendor: 'unknown', architecture: 'unknown' })).toBe(
+			'видеокарта'
+		);
 	});
 
 	it('sorts jobs newest first', () => {

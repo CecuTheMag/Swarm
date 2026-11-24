@@ -1,3 +1,4 @@
+import { HIDDEN } from '#lib/device-name.ts';
 import type { DashboardEvent } from '#lib/protocol/DashboardEvent.ts';
 import type { DeviceInfo } from '#lib/protocol/DeviceInfo.ts';
 import type { JobSummary } from '#lib/protocol/JobSummary.ts';
@@ -285,7 +286,7 @@ export function deviceGroups(state: DashboardState): DeviceGroup[] {
 export function deviceLabel(device: DeviceInfo): string {
 	switch (device.backend) {
 		case 'webgpu':
-			return `видеокарта ${device.vendor}`;
+			return device.vendor === HIDDEN ? 'видеокарта' : `видеокарта ${device.vendor}`;
 		case 'wasm':
 			return `процесор (${device.architecture.replace('threads', 'нишки')})`;
 		case 'native':

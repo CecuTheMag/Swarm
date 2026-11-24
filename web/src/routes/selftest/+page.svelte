@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { nnShader, nnVectors, piShader, piVectors, ptShader, ptVectors } from '#lib/templates.ts';
 	import { sha256Hex } from '#lib/gpu/hash.ts';
+	import { deviceDetail } from '#lib/device-name.ts';
 	import { agreement, decodeRgb, gpuAgrees, type Agreement } from '#lib/pt.ts';
 	import { ComputeClient } from '#lib/worker/compute-client.ts';
 	import type { DeviceInfo } from '#lib/protocol/DeviceInfo.ts';
@@ -185,7 +186,7 @@
 			<div class="value small-value">
 				{device ? (device.backend === 'webgpu' ? 'Видеокарта' : 'Процесор') : '—'}
 			</div>
-			<div class="label">{device ? `${device.vendor} · ${device.architecture}` : 'устройство'}</div>
+			<div class="label">{device ? deviceDetail(device) : 'устройство'}</div>
 		</div>
 		<div class="card stat">
 			<div class="value">

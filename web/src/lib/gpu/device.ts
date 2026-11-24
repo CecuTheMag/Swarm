@@ -1,4 +1,5 @@
 import type { DeviceInfo } from '#lib/protocol/DeviceInfo.ts';
+import { reportedGpu } from '#lib/device-name.ts';
 
 export interface Gpu {
 	device: GPUDevice;
@@ -21,8 +22,9 @@ export async function requestGpu(): Promise<Gpu> {
 		device,
 		info: {
 			backend: 'webgpu',
-			vendor: adapter.info.vendor || 'unknown',
-			architecture: adapter.info.architecture || adapter.info.description || 'unknown',
+			// Blank when the browser hides the card (Brave's fingerprinting protection): the
+			// system then stands in, so a phone and a laptop still differ in the console.
+			...reportedGpu(adapter.info, navigator.userAgent),
 			// Language-model units go only to devices whose GPU can hold the model (spec 0017).
 			max_buffer_size: adapter.limits.maxBufferSize
 		}

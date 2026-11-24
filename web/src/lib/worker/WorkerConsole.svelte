@@ -16,6 +16,7 @@
 	} from '#lib/worker/pacing.ts';
 	import { loadCommunity, saveCommunity } from '#lib/worker/consent.ts';
 	import { wsUrl } from '#lib/net.ts';
+	import { deviceDetail } from '#lib/device-name.ts';
 	import Icon from '#lib/ui/Icon.svelte';
 	import NetworkCard from '#lib/worker/NetworkCard.svelte';
 	import type { Backend } from '#lib/protocol/Backend.ts';
@@ -338,9 +339,7 @@
 				{session.device ? backendText[session.device.backend] : '—'}
 			</div>
 			<div class="label">
-				{session.device
-					? `${session.device.vendor} · ${session.device.architecture}`
-					: 'с какво смята'}
+				{session.device ? deviceDetail(session.device) : 'с какво смята'}
 			</div>
 		</div>
 	</section>
