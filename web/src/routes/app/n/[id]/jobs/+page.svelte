@@ -285,6 +285,16 @@
 		}
 	}
 
+	/** The owner takes the results that wait for a second device as they are (spec 0018). */
+	async function acceptUnchecked(job: string) {
+		error = null;
+		try {
+			await api(`/api/networks/${id}/jobs/${job}/accept-unchecked`, { body: {} });
+		} catch (e) {
+			error = failureText(e);
+		}
+	}
+
 	async function stop(job: string) {
 		error = null;
 		try {
@@ -842,11 +852,21 @@
 						/>
 					{/if}
 					{#if (job.status === 'queued' || job.status === 'running') && !network.view?.public && job.quorum > (network.view?.devices_online ?? 0)}
-						<p class="muted small needs-more" data-testid="needs-more" role="status">
-							Всяка част се проверява от {job.quorum} устройства, а на линия има {network.view
-								?.devices_online ?? 0}. Включете още едно или спрете задачата и я пуснете с проверка
-							от 1 резултат.
-						</p>
+						<div class="needs-more" data-testid="needs-more" role="status">
+							<p class="muted small">
+								Всяка част се проверява от {job.quorum} устройства, а на линия има {network.view
+									?.devices_online ?? 0}. Включете още едно устройство или приемете получените
+								резултати без втора проверка.
+							</p>
+							{#if admin}
+								<ConfirmButton
+									label="Приеми без втора проверка"
+									confirm="Приемам резултатите?"
+									onconfirm={() => acceptUnchecked(job.id)}
+									testid="accept-unchecked"
+								/>
+							{/if}
+						</div>
 					{/if}
 				</li>
 			{/each}
@@ -924,8 +944,14 @@
 	}
 	.needs-more {
 		grid-column: 1 / -1;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--s-3);
+	}
+	.needs-more p {
 		margin: 0;
-		color: var(--warn, var(--muted));
+		flex: 1 1 260px;
 	}
 	.job:last-child {
 		border-bottom: 0;

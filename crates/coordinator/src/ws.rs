@@ -485,6 +485,41 @@ async fn worker_loop(
     }
 }
 
+/// Tells the render cache, the progress counters and the dashboards that `completion`
+/// decided a unit, and that it finished its job if it did. Returns whether the worker
+/// that produced the accepted result looks suspicious (its result was not in the
+/// agreeing group). Anything but `Completion::Decided` announces nothing.
+pub async fn announce_decided(state: &AppState, worker_id: Uuid, completion: Completion) -> bool {
+    let Completion::Decided {
+        job_id,
+        network_id,
+        unit_id,
+        unit_params,
+        output,
+        agreed,
+        units_done,
+        units_total,
+        job_finished,
+        ..
+    } = completion
+    else {
+        return false;
+    };
+    state
+        .renders
+        .unit_accepted(job_id, unit_id, &unit_params, &output)
+        .await;
+    if let Some(w) = state.workers.lock().unwrap().get_mut(&worker_id) {
+        w.units_done += 1;
+    }
+    state.unit_decided(network_id, job_id, worker_id, units_done, units_total);
+    if let Some(job) = job_finished {
+        tracing::info!(%job_id, status = ?job.status, "job finished");
+        state.publish(network_id, DashboardEvent::JobUpdated { job });
+    }
+    !agreed
+}
+
 /// Records a result and announces what it changed. Returns whether the worker is told
 /// its result was accepted, and whether its client got banned by it.
 async fn handle_completion(
@@ -520,32 +555,7 @@ async fn handle_completion(
     }
 
     let suspicious = match completion {
-        Completion::Decided {
-            job_id,
-            network_id,
-            unit_id,
-            unit_params,
-            output,
-            agreed,
-            units_done,
-            units_total,
-            job_finished,
-            ..
-        } => {
-            state
-                .renders
-                .unit_accepted(job_id, unit_id, &unit_params, &output)
-                .await;
-            if let Some(w) = state.workers.lock().unwrap().get_mut(&worker_id) {
-                w.units_done += 1;
-            }
-            state.unit_decided(network_id, job_id, worker_id, units_done, units_total);
-            if let Some(job) = job_finished {
-                tracing::info!(%job_id, status = ?job.status, "job finished");
-                state.publish(network_id, DashboardEvent::JobUpdated { job });
-            }
-            !agreed
-        }
+        decided @ Completion::Decided { .. } => announce_decided(state, worker_id, decided).await,
         Completion::Unresolved { job } => {
             if let Some(job) = job {
                 tracing::warn!(job_id = %job.id, error = job.error.as_deref().unwrap_or(""), "job failed");

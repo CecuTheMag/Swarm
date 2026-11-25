@@ -1420,3 +1420,104 @@ async fn a_ban_reopens_a_finished_job_and_withdraws_its_poisoned_known_answers(d
     let result: pi::JobResult = serde_json::from_value(job.result.unwrap()).unwrap();
     assert_eq!(result.inside, reference_inside(1, 1000, 21));
 }
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn an_owner_can_accept_results_that_wait_for_a_second_device(db: PgPool) {
+    // Spec 0018: one device answered every unit, the second never came; the units wait.
+    let cfg = verifying();
+    let job_id = pi_job_with(&db, &cfg, 3, 1000, 3).await;
+    let a = worker(&db).await;
+    let mut taken = Vec::new();
+    for _ in 0..3 {
+        let c = db::claim_unit(&db, a, PUBLIC_NETWORK, false, &cfg)
+            .await
+            .unwrap()
+            .unwrap();
+        let done = complete(&db, a, &c, &honest(&c), &cfg).await;
+        assert!(
+            matches!(done, Completion::Recorded),
+            "one result decides nothing"
+        );
+        taken.push(c.unit_id);
+    }
+    // It cannot check itself, so nothing is left to claim and the job does not move.
+    assert!(
+        db::claim_unit(&db, a, PUBLIC_NETWORK, false, &cfg)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let job = db::get_job(&db, job_id).await.unwrap().unwrap();
+    assert_eq!((job.units_done, job.status), (0, JobStatus::Running));
+
+    let decided = db::accept_unchecked(&db, job_id, &cfg).await.unwrap();
+    assert_eq!(decided.len(), 3);
+    assert!(
+        decided
+            .iter()
+            .all(|(w, c)| *w == a && matches!(c, Completion::Decided { agreed: true, .. }))
+    );
+    // The last one finished the job, with the answer the device gave.
+    let finished: Vec<_> = decided
+        .iter()
+        .filter_map(|(_, c)| match c {
+            Completion::Decided { job_finished, .. } => job_finished.as_ref(),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(finished.len(), 1);
+    let job = db::get_job(&db, job_id).await.unwrap().unwrap();
+    assert_eq!((job.units_done, job.status), (3, JobStatus::Done));
+    for unit in taken {
+        assert_eq!(unit_status(&db, unit).await, "done");
+    }
+    // Accepting is not agreeing: it earns no reputation, and nothing is left to accept.
+    assert_eq!(standing(&db, a).await, (0, 0, false));
+    assert!(
+        db::accept_unchecked(&db, job_id, &cfg)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn accepting_leaves_units_without_a_result_and_banned_clients_out(db: PgPool) {
+    let cfg = verifying();
+    let job_id = pi_job_with(&db, &cfg, 2, 1000, 3).await;
+    let (a, cheat) = (worker(&db).await, worker(&db).await);
+    // `a` answers the first unit; the second is only leased, with no result yet.
+    let first = db::claim_unit(&db, a, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
+    complete(&db, a, &first, &honest(&first), &cfg).await;
+    let second = db::claim_unit(&db, a, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
+    // Another client answered the first unit's second copy wrongly and is banned: its
+    // result must never be the one accepted.
+    let wrong_one = db::claim_unit(&db, cheat, PUBLIC_NETWORK, false, &cfg)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(wrong_one.unit_id, first.unit_id);
+    db::complete_lease(&db, cheat, wrong_one.lease_id, &wrong(&wrong_one), 1, &cfg)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE clients SET banned_at = now() WHERE id = (SELECT client_id FROM workers WHERE id = $1)")
+        .bind(cheat)
+        .execute(&db)
+        .await
+        .unwrap();
+
+    let decided = db::accept_unchecked(&db, job_id, &cfg).await.unwrap();
+    // The first unit is decided with `a`'s result; the second has none and stays open.
+    assert_eq!(decided.len(), 1);
+    assert_eq!(decided[0].0, a);
+    assert_eq!(unit_status(&db, first.unit_id).await, "done");
+    assert_ne!(unit_status(&db, second.unit_id).await, "done");
+    let job = db::get_job(&db, job_id).await.unwrap().unwrap();
+    assert_eq!((job.units_done, job.status), (1, JobStatus::Running));
+}

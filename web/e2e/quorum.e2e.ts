@@ -2,7 +2,8 @@ import { expect, test } from '@playwright/test';
 import { createNetwork, deleteNetwork } from './submit.ts';
 
 // One device cannot make two results agree. A job that asks for two stalls just before
-// the end, and the console says why; the same job that asks for one result finishes.
+// the end, and the console says why; the same job that asks for one result finishes, and
+// the owner can accept the results that wait.
 
 test('a job that needs two devices says so when one is online; one result finishes', async ({
 	page,
@@ -39,7 +40,14 @@ test('a job that needs two devices says so when one is online; one result finish
 	await expect(finished).toHaveAttribute('data-status', 'done', { timeout: 60_000 });
 	await expect(finished.getByTestId('needs-more')).toHaveCount(0);
 	// The stalled job still waits, and still says why.
-	await expect(page.getByTestId('job').nth(1)).not.toHaveAttribute('data-status', 'done');
+	const waiting = page.getByTestId('job').nth(1);
+	await expect(waiting).not.toHaveAttribute('data-status', 'done');
+
+	// The owner can accept what the one device answered: two taps, then the job is done.
+	await waiting.getByTestId('accept-unchecked').click();
+	await waiting.getByTestId('accept-unchecked').click();
+	await expect(waiting).toHaveAttribute('data-status', 'done', { timeout: 30_000 });
+	await expect(waiting.getByTestId('needs-more')).toHaveCount(0);
 
 	await deleteNetwork(page, networkUrl);
 });

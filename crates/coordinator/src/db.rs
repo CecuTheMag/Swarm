@@ -1123,6 +1123,83 @@ async fn update_assignment(
     Ok(())
 }
 
+/// The first result of a unit that no other device has checked.
+#[derive(FromRow)]
+struct WaitingResult {
+    unit_id: Uuid,
+    unit_params: Json<Value>,
+    lease_id: Uuid,
+    worker_id: Uuid,
+    output: Json<Value>,
+    template: String,
+}
+
+/// An owner accepts, for every unit of `job_id` that holds a result and waits for a second
+/// device to check it, that result as it stands (spec 0018). Each unit is decided as a
+/// trusted client's solo unit is: the lease's verdict is `trusted`, which does not count
+/// towards anyone's reputation. Units without any result are left alone. Returns, for each
+/// unit decided, the worker whose result was taken and the completion to announce.
+pub async fn accept_unchecked(
+    db: &PgPool,
+    job_id: Uuid,
+    cfg: &Config,
+) -> sqlx::Result<Vec<(Uuid, Completion)>> {
+    let mut decided = Vec::new();
+    loop {
+        let mut tx = db.begin().await?;
+        let waiting: Option<WaitingResult> = sqlx::query_as(
+            "SELECT u.id AS unit_id, u.params AS unit_params, l.id AS lease_id, l.worker_id,
+                    l.output, j.template
+             FROM units u
+             JOIN jobs j ON j.id = u.job_id
+             JOIN LATERAL (
+                 SELECT l.id, l.worker_id, l.output FROM leases l
+                 JOIN workers w ON w.id = l.worker_id
+                 LEFT JOIN clients c ON c.id = w.client_id
+                 WHERE l.unit_id = u.id AND l.completed_at IS NOT NULL
+                   AND l.verdict IS NULL AND NOT l.honeypot AND c.banned_at IS NULL
+                 ORDER BY l.completed_at, l.id
+                 LIMIT 1
+             ) l ON true
+             WHERE u.job_id = $1 AND u.status IN ('pending', 'leased')
+               AND j.status IN ('queued', 'running')
+             LIMIT 1
+             FOR UPDATE OF u",
+        )
+        .bind(job_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(WaitingResult {
+            unit_id,
+            unit_params: Json(unit_params),
+            lease_id,
+            worker_id,
+            output: Json(output),
+            template: template_id,
+        }) = waiting
+        else {
+            return Ok(decided);
+        };
+        let Some(template) = templates::get(&template_id) else {
+            return Ok(decided);
+        };
+        let bans = record_verdicts(&mut tx, &[(lease_id, "trusted")], cfg).await?;
+        let completion = decide(
+            &mut tx,
+            template,
+            job_id,
+            unit_id,
+            unit_params,
+            output,
+            true,
+            bans,
+        )
+        .await?;
+        tx.commit().await?;
+        decided.push((worker_id, completion));
+    }
+}
+
 /// Accepts `output` for the unit and counts it towards the job; the completion that
 /// counts the last unit aggregates the job.
 #[allow(clippy::too_many_arguments)]

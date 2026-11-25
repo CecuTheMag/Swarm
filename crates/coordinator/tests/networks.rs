@@ -916,3 +916,65 @@ async fn an_abandoned_sign_in_keeps_its_slot_until_its_check_ends(db: PgPool) {
         .await
         .expect("every slot is free once the checks end");
 }
+
+/// Spec 0018: a job that asks for two agreeing results stalls when only one device is
+/// online. The owner can accept what that device answered; nobody else can.
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn an_owner_accepts_the_results_a_lone_device_gave(db: PgPool) {
+    let addr = serve(db, config()).await;
+    let owner = Browser::admin(&addr).await;
+    let lab = owner.create_network("Кабинет").await;
+    let viewer = owner.invite_member(lab.id, "viewer", "v@school.bg").await;
+
+    let mut body = sim_worker::pi_job(2, 1000, 7);
+    body["quorum"] = json!(2);
+    let res = owner
+        .post(&format!("/api/networks/{}/jobs", lab.id), body)
+        .await;
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let job: JobSummary = res.json().await.unwrap();
+
+    // The one device answers both units.
+    let (mut ws, _) = device(&addr, Some(&lab.join_code), Uuid::now_v7()).await;
+    for _ in 0..2 {
+        let CoordinatorMessage::Assign {
+            lease_id,
+            template,
+            params,
+            ..
+        } = request_work(&mut ws).await
+        else {
+            panic!("expected a unit");
+        };
+        let output = sim_worker::compute(&template.id, template.version, &params).unwrap();
+        ws.send(Message::text(
+            json!({"type":"result","lease_id":lease_id,"output":output,"elapsed_ms":1}).to_string(),
+        ))
+        .await
+        .unwrap();
+        assert!(matches!(
+            next(&mut ws).await,
+            CoordinatorMessage::Ack { accepted: true, .. }
+        ));
+    }
+    // It cannot check itself: nothing more for it, and the job waits.
+    assert!(matches!(
+        request_work(&mut ws).await,
+        CoordinatorMessage::NoWork { .. }
+    ));
+    assert_eq!(owner.job(lab.id, job.id).await.units_done, 0);
+
+    let path = format!("/api/networks/{}/jobs/{}/accept-unchecked", lab.id, job.id);
+    assert_eq!(
+        viewer.post(&path, json!({})).await.status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(owner.job(lab.id, job.id).await.units_done, 0);
+
+    let res = owner.post(&path, json!({})).await;
+    assert_eq!(res.status(), StatusCode::OK, "{:?}", res.text().await);
+    let done: JobSummary = res.json().await.unwrap();
+    assert_eq!(done.units_done, 2);
+    assert_eq!(done.status, protocol::JobStatus::Done);
+    assert!(done.result.is_some());
+}

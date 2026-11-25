@@ -141,6 +141,10 @@ pub fn router(state: AppState) -> Router {
             post(networks::cancel_job),
         )
         .route(
+            "/api/networks/{id}/jobs/{job}/accept-unchecked",
+            post(networks::accept_unchecked),
+        )
+        .route(
             "/api/networks/{id}/jobs/{job}/image.png",
             get(networks::job_image),
         )

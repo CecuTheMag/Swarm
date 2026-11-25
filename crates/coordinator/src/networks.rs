@@ -794,6 +794,24 @@ pub async fn cancel_job(
     Ok(Json(crate::api::cancel(&state, job_id).await?))
 }
 
+/// The owner accepts the results that wait for a second device (spec 0018): for a job
+/// that stalled because only one device is online.
+pub async fn accept_unchecked(
+    State(state): State<AppState>,
+    method: Method,
+    headers: HeaderMap,
+    Path((id, job_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<JobSummary>, AppError> {
+    auth::network_access(&state, &method, &headers, id, Role::Admin).await?;
+    job_in(&state, id, job_id).await?;
+    let decided = db::accept_unchecked(&state.db, job_id, &state.config).await?;
+    tracing::info!(%job_id, units = decided.len(), "owner accepted results without a second check");
+    for (worker_id, completion) in decided {
+        crate::ws::announce_decided(&state, worker_id, completion).await;
+    }
+    Ok(Json(job_in(&state, id, job_id).await?))
+}
+
 pub async fn job_image(
     State(state): State<AppState>,
     method: Method,
