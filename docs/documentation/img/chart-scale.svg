@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 480 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Резултати в секунда при 100 и 1000 устройства">
+  <style>
+    .ax { stroke: #000; stroke-width: 1.2; }
+    .gr { stroke: #ccc; stroke-width: 0.8; }
+    .tk { font-size: 16px; fill: #000; }
+    .lb { font-size: 17px; fill: #000; font-weight: bold; }
+    .id { fill: #ddd; stroke: #777; stroke-width: 1; }
+    .me { fill: #e08a00; }
+    .wh { stroke: #000; stroke-width: 1.6; }
+  </style>
+  <text x="270" y="18" class="lb" text-anchor="middle">Мащабиране на координатора</text>
+  <line x1="80" y1="40" x2="80" y2="250" class="ax"/><line x1="80" y1="250" x2="460" y2="250" class="ax"/>
+  <line x1="80" y1="200" x2="460" y2="200" class="gr"/><line x1="80" y1="150" x2="460" y2="150" class="gr"/><line x1="80" y1="100" x2="460" y2="100" class="gr"/><line x1="80" y1="50" x2="460" y2="50" class="gr"/>
+  <text x="72" y="255" class="tk" text-anchor="end">0</text><text x="72" y="205" class="tk" text-anchor="end">250</text><text x="72" y="155" class="tk" text-anchor="end">500</text><text x="72" y="105" class="tk" text-anchor="end">750</text><text x="72" y="55" class="tk" text-anchor="end">1000</text>
+  <text x="20" y="150" class="tk" text-anchor="middle" transform="rotate(-90 20 150)">резултати в секунда</text>
+  <rect x="120" y="230" width="55" height="20" class="id"/><rect x="180" y="231.6" width="55" height="18.4" class="me"/>
+  <text x="207" y="222" class="tk" text-anchor="middle">92</text>
+  <rect x="300" y="50" width="55" height="200" class="id"/><rect x="360" y="59" width="55" height="191" class="me"/>
+  <line x1="387" y1="54" x2="387" y2="64" class="wh"/><line x1="380" y1="54" x2="394" y2="54" class="wh"/><line x1="380" y1="64" x2="394" y2="64" class="wh"/>
+  <text x="387" y="84" class="tk" text-anchor="middle" fill="#fff" font-weight="bold">930–980</text>
+  <text x="177" y="272" class="tk" text-anchor="middle">100 устройства</text>
+  <text x="357" y="272" class="tk" text-anchor="middle">1000 устройства</text>
+  <rect x="110" y="283" width="14" height="12" class="id"/><text x="130" y="294" class="tk">идеално</text>
+  <rect x="230" y="283" width="14" height="12" class="me"/><text x="250" y="294" class="tk">измерено, 0 отпаднали</text>
+</svg>

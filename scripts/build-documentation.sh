@@ -62,7 +62,8 @@ if creds:
     link = "<code>/join/КОД</code>"
     assert link in html, "the volunteer row changed"
     host = creds["SWARM_URL"].split("://", 1)[-1]
-    html = html.replace(link, f'<code>{host}/join/{creds["JOIN_CODE"]}</code>')
+    join = creds["JOIN_CODE"]
+    html = html.replace(link, f"<code>{host}/join/{join}</code>")
 else:
     left.append("test logins (run scripts/test-accounts.sh)")
 

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1000 268" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Проверка на резултат">
+  <defs>
+    <marker id="vr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#333"/></marker>
+    <marker id="vg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#18794e"/></marker>
+    <marker id="vb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#c4161c"/></marker>
+  </defs>
+  <style>
+    .t { font-size: 19px; font-weight: bold; fill: #000; }
+    .s { font-size: 17px; fill: #222; }
+    .d { fill: #fff4e0; stroke: #e08a00; stroke-width: 1.4; }
+    .bx { fill: #fff; stroke: #444; stroke-width: 1.2; }
+    .ok { fill: #e6f4ec; stroke: #18794e; stroke-width: 1.4; }
+    .bad { fill: #fdeaea; stroke: #c4161c; stroke-width: 1.4; }
+    .n { fill: none; stroke: #333; stroke-width: 1.5; }
+    .g { fill: none; stroke: #18794e; stroke-width: 1.6; }
+    .r { fill: none; stroke: #c4161c; stroke-width: 1.6; }
+  </style>
+  <rect x="10" y="10" width="120" height="50" rx="25" class="bx"/><text x="70" y="41" class="t" text-anchor="middle">резултат</text>
+  <path d="M130 35 H160" class="n" marker-end="url(#vr)"/>
+  <polygon points="176,10 330,10 346,35 330,60 176,60 160,35" class="d"/><text x="253" y="41" class="t" text-anchor="middle">верен формат?</text>
+  <path d="M346 35 H376" class="n" marker-end="url(#vr)"/><text x="361" y="27" class="s" text-anchor="middle">да</text>
+  <polygon points="392,10 568,10 584,35 568,60 392,60 376,35" class="d"/><text x="480" y="41" class="t" text-anchor="middle">контролна задача?</text>
+  <path d="M584 35 H614" class="n" marker-end="url(#vr)"/><text x="599" y="27" class="s" text-anchor="middle">не</text>
+  <polygon points="630,10 840,10 856,35 840,60 630,60 614,35" class="d"/><text x="735" y="41" class="t" text-anchor="middle">два резултата съвпадат?</text>
+  <path d="M856 35 H886" class="g" marker-end="url(#vg)"/><text x="871" y="27" class="s" text-anchor="middle">да</text>
+  <rect x="888" y="10" width="104" height="50" rx="8" class="ok"/><text x="940" y="41" class="t" text-anchor="middle">приет</text>
+
+  <path d="M253 60 V90" class="r" marker-end="url(#vb)"/><text x="262" y="81" class="s">не</text>
+  <rect x="160" y="92" width="186" height="50" rx="8" class="bad"/><text x="253" y="123" class="t" text-anchor="middle">отхвърлен</text>
+  <path d="M480 60 V90" class="n" marker-end="url(#vr)"/><text x="489" y="81" class="s">да</text>
+  <rect x="376" y="92" width="208" height="50" rx="8" class="bx"/><text x="480" y="114" class="t" text-anchor="middle">сравнение с</text><text x="480" y="135" class="t" text-anchor="middle">известния отговор</text>
+  <path d="M480 142 V164" class="r" marker-end="url(#vb)"/>
+  <text x="480" y="184" class="s" text-anchor="middle" fill="#c4161c">2 грешни → блокиране;</text>
+  <text x="480" y="204" class="s" text-anchor="middle" fill="#c4161c">приетото от него се смята наново</text>
+  <path d="M735 60 V90" class="n" marker-end="url(#vr)"/><text x="744" y="81" class="s">не</text>
+  <rect x="614" y="92" width="242" height="50" rx="8" class="bx"/><text x="735" y="114" class="t" text-anchor="middle">спорна единица:</text><text x="735" y="135" class="t" text-anchor="middle">още едно копие</text>
+
+  <rect x="10" y="216" width="980" height="46" rx="8" class="bx"/>
+  <text x="24" y="245" class="s"><tspan font-weight="bold">Доверие</tspan> = (верни + 1) / (верни + грешни + 2)</text>
+  <text x="372" y="245" class="s"><tspan font-weight="bold">Ново:</tspan> двама на единица, 20&#160;% контролни</text>
+  <text x="690" y="245" class="s"><tspan font-weight="bold">Доверено:</tspan> 90&#160;% сам, 5&#160;% контролни</text>
+</svg>

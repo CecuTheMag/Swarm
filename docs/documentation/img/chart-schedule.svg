@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 480 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Цена на най-доброто разписание спрямо броя търсения">
+  <style>
+    .ax { stroke: #000; stroke-width: 1.2; }
+    .gr { stroke: #ccc; stroke-width: 0.8; }
+    .tk { font-size: 16px; fill: #000; }
+    .lb { font-size: 17px; fill: #000; font-weight: bold; }
+    .s20 { fill: none; stroke: #0057b3; stroke-width: 2.6; }
+    .s40 { fill: none; stroke: #e08a00; stroke-width: 2.6; }
+    .s60 { fill: none; stroke: #c4161c; stroke-width: 2.6; }
+  </style>
+  <text x="262" y="18" class="lb" text-anchor="middle">Най-доброто намерено разписание</text>
+  <line x1="70" y1="40" x2="70" y2="250" class="ax"/><line x1="70" y1="250" x2="455" y2="250" class="ax"/>
+  <line x1="70" y1="198" x2="455" y2="198" class="gr"/><line x1="70" y1="145" x2="455" y2="145" class="gr"/><line x1="70" y1="93" x2="455" y2="93" class="gr"/><line x1="70" y1="40" x2="455" y2="40" class="gr"/>
+  <text x="62" y="255" class="tk" text-anchor="end">0</text><text x="62" y="203" class="tk" text-anchor="end">40</text><text x="62" y="150" class="tk" text-anchor="end">80</text><text x="62" y="98" class="tk" text-anchor="end">120</text><text x="62" y="45" class="tk" text-anchor="end">160</text>
+  <text x="70" y="270" class="tk" text-anchor="middle">1</text><text x="146" y="270" class="tk" text-anchor="middle">2</text><text x="222" y="270" class="tk" text-anchor="middle">4</text><text x="298" y="270" class="tk" text-anchor="middle">8</text><text x="374" y="270" class="tk" text-anchor="middle">16</text><text x="450" y="270" class="tk" text-anchor="middle">32</text>
+  <text x="262" y="294" class="tk" text-anchor="middle">брой паралелни търсения</text>
+  <text x="20" y="145" class="tk" text-anchor="middle" transform="rotate(-90 20 145)">наказателни точки</text>
+  <polyline points="70,237 146,243 222,250 298,250 374,250 450,250" class="s20"/>
+  <polyline points="70,171 146,204 222,204 298,204 374,204 450,204" class="s40"/>
+  <polyline points="70,53 146,53 222,53 298,86 374,86 450,86" class="s60"/>
+  <text x="446" y="240" class="tk" text-anchor="end" fill="#0057b3">20 паралелки</text>
+  <text x="446" y="194" class="tk" text-anchor="end" fill="#b36b00">40 паралелки</text>
+  <text x="446" y="77" class="tk" text-anchor="end" fill="#c4161c">60 паралелки</text>
+</svg>
