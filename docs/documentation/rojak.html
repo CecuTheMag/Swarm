@@ -32,6 +32,9 @@ img.shot { width: 74% !important; border: 0.6pt solid #999; }
 .shots img { border: 0.6pt solid #999; }
 .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 10pt; }
 code { font-family: "Courier New", monospace; font-size: 11pt; }
+table.acc { line-height: 1.15; }
+table.acc td, table.acc th { padding: 1pt 4pt; font-size: 11pt; }
+table.acc code { font-size: 9.5pt; word-break: break-all; }
 svg text { font-family: "Times New Roman", Times, serif; }
 </style>
 </head>
@@ -270,7 +273,7 @@ svg text { font-family: "Times New Roman", Times, serif; }
 </figure>
 <p class="flush" style="text-align:left"><b>Литература:</b> [1] D. P. Anderson, BOINC: A System for Public-Resource Computing and Storage, GRID 2004; [2] L. F. G. Sarmenta, Sabotage-Tolerance Mechanisms for Volunteer Computing Systems, Future Generation Computer Systems, 2002; [3] E. K. Burke, Y. Bykov, The Late Acceptance Hill-Climbing Heuristic, European Journal of Operational Research, 2017; [4] J. T. Kajiya, The Rendering Equation, SIGGRAPH 1986; [5] W3C, WebGPU, https://www.w3.org/TR/webgpu/.</p>
 
-<h3>4.6. Описание на приложението</h3>
+<h3 style="break-before: page">4.6. Описание на приложението</h3>
 <p><b>Доброволец</b> (без профил): сканира QR кода или отваря връзката на мрежата и натиска „Включи се“. Избира мощност от 25 до 100&nbsp;% и спира с един бутон. Изчисленията спират сами, когато разделът е скрит или батерията е под 30&nbsp;% (в браузърите, които дават тези данни). На телефон страницата се добавя на началния екран и се отваря като приложение, с главен екран „Изчислява“.</p>
 <p><b>Училище</b> (собственик или администратор на мрежа): влиза в конзолата, създава мрежа („Кабинет 12“), задава правила – одобрение на всяко устройство, работно време и най-висока мощност – и показва QR кода. В „Задачи“ пуска изображение, обучение на невронни мрежи, разписание, файл със запитвания към езиков модел или собствена програма и следи изгледа на живо (фиг. 4). Всяка част се проверява от две устройства; ако на линия има само едно, задачата спира и конзолата го казва с думи. Собственикът може тогава да избере проверка с един резултат или да приеме резултатите, които чакат второ устройство (публичната мрежа няма такъв бутон – проверката е смисълът на показването ѝ). Наблюдателят вижда мрежата, без да може да я променя.</p>
 <figure>
@@ -286,14 +289,14 @@ svg text { font-family: "Times New Roman", Times, serif; }
 <figcaption>Фиг. 5. Вляво: разписание на паралелка, намерено от устройствата на училището. Вдясно: телефон, който изчислява, с бутон за спиране.</figcaption>
 </figure>
 <p><b>Стартиране и поддръжка.</b> Потребителите не инсталират нищо – нужен е само браузър. Сървърът се стартира с една команда (<code>just stack</code>, т.е. <code>docker compose</code>) на всяка машина с Docker и има нужда от HTTPS адрес; <code>just deploy</code> обновява работещия сървър. Тестовите профили за всяка роля са в таблицата по-долу.</p>
-<p class="flush"><b>Тестови профили.</b> Всички влизат на <b>https://swarmrelay.duckdns.org/login</b>. Профилите се правят от администратора на платформата с покани (<code>/app/admin</code> за платформата, „Членове“ за мрежата); мрежата за изпитване се казва „Защита“.</p>
-<table>
-<tr><th style="width:21%">Роля</th><th style="width:44%">Какво може</th><th>Вход</th></tr>
-<tr><td>Доброволец</td><td>Включва устройство и изчислява; спира го с един бутон. Няма профил.</td><td>QR кодът на мрежата „Защита“ или връзката <code>/join/&lt;код&gt;</code>; без парола</td></tr>
-<tr><td>Администратор на платформата</td><td>Създава покани и профили; управлява публичната „Обща мрежа“.</td><td><span class="fill">[имейл]</span> / <span class="fill">[парола]</span></td></tr>
-<tr><td>Собственик на мрежа</td><td>Всичко в мрежата, включително членове и роли, и изтриване на мрежата.</td><td><span class="fill">[имейл]</span> / <span class="fill">[парола]</span></td></tr>
-<tr><td>Администратор на мрежа</td><td>Пуска и спира задачи, одобрява и премахва устройства, променя правилата, ключове за програмния интерфейс, панел за устойчивост (измамници, изключване на устройство).</td><td><span class="fill">[имейл]</span> / <span class="fill">[парола]</span></td></tr>
-<tr><td>Наблюдател</td><td>Вижда мрежата, устройствата, задачите и изгледа на живо; нищо не променя.</td><td><span class="fill">[имейл]</span> / <span class="fill">[парола]</span></td></tr>
+<p class="flush"><b>Тестови профили</b> (вход на <b>https://swarmrelay.duckdns.org/login</b>; мрежа „Защита“):</p>
+<table class="acc">
+<tr><th style="width:24%">Роля</th><th style="width:25%">Може</th><th>Имейл</th><th style="width:19%">Парола</th></tr>
+<tr><td>Доброволец</td><td>изчислява</td><td colspan="2">без профил: <code>/join/КОД</code> или QR кодът</td></tr>
+<tr><td>Админ. платформа</td><td>покани, профили</td><td><span class="fill">[имейл]</span></td><td><span class="fill">[парола]</span></td></tr>
+<tr><td>Собственик на мрежа</td><td>всичко</td><td><span class="fill">[имейл]</span></td><td><span class="fill">[парола]</span></td></tr>
+<tr><td>Админ. на мрежа</td><td>задачи, правила</td><td><span class="fill">[имейл]</span></td><td><span class="fill">[парола]</span></td></tr>
+<tr><td>Наблюдател</td><td>само гледа</td><td><span class="fill">[имейл]</span></td><td><span class="fill">[парола]</span></td></tr>
 </table>
 
 <h3>4.7. Заключение</h3>

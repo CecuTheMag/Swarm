@@ -164,13 +164,14 @@ for line in open(os.environ["FILE"], encoding="utf-8"):
         k, v = line.rstrip("\n").split("=", 1)
         creds[k] = v.strip("'")
 html = open(os.environ["SRC"], encoding="utf-8").read()
-pair = re.compile(r'<span class="fill">\[имейл\]</span> / <span class="fill">\[парола\]</span>')
+pair = re.compile(r'<td><span class="fill">\[имейл\]</span></td><td><span class="fill">\[парола\]</span></td>')
 order = ["ADMIN", "OWNER", "ADMIN_NET", "VIEWER"]
 assert len(pair.findall(html)) == len(order), "the table's placeholders changed"
 for key in order:
-    html = pair.sub(f'<code>{creds[key + "_EMAIL"]}</code> / <code>{creds[key + "_PASSWORD"]}</code>', html, count=1)
-html = html.replace("QR кодът на мрежата „Защита“ или връзката <code>/join/&lt;код&gt;</code>; без парола",
-                    f'QR кодът на мрежата „Защита“ или <code>{os.environ["JOIN_LINK"]}</code>; без парола')
+    html = pair.sub(f'<td><code>{creds[key + "_EMAIL"]}</code></td><td><code>{creds[key + "_PASSWORD"]}</code></td>', html, count=1)
+link = "<code>/join/КОД</code>"
+assert link in html, "the volunteer row changed"
+html = html.replace(link, f'<code>{os.environ["JOIN_LINK"]}</code>')
 open(os.environ["DST"], "w", encoding="utf-8").write(html)
 PY
   "$CHROME" --headless=new --disable-gpu --no-pdf-header-footer \
