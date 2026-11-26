@@ -89,6 +89,11 @@ admin-create email server=env_var_or_default("SWARM_SERVER", ""):
 test-accounts:
     bash scripts/test-accounts.sh
 
+# The documentation PDF with the authors' details and the test logins filled in, built
+# outside the repository (scripts/build-documentation.sh says where it reads them from).
+documentation:
+    bash scripts/build-documentation.sh
+
 # Public HTTPS for the deployed server through Tailscale Funnel. The first run prints a
 # login link that adds the server to your tailnet; run it again to get the address.
 public server=env_var_or_default("SWARM_SERVER", ""):

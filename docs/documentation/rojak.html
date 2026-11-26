@@ -8,6 +8,7 @@
 @page {
   size: A4;
   margin: 18mm 20mm 16mm 20mm;
+  @top-right { content: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 150 26%22 width=%22150%22 height=%2226%22%3E%3Cg transform=%22scale(0.40625)%22%3E%3Cpath d=%22M32 6l11 6.4v12.7L32 31.5l-11-6.4V12.4z%22 fill=%22%23f5a524%22/%3E%3Cpath d=%22M18.7 30.5l11 6.4v12.7l-11 6.4-11-6.4V36.9z%22 fill=%22%23f5a524%22 fill-opacity=%22.78%22/%3E%3Cpath d=%22M45.3 30.5l11 6.4v12.7l-11 6.4-11-6.4V36.9z%22 fill=%22%23f5a524%22 fill-opacity=%22.55%22/%3E%3C/g%3E%3Ctext x=%2232%22 y=%2218%22 font-family=%22Times New Roman, serif%22 font-size=%2213%22 letter-spacing=%221.6%22 fill=%22%238a6a2a%22%3E%D0%A0%D0%9E%D0%AF%D0%9A%3C/text%3E%3C/svg%3E"); vertical-align: bottom; padding-bottom: 2mm; opacity: 0.6; }
   @bottom-center { content: counter(page) " / " counter(pages); font-family: "Times New Roman", Times, serif; font-size: 10pt; color: #555; }
 }
 * { box-sizing: border-box; }
@@ -32,9 +33,11 @@ img.shot { width: 74% !important; border: 0.6pt solid #999; }
 .shots img { border: 0.6pt solid #999; }
 .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 10pt; }
 code { font-family: "Courier New", monospace; font-size: 11pt; }
+
 table.acc { line-height: 1.15; }
 table.acc td, table.acc th { padding: 1pt 4pt; font-size: 11pt; }
 table.acc code { font-size: 9.5pt; word-break: break-all; }
+table.api code { font-size: 9pt; }
 svg text { font-family: "Times New Roman", Times, serif; }
 </style>
 </head>
@@ -47,10 +50,10 @@ svg text { font-family: "Times New Roman", Times, serif; }
 <p class="flush">Рояк – разпределена система, която превръща неизползваните училищни компютри и личните устройства в общ изчислителен ресурс чрез уеб браузъра (WebGPU и WebAssembly). Направление: Разпределени приложения. Адрес: <b>https://swarmrelay.duckdns.org</b>.</p>
 
 <h2>2. Автори</h2>
-<p class="flush"><span class="fill">[Трите имена]</span>, тел. <span class="fill">[телефон]</span>, <span class="fill">[имейл]</span>, <span class="fill">[училище, населено място]</span>, <span class="fill">[клас]</span> клас</p>
+<p class="flush"><span class="fill" data-k="AUTHOR_NAME">[Трите имена]</span>, тел. <span class="fill" data-k="AUTHOR_PHONE">[телефон]</span>, <span class="fill" data-k="AUTHOR_EMAIL">[имейл]</span>, <span class="fill" data-k="AUTHOR_SCHOOL">[училище, населено място]</span>, <span class="fill" data-k="AUTHOR_CLASS">[клас]</span> клас</p>
 
 <h2>3. Ръководител</h2>
-<p class="flush"><span class="fill">[Трите имена]</span>, тел. <span class="fill">[телефон]</span>, <span class="fill">[имейл]</span>, <span class="fill">[длъжност]</span></p>
+<p class="flush"><span class="fill" data-k="SUPERVISOR_NAME">[Трите имена]</span>, тел. <span class="fill" data-k="SUPERVISOR_PHONE">[телефон]</span>, <span class="fill" data-k="SUPERVISOR_EMAIL">[имейл]</span>, <span class="fill" data-k="SUPERVISOR_POSITION">[длъжност]</span></p>
 
 <h2>4. Резюме</h2>
 
@@ -74,7 +77,7 @@ svg text { font-family: "Times New Roman", Times, serif; }
 <li><b>21 ноември:</b> езикови модели на роя – малък модел (SmolLM2-360M) отговаря на файл със запитвания в браузърите на устройствата; всяко устройство проверява при зареждане с известен отговор дали изчислява модела вярно.</li>
 <li><b>23–25 ноември:</b> приложение за телефон (страницата се добавя на началния екран и се отваря като приложение), изглед на живо на началната страница, по-малко движение и по-бърз интерфейс; езиковите модели се изпълняват само на компютри; конзолата казва кога задача чака второ устройство за проверка и дава избор на проверка („1 или 2 устройства“); собственикът може да приеме резултатите, които чакат второ устройство.</li>
 </ul>
-<p>Роли на авторите: <span class="fill">[Име]</span> – координатор, проверка на резултатите, база данни и внедряване; <span class="fill">[Име]</span> – изчисления в браузъра (WebGPU, WebAssembly) и уеб интерфейс.</p>
+<p>Роля на автора: <span class="fill" data-k="AUTHOR_SHORT">[Име]</span> – цялата разработка: координатор, проверка на резултатите, база данни и внедряване; изчисления в браузъра (WebGPU, WebAssembly) и уеб интерфейс; тестове и документация.</p>
 
 <h3>4.3. Ниво на сложност на проекта</h3>
 <ul>
@@ -216,7 +219,39 @@ svg text { font-family: "Times New Roman", Times, serif; }
 <tr><td>GitHub Actions</td><td>Всяка промяна минава автоматичните тестове.</td></tr>
 </table>
 <p><b>Алгоритми:</b> метод Монте Карло (пресмятане на π); проследяване на лъчи за реалистично изображение [4]; обучение на невронни мрежи само с цели числа върху ръкописните цифри MNIST и търсене на най-добрите им параметри; търсене на седмично разписание със закъсняло приемане (late acceptance hill climbing) [3]; отговори на запитвания от малък езиков модел (SmolLM2-360M, ONNX Runtime Web с WebGPU), по едно запитване на единица; проверка на резултатите с кворум и контролни задачи [2] и репутация като средна стойност на бета разпределение.</p>
+<p><b>Програмен интерфейс.</b> Задачите се пускат и следят и от скрипт: ключ на мрежата в заглавието <code>Authorization: Bearer …</code> дава права на администратор само в нейната мрежа. Устройствата и изгледът на живо говорят по WebSocket (<code>/ws/worker</code>, <code>/ws/networks/{id}/live</code>), а всичко останало е REST с JSON.</p>
+<table class="acc api">
+<tr><th style="width:49%">Заявка</th><th>Какво прави</th><th style="width:17%">Достъп</th></tr>
+<tr><td><code>POST /api/auth/login</code></td><td>вход, сесия в бисквитка</td><td>всеки</td></tr>
+<tr><td><code>GET /api/join/{код}</code></td><td>данни за включване</td><td>всеки</td></tr>
+<tr><td><code>POST /api/networks</code></td><td>нова мрежа</td><td>профил</td></tr>
+<tr><td><code>POST /api/networks/{id}/keys</code></td><td>ключ за скрипт</td><td>админ</td></tr>
+<tr><td><code>POST /api/networks/{id}/jobs</code></td><td>пуска задача (шаблон, параметри)</td><td>админ, ключ</td></tr>
+<tr><td><code>GET /api/networks/{id}/jobs/{job}</code></td><td>състояние и резултат</td><td>наблюдател</td></tr>
+<tr><td><code>POST /api/networks/{id}/jobs/{job}/cancel</code></td><td>спира задача</td><td>админ, ключ</td></tr>
+</table>
 <p><b>Тестване:</b> 291 теста на Rust, модулни тестове на интерфейса (Vitest) и браузърни тестове (Playwright) в Chromium с и без WebGPU, Firefox и WebKit (браузърната машина на Safari) при всяка промяна. На 4 ноември 2026 г. 13 компютъра в училищен кабинет (Intel i3, 4&nbsp;GB, Windows 10) дадоха побитово еднакви резултати със сървъра: 107 милиарда проби по метода Монте Карло за 43&nbsp;s, изображение 1920×1080 за около 70&nbsp;s и 240 обучения на невронна мрежа за 112&nbsp;s с точност 93,7&nbsp;% върху ръкописни цифри. Измамник беше блокиран 3,4&nbsp;s след включването си, а във всички изпитания с измамници крайният резултат беше верен.</p>
+<p class="flush" style="break-after: avoid"><b>Измерени резултати</b> (методът и условията на всяко число са в <code>docs/measurements.md</code>):</p>
+<table class="acc res">
+<tr><th style="width:36%">Изпитване</th><th>Резултат</th></tr>
+<tr><td>13 компютъра в кабинета, без графичен процесор</td><td>изображение 1920×1080 за около 70&nbsp;s; 107 милиарда проби за π за 43&nbsp;s; побитово еднакви със сървъра</td></tr>
+<tr><td>Телефон Nothing Phone (1)</td><td>800 милиона проби за π в секунда, еднакво през 10,6 минути работа</td></tr>
+<tr><td>MacBook Pro, Apple M1 Max</td><td>7,4 милиарда проби за π в секунда в WebKit, без забавяне през 10 минути</td></tr>
+<tr><td>1000 симулирани устройства</td><td>около 1000 резултата в секунда, нито едно отпаднало устройство</td></tr>
+<tr><td>Измамник; двама в сговор</td><td>блокиран за 3,1–3,4&nbsp;s; двамата в сговор – за около 70&nbsp;s, а приетите им части са преизчислени за 11&nbsp;s</td></tr>
+<tr><td>Цена на проверката</td><td>1,20–1,26 изчисления на част вместо 2,0, защото на доказалите се устройства се вярва</td></tr>
+<tr><td>Езиков модел SmolLM2-360M</td><td>50 въпроса за около 24&nbsp;s на лаптоп; 30 от 30 отговора на телефона съвпаднаха с тези на лаптоп</td></tr>
+</table>
+<p class="flush" style="break-after: avoid"><b>Автоматични тестове</b> (при всяка промяна; <code>docs/tests/automated-suites.md</code>):</p>
+<table class="acc res">
+<tr><th style="width:27%">Област</th><th>Какво се доказва</th></tr>
+<tr><td>Ядра и шаблони</td><td>резултатите са равни на независимо изчислени еталони</td></tr>
+<tr><td>Проверка</td><td>измамникът е хванат и блокиран, работата му е преизчислена</td></tr>
+<tr><td>Профили и мрежи</td><td>роли на всеки маршрут, изолация между мрежите</td></tr>
+<tr><td>Разписания</td><td>всяко правило за цена; фалшиво разписание се отхвърля</td></tr>
+<tr><td>Езикови модели</td><td>устройство, което смята модела грешно, не получава единици</td></tr>
+<tr><td>Браузър (Playwright)</td><td>включване, изобразяване, хаос, изгубена и върната връзка</td></tr>
+</table>
 <figure>
 <div class="charts">
 <svg viewBox="0 0 480 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Цена на най-доброто разписание спрямо броя търсения">

@@ -149,34 +149,8 @@ NETWORK_ID='$NETWORK_ID'
 JOIN_CODE='$JOIN_CODE'
 EOF
 
-# 5. The documentation with the four logins filled in, built outside the repository.
-DOC_DIR="$(cd "$(dirname "$0")/../docs/documentation" && pwd)"
-CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
-if [ -x "$CHROME" ] && command -v python3 >/dev/null; then
-  rm -rf "$OUT_DIR/doc"
-  mkdir -p "$OUT_DIR/doc"
-  cp -R "$DOC_DIR/img" "$OUT_DIR/doc/img"
-  FILE="$FILE" SRC="$DOC_DIR/rojak.html" DST="$OUT_DIR/doc/rojak.html" JOIN_LINK="$JOIN_LINK" python3 - <<'PY'
-import os, re
-creds = {}
-for line in open(os.environ["FILE"], encoding="utf-8"):
-    if "=" in line and not line.startswith("#"):
-        k, v = line.rstrip("\n").split("=", 1)
-        creds[k] = v.strip("'")
-html = open(os.environ["SRC"], encoding="utf-8").read()
-pair = re.compile(r'<td><span class="fill">\[имейл\]</span></td><td><span class="fill">\[парола\]</span></td>')
-order = ["ADMIN", "OWNER", "ADMIN_NET", "VIEWER"]
-assert len(pair.findall(html)) == len(order), "the table's placeholders changed"
-for key in order:
-    html = pair.sub(f'<td><code>{creds[key + "_EMAIL"]}</code></td><td><code>{creds[key + "_PASSWORD"]}</code></td>', html, count=1)
-link = "<code>/join/КОД</code>"
-assert link in html, "the volunteer row changed"
-html = html.replace(link, f'<code>{os.environ["JOIN_LINK"]}</code>')
-open(os.environ["DST"], "w", encoding="utf-8").write(html)
-PY
-  "$CHROME" --headless=new --disable-gpu --no-pdf-header-footer \
-    --print-to-pdf="$OUT_DIR/Рояк-с-профили.pdf" "file://$OUT_DIR/doc/rojak.html" >/dev/null 2>&1 || true
-fi
+# 5. The documentation with the logins (and the authors' details) filled in, outside the repository.
+OUT_DIR="$OUT_DIR" bash "$(dirname "$0")/build-documentation.sh" || echo "The documentation was not built." >&2
 
 cat <<EOF
 
@@ -189,4 +163,3 @@ Test accounts on $BASE
 
 Saved in $FILE
 EOF
-[ -f "$OUT_DIR/Рояк-с-профили.pdf" ] && echo "Documentation with these logins: $OUT_DIR/Рояк-с-профили.pdf"
