@@ -83,6 +83,12 @@ admin-create email server=env_var_or_default("SWARM_SERVER", ""):
     @test -n "{{server}}" || { echo "usage: just admin-create EMAIL user@host (or set SWARM_SERVER)"; exit 1; }
     ssh -t {{server}} 'cd ~/swarm && docker compose --env-file ~/swarm.env -f deploy/compose.server.yaml exec coordinator coordinator admin-create {{email}}'
 
+# One test account per role for the jury (owner, admin and viewer of a network), made
+# through the server's API and filled into the documentation outside the repository
+# (scripts/test-accounts.sh explains what it needs).
+test-accounts:
+    bash scripts/test-accounts.sh
+
 # Public HTTPS for the deployed server through Tailscale Funnel. The first run prints a
 # login link that adds the server to your tailnet; run it again to get the address.
 public server=env_var_or_default("SWARM_SERVER", ""):
