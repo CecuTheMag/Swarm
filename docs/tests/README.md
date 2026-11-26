@@ -29,3 +29,10 @@ home, the school's own network.
 | Page | Result |
 |---|---|
 | [earlier-tests.md](earlier-tests.md) | Phones, the old laptop, load tests up to 1 000 devices, the 30-device rehearsal |
+
+## Plans for real devices
+
+| Page | What |
+|---|---|
+| [lab-session.md](lab-session.md) | The plan for the next school lab session: which checks come first |
+| [macbook.md](macbook.md) | Safari, Metal, an iPhone through Web Inspector, the presenting laptop |
