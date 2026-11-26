@@ -2,7 +2,7 @@
 
 A plan for what the new MacBook does for Рояк between now (10 November 2026) and
 registration (25 November), and after it. It turns open items of
-[roadmap.md](roadmap.md) (3. Real devices, 4. Registration material, 5. Defense run
+[roadmap.md](../roadmap.md) (3. Real devices, 4. Registration material, 5. Defense run
 sheet) into concrete steps that this machine can do and the ThinkPad could not.
 
 ## What the machine is
@@ -13,14 +13,14 @@ day.
 
 ## Why it matters
 
-Every WebGPU number in [measurements.md](measurements.md) so far comes from one Adreno
+Every WebGPU number in [measurements.md](../measurements.md) so far comes from one Adreno
 phone or from SwiftShader, a GPU emulated on the processor. The MacBook adds:
 
 1. **A real desktop GPU through Metal.** The first one in the log.
 2. **Safari 26 with WebGPU.** It runs the same engine as the iPhone. The README's support
    list (section 23) names Safari 26 on macOS and iOS, and Firefox 145+ on Apple-silicon
    Macs, and none of them has been tested on a real device ("Not yet tested on real
-   devices" under [Browser engines](measurements.md#browser-engines-automated-tests)).
+   devices" under [Browser engines](../measurements.md#browser-engines-automated-tests)).
 3. **Three independent shader compilers on one GPU.** Safari (WebKit's WGSL compiler),
    Chrome and Edge (Tint) and Firefox (naga) each translate the same WGSL to Metal in their
    own way. Spec 0011 says a configuration trained on "Apple silicon" ends with the same
@@ -31,7 +31,7 @@ phone or from SwiftShader, a GPU emulated on the processor. The MacBook adds:
    the README's electricity question (section on objections) a measured answer, and starts
    the roadmap's "energy estimate per job from measured device power".
 6. **A presenting laptop.** It is fast enough to build and run the whole stack (Plan B
-   and C in [demo-day.md](demo-day.md)) and to drive the projector all day on battery.
+   and C in [demo-day.md](../competition/demo-day.md)) and to drive the projector all day on battery.
 
 ## State on 10 November
 
@@ -82,12 +82,12 @@ The tooling was written on Linux. Known and likely problems:
 | Example programs are checked for x86-64 Linux in CI | `ci.yml` runs `cargo clippy/test --target x86_64-unknown-linux-gnu` | Locally use `--target aarch64-apple-darwin`; `just programs` needs no change |
 
 Done when a deploy from the Mac restarts the server cleanly, `just e2e` and the WebKit
-project pass natively, and [Browser engines](measurements.md#browser-engines-automated-tests)
+project pass natively, and [Browser engines](../measurements.md#browser-engines-automated-tests)
 has rows for macOS (Chromium, Firefox, WebKit, natively on Apple silicon).
 
 ## Phase 2: the Mac as a measured device (12–13 November)
 
-Everything here goes into [measurements.md](measurements.md) with the date, the browser
+Everything here goes into [measurements.md](../measurements.md) with the date, the browser
 version and the macOS version. Run on mains power, with Low Power Mode off, and with
 `caffeinate -i` in a terminal so the Mac does not sleep.
 
@@ -101,7 +101,7 @@ For each of Safari, Chrome, Edge and Firefox, open `/selftest`:
   network (`templates/nn/vectors.json`: accuracy, loss curve and SHA-256 of the final
   weights) and the timetable search.
 
-That gives four new rows in [WebGPU support by device](measurements.md#webgpu-support-by-device).
+That gives four new rows in [WebGPU support by device](../measurements.md#webgpu-support-by-device).
 The neural-network rows decide whether spec 0011's sentence about Apple silicon stays.
 A mismatch in one browser is a bug found before the jury finds it. Keep the failing
 vector and the browser version.

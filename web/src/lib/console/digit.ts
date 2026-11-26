@@ -19,7 +19,7 @@ export const PENS: Record<string, Pen> = {
 	// crates/kernels/src/nn/glyphs.rs: the middle of its widths (12 × 0.045..0.13),
 	// centred by the box.
 	glyphs: { halfWidth: 1.05, fill: 0.85, byMass: false },
-	// MNIST: a 20 × 20 box in 28 × 28, centred by mass, halved (tools/pack_mnist.py).
+	// MNIST: a 20 × 20 box in 28 × 28, centred by mass, halved (scripts/pack_mnist.py).
 	mnist: { halfWidth: 0.8, fill: 10 / 12, byMass: true }
 };
 

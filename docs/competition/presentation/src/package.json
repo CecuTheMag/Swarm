@@ -2,7 +2,7 @@
   "name": "swarm-presentation",
   "private": true,
   "type": "module",
-  "description": "Builds the defense deck (docs/presentation/Рояк.pptx)",
+  "description": "Builds the defense deck (docs/competition/presentation/Рояк.pptx)",
   "scripts": {
     "build": "node build.mjs"
   },

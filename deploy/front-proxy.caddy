@@ -1,5 +1,5 @@
 # Public HTTPS for Swarm on a host whose ports 80 and 443 already belong to another
-# Caddy (docs/demo-day.md, Plan A). Paste this block into that Caddyfile and restart
+# Caddy (docs/competition/demo-day.md, Plan A). Paste this block into that Caddyfile and restart
 # or reload it: Caddy gets and renews the Let's Encrypt certificate by itself, as long
 # as the name points to the host and port 80 reaches it. Replace the name with yours,
 # and the upstream with the address at which that Caddy reaches Swarm's proxy

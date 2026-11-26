@@ -742,7 +742,7 @@
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 	}
-	/* ---------- Phones: „Рояк в джоба“ (docs/design-system.md) ---------- */
+	/* ---------- Phones: „Рояк в джоба“ (docs/design/design-system.md) ---------- */
 	@media (max-width: 760px) {
 		.home {
 			padding-top: 0;

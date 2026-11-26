@@ -1,6 +1,6 @@
 # Roadmap
 
-What is left between today's grid and the full vision ([vision.md](vision.md)), in build order. Each
+What is left between today's grid and the full vision ([vision.md](design/vision.md)), in build order. Each
 item gets its own spec in `docs/specs/` before work starts; this file only orders them.
 
 Status on 2026-11-08: specs 0001–0008 and 0010–0016 implemented (π and path-tracer
@@ -36,22 +36,22 @@ accounts, devices, the school.
      measurements on it and on a public benchmark (XHSTT) in `docs/measurements.md`.
 3. **Real devices (owner)** — a phone on mobile data, an iPhone (Safari's WebGPU), wake
    lock and losing signal on a real phone, a program and a timetable job on a phone, the
-   laptop fallback (`docs/demo-day.md` Plan B); results in `docs/measurements.md`.
+   laptop fallback (`docs/competition/demo-day.md` Plan B); results in `docs/measurements.md`.
    The MacBook's part (Safari, Metal, an iPhone through Web Inspector, the presenting
-   laptop) is planned in `docs/macbook.md`.
+   laptop) is planned in `docs/tests/macbook.md`.
 4. ~~**Registration material**~~ — done 21 November: the annotation in
-   [registration.md](registration.md), around what Рояк is now, with measured numbers
+   [registration.md](competition/registration.md), around what Рояк is now, with measured numbers
    only; the school agreed to the lab run (4 November); the lab's idle time is the
    author's estimate from its timetable (about 75 %), still to be logged on the PCs.
-5. **Defense run sheet** — written 21 November (`docs/demo-day.md`, „The 20 minutes“);
-   the deck and the full script were added 23 November (`docs/presentation/`: `Рояк.pptx`
+5. **Defense run sheet** — written 21 November (`docs/competition/demo-day.md`, „The 20 minutes“);
+   the deck and the full script were added 23 November (`docs/competition/presentation/`: `Рояк.pptx`
    with Morph transitions, `Рояк.pdf` as a fallback, `сценарий.md` timed to the regulation's
    20 minutes and mapped to its scoring protocol);
    still to rehearse and time: the committee joins by QR, a
    timetable for a real school is searched live on their phones, a cheater is caught,
-   a device is switched off mid-job; `docs/demo-day.md` updated and timed.
+   a device is switched off mid-job; `docs/competition/demo-day.md` updated and timed.
 6. ~~**README for the jury**~~ — done 21 November, in Bulgarian; the original design
-   moved to [vision.md](vision.md) without the catalog metadata.
+   moved to [vision.md](design/vision.md) without the catalog metadata.
 6a. **AI on the swarm** — every capable device runs a whole small model in the browser
    (a language model, speech recognition), and the swarm spreads many requests over
    them: a lesson transcribed, 2 000 essays summarised ([spec 0017](specs/0017-ai-on-the-swarm.md)); verification of
@@ -88,9 +88,9 @@ first time.
 7. ~~**Chaos panel**~~ — done (spec 0008): in a network's live view, switch off or cut off a
    device, add a cheater or colluders; counters for what was caught and redone.
 8. **Real devices** — a phone on mobile data, an iPhone, wake lock and losing signal on
-   a real phone, the laptop fallback (docs/demo-day.md Plan B); results go into
+   a real phone, the laptop fallback (docs/competition/demo-day.md Plan B); results go into
    docs/measurements.md.
-9. ~~**Registration material**~~ — done: [registration.md](registration.md).
+9. ~~**Registration material**~~ — done: [registration.md](competition/registration.md).
 
 ## 2. Full version (December 2026 – February 2027)
 

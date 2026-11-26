@@ -32,7 +32,7 @@ The coordinator checks every module at upload (`crates/programs`): at most 4 MiB
 WebAssembly 2.0 (fixed-width SIMD included; threads, relaxed SIMD, 64-bit memory,
 exceptions, GC and tail calls refused); no imports; one memory, exported, with a maximum
 of at most 256 MiB; the four exports with exactly these types. Each refusal says what to
-change. `sdk/rust` provides a one-line macro; `docs/programs.md` is the guide.
+change. `sdk/rust` provides a one-line macro; `docs/design/programs.md` is the guide.
 
 Programs belong to a network: its admins upload them, its viewers see them. A network
 keeps at most 50; the same module uploaded twice is one program.

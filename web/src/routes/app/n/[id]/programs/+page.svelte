@@ -153,7 +153,8 @@
 		<p class="muted small">
 			Изисквания: без импорти, памет с обявен максимум до 256 MiB, изнесени <code>memory</code>,
 			<code>swarm_input</code>, <code>swarm_run</code> и <code>swarm_output</code>. Как се пише
-			програма: <code>docs/programs.md</code>, пример на Rust в <code>examples/programs</code>.
+			програма: <code>docs/design/programs.md</code>, пример на Rust в
+			<code>examples/programs</code>.
 		</p>
 	</section>
 {/if}

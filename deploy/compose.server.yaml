@@ -3,7 +3,7 @@
 #
 #   http://<server>:7780            site, worker page, dashboard (LAN)
 #   https://<your domain>           public HTTPS from a Caddy in front of port 7780
-#                                   (deploy/front-proxy.caddy, docs/demo-day.md)
+#                                   (deploy/front-proxy.caddy, docs/competition/demo-day.md)
 #   --profile public                + public HTTPS through Tailscale Funnel (`just public`)
 #   --profile fleet                 + simulated CPU workers on the server
 #

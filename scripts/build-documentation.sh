@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the documentation for the jury: docs/documentation/rojak.html with the authors'
+# Builds the documentation for the jury: docs/competition/documentation/rojak.html with the authors'
 # details and the test logins filled in, printed to a PDF outside the repository (the
 # repository is public; the committed documentation keeps its yellow placeholders).
 #
@@ -14,7 +14,7 @@
 set -euo pipefail
 
 OUT_DIR="${OUT_DIR:-$HOME/rojak-jury}"
-DOC_DIR="$(cd "$(dirname "$0")/../docs/documentation" && pwd)"
+DOC_DIR="$(cd "$(dirname "$0")/../docs/competition/documentation" && pwd)"
 CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
 [ -x "$CHROME" ] || { echo "Chrome not found at $CHROME (set CHROME)" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "python3 is needed" >&2; exit 1; }

@@ -43,7 +43,7 @@ Everyone sees the outcome: the feed and the honeycomb as before, and once a chea
 is caught a counter under the image — cheaters caught, wrong results rejected, units
 computed again — with the panel adding devices that left and units returned.
 
-The run sheet in `docs/demo-day.md` uses the panel instead of `just cheater` (which
+The run sheet in `docs/competition/demo-day.md` uses the panel instead of `just cheater` (which
 stays, for a terminal).
 
 ## Tests

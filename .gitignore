@@ -33,5 +33,8 @@ playwright-report/
 # Model files (spec 0017): `just models` downloads them
 /models/
 
-# Presentation build (docs/presentation/src: npm run build)
-/docs/presentation/build/
+# Presentation build (docs/competition/presentation/src: npm run build)
+/docs/competition/presentation/build/
+
+# Office lock files
+~$*

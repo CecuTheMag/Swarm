@@ -1,5 +1,5 @@
 /*
- * Рояк design system (docs/design-system.md): tokens first, then base elements, then
+ * Рояк design system (docs/design/design-system.md): tokens first, then base elements, then
  * components. Pages use these classes and tokens; a page's own <style> handles layout.
  */
 
@@ -356,7 +356,7 @@ html {
 
 /* ---------- Glass ---------- */
 
-/* Depth has three levels (docs/design-system.md): the page; cards, solid, for content
+/* Depth has three levels (docs/design/design-system.md): the page; cards, solid, for content
    that sits on the page; glass, blurred, only for layers that float over moving content. */
 .glass {
 	background: var(--glass);
@@ -855,7 +855,7 @@ th {
 }
 
 /* Phones behave like an app: content is simply there, it does not fade up as it
-   scrolls in (docs/design-system.md, „Рояк в джоба“). */
+   scrolls in (docs/design/design-system.md, „Рояк в джоба“). */
 @media (max-width: 760px) {
 	.js [data-reveal] {
 		opacity: 1;

@@ -9,7 +9,7 @@ export { default as nnVectors } from '../../../templates/nn/vectors.json';
 // The timetable solver is Rust compiled to WebAssembly; its vectors pin its behaviour,
 // and their hash is the template's (spec 0013).
 export { default as ttVectorsText } from '../../../templates/tt/vectors.json?raw';
-// `mnist` packed at 14 × 14 (tools/pack_mnist.py); devices download it once, cached.
+// `mnist` packed at 14 × 14 (scripts/pack_mnist.py); devices download it once, cached.
 export { default as mnistUrl } from '../../../templates/nn/mnist14.bin?url';
 // The model catalog of language-model units (spec 0017): its hash is the template's, and
 // every model file is checked against the SHA-256 it lists.

@@ -2,7 +2,7 @@
 # images from MNIST's training set and 2 000 validation images from its test set.
 # Layout: training pixels, validation pixels, training labels, validation labels.
 #
-#   python3 tools/pack_mnist.py <folder with the four MNIST .gz files> templates/nn/mnist14.bin
+#   python3 scripts/pack_mnist.py <folder with the four MNIST .gz files> templates/nn/mnist14.bin
 #
 # The files (from any MNIST mirror, e.g. storage.googleapis.com/cvdf-datasets/mnist/) and
 # their MD5 sums: train-images-idx3-ubyte.gz f68b3c2dcbeaaa9fbdd348bbdeb94873,

@@ -1,7 +1,7 @@
 //! `mnist`: real handwritten digits, 14 × 14 (spec 0011).
 //!
 //! MNIST (Y. LeCun, C. Cortes, C. J. C. Burges; CC BY-SA 3.0) packed by
-//! `tools/pack_mnist.py`: each 28 × 28 image averaged over 2 × 2 blocks, rounded; the
+//! `scripts/pack_mnist.py`: each 28 × 28 image averaged over 2 × 2 blocks, rounded; the
 //! first 10 000 images of MNIST's training set for training and the first 2 000 of its
 //! test set, written by different people, for validation. The file is pinned by
 //! [`SHA256`]: every device trains on exactly these bytes.

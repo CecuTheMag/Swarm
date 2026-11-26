@@ -615,7 +615,7 @@
 		color: var(--brand-ink);
 	}
 
-	/* ---------- Phones: the app's main screen (docs/design-system.md) ---------- */
+	/* ---------- Phones: the app's main screen (docs/design/design-system.md) ---------- */
 	@media (max-width: 760px) {
 		.worker {
 			padding-top: var(--s-3);

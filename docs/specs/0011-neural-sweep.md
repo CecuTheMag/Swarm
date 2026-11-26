@@ -11,7 +11,7 @@ learning rate, batch size, training length) and reports how well it did; the con
 shows a leaderboard that fills in live, the learning curves, and the best model, which
 can be downloaded.
 
-It is the useful job the original design promises ([vision.md](../vision.md), section 17: "a toy that computes π" kills
+It is the useful job the original design promises ([vision.md](../design/vision.md), section 17: "a toy that computes π" kills
 the project), and it keeps Рояк's defining property: **every result is checked**.
 
 ## The hard part, and the answer: training that is bit-exact on every device
@@ -61,7 +61,7 @@ device trains on exactly the same bytes, and nothing personal ever enters it.
 | Dataset | Content | Size | Phase |
 |---|---|---|---|
 | `glyphs` | Procedural handwritten-style digits 0–9 (strokes with random shift, scale, slant, thickness, noise and a stray stroke on half of them), 14×14, 4 096 train + 1 024 validation, generated from a fixed seed by the reference kernels | 0 bytes: every device generates it | 1 |
-| `mnist` | MNIST (CC BY-SA 3.0): real handwriting, 2 × 2 averaged to 14×14 (`tools/pack_mnist.py`); the first 10 000 of its training set to train, the first 2 000 of its test set (other writers) to validate | 2.4 MB (`templates/nn/mnist14.bin`, SHA-256 pinned in `kernels::nn::mnist`), downloaded once per device | 4 (done) |
+| `mnist` | MNIST (CC BY-SA 3.0): real handwriting, 2 × 2 averaged to 14×14 (`scripts/pack_mnist.py`); the first 10 000 of its training set to train, the first 2 000 of its test set (other writers) to validate | 2.4 MB (`templates/nn/mnist14.bin`, SHA-256 pinned in `kernels::nn::mnist`), downloaded once per device | 4 (done) |
 | `fashion` | Fashion-MNIST (MIT), same format | ~2.4 MB, cached | 4 |
 
 Pixels are `u8`; a fixed validation split is never trained on.

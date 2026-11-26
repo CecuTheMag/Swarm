@@ -64,7 +64,7 @@ deploy server=env_var_or_default("SWARM_SERVER", ""):
 # `--test` fetches the tiny test model the browser tests use instead.
 # Model files of the catalog (spec 0017) into models/, each checked against its SHA-256.
 models *args:
-    python3 tools/models.py {{args}}
+    python3 scripts/models.py {{args}}
 
 # Only what changed is sent; run `just models` first.
 # Copy the model files to the server (the coordinator serves them from ~/swarm-models).
@@ -83,6 +83,10 @@ admin-create email server=env_var_or_default("SWARM_SERVER", ""):
     @test -n "{{server}}" || { echo "usage: just admin-create EMAIL user@host (or set SWARM_SERVER)"; exit 1; }
     ssh -t {{server}} 'cd ~/swarm && docker compose --env-file ~/swarm.env -f deploy/compose.server.yaml exec coordinator coordinator admin-create {{email}}'
 
+# Copies the documentation, the presentation and the brochure PDFs to the repository root.
+materials:
+    bash scripts/materials.sh
+
 # One test account per role for the jury (owner, admin and viewer of a network), made
 # through the server's API and filled into the documentation outside the repository
 # (scripts/test-accounts.sh explains what it needs).
@@ -99,7 +103,7 @@ documentation:
 public server=env_var_or_default("SWARM_SERVER", ""):
     ssh {{server}} 'sh ~/swarm/deploy/tailscale/public.sh'
 
-# The fallback for a demo when the server or its connection is down (docs/demo-day.md).
+# The fallback for a demo when the server or its connection is down (docs/competition/demo-day.md).
 # Kept apart from the dev services; the submit password is in ~/swarm.env, created on
 # first use.
 # The whole server stack on this machine, on port 7780.
@@ -115,7 +119,7 @@ stack-down:
 fleet n="4" server=env_var_or_default("SWARM_SERVER", ""):
     ssh {{server}} 'cd ~/swarm && SIM_WORKERS={{n}} docker compose --env-file ~/swarm.env -f deploy/compose.server.yaml --profile fleet up -d sim {{ if n == "0" { "--scale sim=0" } else { "" } }}'
 
-# For the live demo (docs/demo-day.md); it stops by itself once blocked.
+# For the live demo (docs/competition/demo-day.md); it stops by itself once blocked.
 # A device that makes up every result joins the server's grid and is caught (spec 0004).
 cheater server=env_var_or_default("SWARM_SERVER", ""):
     ssh {{server}} 'docker run --rm --network swarm_default --label com.centurylinklabs.watchtower.enable=false swarm-coordinator sim-worker --url ws://coordinator:7700/ws/worker --cheat-rate 1 --delay-ms 1000'

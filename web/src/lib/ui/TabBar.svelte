@@ -4,7 +4,7 @@
 	import { account } from '#lib/account.svelte.ts';
 	import Icon from '#lib/ui/Icon.svelte';
 
-	// The phone's navigation (docs/design-system.md, „Рояк в джоба“): three places, the
+	// The phone's navigation (docs/design/design-system.md, „Рояк в джоба“): three places, the
 	// middle one the product's single action, raised where the thumb rests. Hidden from
 	// 761 px up, where the header carries the navigation.
 

@@ -14,13 +14,13 @@ How the address works: the DuckDNS name points to the home connection, whose rou
 forwards ports 80 and 443 to the server. On the server those ports belong to the Caddy
 of another project (Kant), which also serves `swarmrelay.duckdns.org`: it terminates
 TLS, renews the certificate by itself and passes everything, WebSockets included, to
-Swarm's own proxy on port 7780 ([`deploy/front-proxy.caddy`](../deploy/front-proxy.caddy)
+Swarm's own proxy on port 7780 ([`deploy/front-proxy.caddy`](../../deploy/front-proxy.caddy)
 is the block it holds). Swarm needs no port of its own beyond 7780 and no secret in the
 repository. If the home IP changes, DuckDNS must be updated (the router or a cron job
 does it with the DuckDNS token, which stays outside the repository).
 
 The Tailscale Funnel address `https://swarm.tail629f50.ts.net` (`just public`) stays as
-a second door. It is about ten times slower (≈2 MB/s against ≈20 MB/s, [measurements](measurements.md#public-address-relay-sweep-spec-0006))
+a second door. It is about ten times slower (≈2 MB/s against ≈20 MB/s, [measurements](../measurements.md#public-address-relay-sweep-spec-0006))
 and dropped a third of 30 connections, so use it only if the DuckDNS name fails.
 
 The day before:
@@ -50,9 +50,9 @@ green) if you want to show data entry; otherwise the 40-class example school is 
 | 2–3 | Join | „На живо“ with the QR code | "Please join." Count the honeycomb cells out loud as they appear |
 | 3–8 | Render and chaos | A render job's live view | The table below: the image fills in, a device switched off, a cheater caught |
 | 8–12 | A school's timetable | **Задачи** → „Разписание“ → „Примерно училище“, 40 classes → „Пусни“, then the job's timetable (or **Училища** → the school → „Търси разписание“) | "Each of your phones is searching this school's timetable right now. The coordinator checks every timetable you send, so a phone cannot lie about its score." Show the best timetable per class, move one hour by hand: the cost of the move shows before it is made. „Печат на паралелката“ |
-| 12–15 | How it works | [architecture.html](architecture.html) | Leases, the queue in PostgreSQL, two copies + known-answer units + reputation, why integers make results bit-exact. The lab numbers: 13 old PCs, 2.1 billion light paths in about 70 s, 0 disagreements |
+| 12–15 | How it works | [architecture.html](../design/architecture.html) | Leases, the queue in PostgreSQL, two copies + known-answer units + reputation, why integers make results bit-exact. The lab numbers: 13 old PCs, 2.1 billion light paths in about 70 s, 0 disagreements |
 | 15–16 | Safety | The worker page on a phone | Only known code runs; programs have no network, files or clock; 75 % power, pauses when hidden or under 30 % battery, „Спри“ |
-| 16–20 | Questions | — | Expected ones: [vision.md](vision.md#19-expected-jury-questions), plus "what next": AI models in the browser, spread over the room |
+| 16–20 | Questions | — | Expected ones: [vision.md](../design/vision.md#19-expected-jury-questions), plus "what next": AI models in the browser, spread over the room |
 
 Stop the render („Спри“ in **Задачи**) before starting the timetable: jobs run in order.
 A timetable search on „Нормално“ is 2 000 000 iterations per unit; how long the room

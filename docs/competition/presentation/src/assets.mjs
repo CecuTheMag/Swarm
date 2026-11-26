@@ -10,9 +10,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import * as Lu from "react-icons/lu";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const repo = path.resolve(here, "../../..");
+const repo = path.resolve(here, "../../../..");
 export const OUT = path.resolve(here, "../build/assets");
-const SHOTS = path.join(repo, "docs/documentation/img");
+const SHOTS = path.join(repo, "docs/competition/documentation/img");
 
 const W = 2560;
 const H = 1440;

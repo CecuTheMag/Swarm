@@ -1,12 +1,12 @@
 # Device test session
 
 How to put real devices (lab PCs, phones) on the grid and record what they do in
-[measurements.md](measurements.md).
+[measurements.md](../measurements.md).
 
 ## Always-on server
 
 The deployed stack (`just deploy`) is public at `https://swarmrelay.duckdns.org`
-(docs/demo-day.md, Plan A), and at `https://swarm.tail629f50.ts.net` through Tailscale
+(docs/competition/demo-day.md, Plan A), and at `https://swarm.tail629f50.ts.net` through Tailscale
 Funnel as a slower second address (`just public`; the first run prints a login link).
 Devices open a network's join link (or `/worker` for the public network) there:
 nothing to install, no dev server needed.
@@ -65,7 +65,7 @@ Optional: `/selftest` on one PC of each kind, for the speed it reports.
 ## School network (for spec 0009)
 
 Ten minutes on one lab PC, during the same visit. They decide whether a lab node is
-worth building; record the answers in [measurements.md](measurements.md) ("School
+worth building; record the answers in [measurements.md](../measurements.md) ("School
 network").
 
 1. **Speed.** Open `https://speed.cloudflare.com` on a lab PC and note download and
@@ -84,7 +84,7 @@ network").
 1. On the server: `ssh <server> 'cd ~/swarm && docker compose -f deploy/compose.server.yaml exec -T postgres psql -U swarm swarm' < deploy/sql/benchmarks.sql`
    gives per-device unit count, average unit time and Msamples/s (`just bench-report`
    does the same for the local dev database).
-2. Copy the rows into [measurements.md](measurements.md) (WebGPU support and
+2. Copy the rows into [measurements.md](../measurements.md) (WebGPU support and
    Benchmarks tables) with the date and browser version.
 3. Leave the network: its PCs rejoin by themselves the next time someone opens the link.
    For a scheduled lab, set working hours (**Правила** → „След училище“).

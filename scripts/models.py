@@ -1,9 +1,9 @@
 # Downloads the model files of templates/ai/catalog.json into models/ (spec 0017), each
 # from its pinned revision on Hugging Face, and checks its size and SHA-256.
 #
-#   python3 tools/models.py              every model that is not a test model
-#   python3 tools/models.py --test       the test models only (CI, browser tests)
-#   python3 tools/models.py --fill       record the size and SHA-256 of files the catalog
+#   python3 scripts/models.py              every model that is not a test model
+#   python3 scripts/models.py --test       the test models only (CI, browser tests)
+#   python3 scripts/models.py --fill       record the size and SHA-256 of files the catalog
 #                                        does not pin yet (when adding a model)
 #
 # Files already in models/ with the right hash are not downloaded again.

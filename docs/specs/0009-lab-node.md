@@ -15,7 +15,7 @@ normal server if not.
 
 Only rendered tiles are heavy (~62 KB each; a π result is ~50 bytes). A lab of 30 PCs on
 the CPU sends about 75 tiles a second, ~4.6 MB/s. Whether that is a problem depends on
-the school, so three checks come first (`docs/lab-session.md`, "School network"):
+the school, so three checks come first (`docs/tests/lab-session.md`, "School network"):
 
 | Check | If it fails |
 |---|---|
@@ -75,7 +75,7 @@ The node never holds the submit password.
 ## Not covered
 
 - No internet at all: lab PCs cannot look up the node's name. That would need the
-  school's own DNS (its IT staff); Plan C in `docs/demo-day.md` stays as it is.
+  school's own DNS (its IT staff); Plan C in `docs/competition/demo-day.md` stays as it is.
 - Several nodes in one lab, and node-to-node traffic.
 
 ## Phases

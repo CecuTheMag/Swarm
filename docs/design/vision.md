@@ -1,8 +1,8 @@
 # Рояк: the original design (October 2026)
 
 The plan the project started from. What is built, measured and planned since is in the
-[README](../README.md), the [specs](specs/), [measurements](measurements.md) and the
-[roadmap](roadmap.md); where they differ, they win.
+[README](../../README.md), the [specs](../specs), [measurements](../measurements.md) and the
+[roadmap](../roadmap.md); where they differ, they win.
 
 ---
 
@@ -77,7 +77,7 @@ Bulgarian schools have **thousands of computers idle most of the day and all nig
 
 The sketch below is the original plan. The system as built (deployment, worker protocol,
 verification, state machines, browser runtime) is drawn from the code in
-[docs/architecture.html](architecture.html); open it in a browser.
+[docs/design/architecture.html](architecture.html); open it in a browser.
 
 ```
   Browsers (lab PCs, laptops, phones)
@@ -214,7 +214,7 @@ verification, state machines, browser runtime) is drawn from the code in
 |---|---|
 | 0–2 | "There are N idle computers in Bulgarian schools right now." (Your measured estimate.) |
 | 2–3 | The QR code: "Please join." |
-| 3–10 | **Live:** judges' devices appear on the grid map → a path-traced image fills in tile by tile → live counters (light paths per second, ×speed-up over the fastest single device) → from the chaos panel you switch a phone off mid-job: the job continues; a "cheater" node is injected and gets caught (run sheet: `docs/demo-day.md`) |
+| 3–10 | **Live:** judges' devices appear on the grid map → a path-traced image fills in tile by tile → live counters (light paths per second, ×speed-up over the fastest single device) → from the chaos panel you switch a phone off mid-job: the job continues; a "cheater" node is injected and gets caught (run sheet: `docs/competition/demo-day.md`) |
 | 10–14 | Architecture: leases, verification, signed templates; speed-up curve from the school lab; scaling test to 1,000 simulated nodes |
 | 14–15 | Security and ethics: why it can never become a botnet or a miner |
 | 15–20 | Questions |
@@ -252,7 +252,7 @@ verification, state machines, browser runtime) is drawn from the code in
   Qualcomm or ARM GPUs; Safari 26 on iOS, iPadOS and macOS 26; Firefox 141+ on Windows
   and 145+ on Apple-silicon Macs. Not yet: Chrome on Linux (behind flags), Firefox on
   Linux and Android. Every one of those gets the CPU fallback (spec 0005), so no device
-  is turned away. Our own devices: [measurements](measurements.md#webgpu-support-by-device).
+  is turned away. Our own devices: [measurements](../measurements.md#webgpu-support-by-device).
 - [ ] The actual idle time of your school's computer lab (measure for a week).
 - [ ] Your school IT policy for running browser workloads, and written permission (section 22).
 - [x] **Adaptive replication to cite:** D. P. Anderson, "BOINC: A Platform for Volunteer

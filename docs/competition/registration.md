@@ -1,7 +1,7 @@
 # Регистрация за НОИТ 2027
 
 Текстът за формуляра за регистрация. Всяко число е от
-[measurements.md](measurements.md).
+[measurements.md](../measurements.md).
 
 ---
 

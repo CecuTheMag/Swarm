@@ -1,7 +1,7 @@
 import type { WorkerSummary } from '#lib/protocol/WorkerSummary.ts';
 
 /**
- * The home page's live honeycomb (docs/design-system.md, "The honeycomb is live"): one
+ * The home page's live honeycomb (docs/design/design-system.md, "The honeycomb is live"): one
  * cell per connected device, from the live dashboard stream. A cell appears when its
  * device joins, lights when the device returns finished work, dims once it has been
  * idle, fades when the device leaves and turns red when it is caught cheating.

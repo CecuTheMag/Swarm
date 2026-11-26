@@ -144,7 +144,7 @@ jobs:
         with:
           path: models
           key: test-models-${{ hashFiles('templates/ai/catalog.json') }}
-      - run: python3 tools/models.py --test
+      - run: python3 scripts/models.py --test
       - run: df -h /
       - run: pnpm exec playwright test
         working-directory: web
