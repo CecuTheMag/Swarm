@@ -61,7 +61,8 @@ if creds:
         html = pair.sub(f'<td><code>{creds[key + "_EMAIL"]}</code></td><td><code>{creds[key + "_PASSWORD"]}</code></td>', html, count=1)
     link = "<code>/join/КОД</code>"
     assert link in html, "the volunteer row changed"
-    html = html.replace(link, f'<code>{creds["SWARM_URL"]}/join/{creds["JOIN_CODE"]}</code>')
+    host = creds["SWARM_URL"].split("://", 1)[-1]
+    html = html.replace(link, f'<code>{host}/join/{creds["JOIN_CODE"]}</code>')
 else:
     left.append("test logins (run scripts/test-accounts.sh)")
 
