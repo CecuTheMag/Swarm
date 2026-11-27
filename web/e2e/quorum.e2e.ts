@@ -22,9 +22,13 @@ test('a job that needs two devices says so when one is online; one result finish
 	});
 
 	await page.goto(`${networkUrl}/jobs`);
-	// A π job: quick on any device. Two results must agree before a unit counts.
+	// A small π job. Two results must agree before a unit counts.
 	await page.getByRole('button', { name: 'Числото π' }).click();
 	await page.locator('details summary').click();
+	// Small units: the default (64 × 16 million samples) takes a minute and more on the
+	// software GPU of a CI runner, and the test is about the checks, not the speed.
+	await page.getByLabel('Единици').fill('4');
+	await page.getByLabel('Проби на единица').fill('65536');
 	await page.getByTestId('job-check').selectOption('2');
 	await page.getByTestId('start-job').click();
 	const stalled = page.getByTestId('job').first();

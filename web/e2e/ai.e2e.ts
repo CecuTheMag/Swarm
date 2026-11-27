@@ -1,4 +1,5 @@
 import { devices, expect, test, type Page } from '@playwright/test';
+import { expectedBackend } from './backend.ts';
 import { createNetwork, deleteNetwork } from './submit.ts';
 
 // Spec 0017 in the browser: a network's device runs a whole language model (the catalog's
@@ -138,7 +139,10 @@ test('a model file whose hash differs is refused and nothing is answered', async
 test('a phone does not announce the GPU memory that language models are given by', async ({
 	page,
 	browser
-}) => {
+}, testInfo) => {
+	// The "computer" in this test must have WebGPU: without it (Firefox and WebKit on
+	// Linux, Chromium without the flags) a device announces the CPU and no GPU memory.
+	test.skip(expectedBackend(testInfo) !== 'webgpu', 'needs a browser with WebGPU');
 	test.setTimeout(120_000);
 	await createNetwork(page, 'Телефон и компютър');
 	const link = await page.getByTestId('join-link').inputValue();
