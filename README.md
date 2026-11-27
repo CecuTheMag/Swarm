@@ -5,7 +5,7 @@
   <img src="docs/assets/banner-light.png" alt="Рояк – доброволен суперкомпютър от браузъри" width="100%">
 </picture>
 
-**[Опитай на живо](https://swarmrelay.duckdns.org)**  ·  [Документация](%D0%A0%D0%BE%D1%8F%D0%BA-%D0%B4%D0%BE%D0%BA%D1%83%D0%BC%D0%B5%D0%BD%D1%82%D0%B0%D1%86%D0%B8%D1%8F.pdf)  ·  [Презентация](%D0%A0%D0%BE%D1%8F%D0%BA-%D0%BF%D1%80%D0%B5%D0%B7%D0%B5%D0%BD%D1%82%D0%B0%D1%86%D0%B8%D1%8F.pdf)  ·  [Диплянка](%D0%A0%D0%BE%D1%8F%D0%BA-%D0%B4%D0%B8%D0%BF%D0%BB%D1%8F%D0%BD%D0%BA%D0%B0.pdf)
+**[Опитай на живо](https://swarmrelay.duckdns.org)**  ·  [Документация](%D0%BF%D1%80%D0%B8%D0%BB%D0%BE%D0%B6%D0%B5%D0%BD%D0%B8%D0%B51.pdf)  ·  [Презентация](%D0%A0%D0%BE%D1%8F%D0%BA-%D0%BF%D1%80%D0%B5%D0%B7%D0%B5%D0%BD%D1%82%D0%B0%D1%86%D0%B8%D1%8F.pdf)  ·  [Диплянка](%D0%A0%D0%BE%D1%8F%D0%BA-%D0%B4%D0%B8%D0%BF%D0%BB%D1%8F%D0%BD%D0%BA%D0%B0.pdf)
 
 [![CI](https://github.com/CecuTheMag/Swarm/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 ![license](https://img.shields.io/badge/license-GPL--3.0-f5a524?style=flat-square)
@@ -124,7 +124,7 @@ docs/         спецификации, измервания, тестове, д
 
 | | |
 |---|---|
-| [Документация](%D0%A0%D0%BE%D1%8F%D0%BA-%D0%B4%D0%BE%D0%BA%D1%83%D0%BC%D0%B5%D0%BD%D1%82%D0%B0%D1%86%D0%B8%D1%8F.pdf) | описанието на проекта по Приложение 1 на регламента, пет страници, с тестови профили за всяка роля |
+| [Документация](%D0%BF%D1%80%D0%B8%D0%BB%D0%BE%D0%B6%D0%B5%D0%BD%D0%B8%D0%B51.pdf) | описанието на проекта по Приложение 1 на регламента, пет страници, с тестови профили за всяка роля |
 | [Презентация](%D0%A0%D0%BE%D1%8F%D0%BA-%D0%BF%D1%80%D0%B5%D0%B7%D0%B5%D0%BD%D1%82%D0%B0%D1%86%D0%B8%D1%8F.pdf) | защитата, 17 слайда; [сценарий](docs/competition/presentation/%D1%81%D1%86%D0%B5%D0%BD%D0%B0%D1%80%D0%B8%D0%B9.md) по минути |
 | [Диплянка](%D0%A0%D0%BE%D1%8F%D0%BA-%D0%B4%D0%B8%D0%BF%D0%BB%D1%8F%D0%BD%D0%BA%D0%B0.pdf) | A4, сгъване на три, за печат (виж [PRINT.md](docs/competition/brochure/PRINT.md)) |
 | [Регистрация](docs/competition/registration.md) · [Пътна карта](docs/roadmap.md) · [Спецификации](docs/specs/) | анотацията към формуляра, какво следва, всяка функция със своя спецификация |
