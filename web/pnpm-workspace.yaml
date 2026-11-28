@@ -4,4 +4,4 @@ allowBuilds:
   onnxruntime-node: false
   protobufjs: false
   # swagger-ui-dist's install-time download counter; the API reference works without it.
-  "@scarf/scarf": false
+  '@scarf/scarf': false
