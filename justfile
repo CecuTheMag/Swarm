@@ -98,6 +98,10 @@ test-accounts:
 documentation:
     bash scripts/build-documentation.sh
 
+# The public copy the repository keeps (no phone numbers, no passwords); `just materials` after.
+documentation-public:
+    PUBLIC=1 OUT_DIR="$(mktemp -d)" bash scripts/build-documentation.sh
+
 # Public HTTPS for the deployed server through Tailscale Funnel. The first run prints a
 # login link that adds the server to your tailnet; run it again to get the address.
 public server=env_var_or_default("SWARM_SERVER", ""):
