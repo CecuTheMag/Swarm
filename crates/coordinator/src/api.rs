@@ -11,7 +11,7 @@ use axum::{
     http::{HeaderMap, Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use protocol::{ApiError, CreateJob, DashboardEvent, JobSummary, api::Role};
+use protocol::{ApiError, CreateJob, DashboardEvent, JobSummary, PlatformStats, api::Role};
 use uuid::Uuid;
 
 #[derive(Debug, thiserror::Error)]
@@ -206,6 +206,34 @@ pub async fn example_school(
         )));
     }
     Ok(Json(timetable::sample::school(q.seed, q.classes)))
+}
+
+/// What the platform has computed so far, for the home page when no device is online.
+#[utoipa::path(
+    operation_id = "public_stats",
+    get,
+    path = "/api/stats",
+    tag = "public jobs",
+    responses((status = 200, description = "Totals of every network", body = PlatformStats)),
+    security(())
+)]
+pub async fn stats(State(state): State<AppState>) -> Result<Response, AppError> {
+    let (units_decided, jobs_done, devices): (i64, i64, i64) = sqlx::query_as(concat!(
+        "SELECT (SELECT COALESCE(SUM(units_done), 0) FROM jobs)::bigint, ",
+        "(SELECT count(*) FROM jobs WHERE status = 'done'), ",
+        "(SELECT count(*) FROM devices WHERE backend <> 'native')"
+    ))
+    .fetch_one(&state.db)
+    .await?;
+    Ok((
+        [(header::CACHE_CONTROL, "public, max-age=30")],
+        Json(PlatformStats {
+            units_decided,
+            jobs_done,
+            devices,
+        }),
+    )
+        .into_response())
 }
 
 #[utoipa::path(

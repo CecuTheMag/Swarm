@@ -77,6 +77,7 @@ use utoipa::{
         edits::drop,
         api::create_job,
         api::list_jobs,
+        api::stats,
         api::get_job,
         api::cancel_job,
         api::job_image,

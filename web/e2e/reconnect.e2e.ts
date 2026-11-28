@@ -71,5 +71,8 @@ test('a worker that loses its connection mid-unit carries on after reconnecting'
 	const home = await page.context().newPage();
 	await home.goto('/');
 	await expect(home.getByTestId('home-live')).toContainText('на линия');
-	await expect(home.getByTestId('home-devices')).toHaveText('0');
+	// No device is online, and a job has finished: the hero shows the totals so far
+	// instead of a zero.
+	await expect(home.getByTestId('home-total-units')).toBeVisible();
+	await expect(home.getByTestId('home-devices')).toHaveCount(0);
 });

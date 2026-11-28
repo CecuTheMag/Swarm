@@ -3,7 +3,8 @@
 use coordinator::{Config, State};
 use futures_util::{SinkExt, StreamExt};
 use protocol::{
-    CoordinatorMessage, DashboardEvent, JobStatus, JobSummary, PROTOCOL_VERSION, templates::pi,
+    CoordinatorMessage, DashboardEvent, JobStatus, JobSummary, PROTOCOL_VERSION, PlatformStats,
+    templates::pi,
 };
 use serde_json::json;
 use sqlx::PgPool;
@@ -1206,4 +1207,56 @@ async fn a_network_sweep_is_trained_verified_and_ranked(db: PgPool) {
     );
     let accuracy = model["accuracy"].as_f64().unwrap();
     assert!(best.min <= accuracy && accuracy <= best.max);
+}
+
+/// The home page's totals when no device is online: decided units and finished jobs of
+/// every network, and browser devices only, not the server's simulated workers.
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn stats_count_decided_units_finished_jobs_and_browser_devices(db: PgPool) {
+    let addr = serve(db, unverified()).await;
+    let stats = || async {
+        let res = reqwest::get(format!("http://{addr}/api/stats"))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200);
+        assert_eq!(res.headers()["cache-control"], "public, max-age=30");
+        res.json::<PlatformStats>().await.unwrap()
+    };
+    let empty = stats().await;
+    assert_eq!(
+        (empty.units_decided, empty.jobs_done, empty.devices),
+        (0, 0, 0)
+    );
+
+    // A simulated (native) worker finishes a job: its units count, it does not.
+    let job = create_pi_job(&addr, 6, 1024, 3).await;
+    for _ in 0..50 {
+        sim_worker::run(sim(&addr)).await.unwrap();
+        if get_job(&addr, job.id).await.status == JobStatus::Done {
+            break;
+        }
+    }
+    assert_eq!(get_job(&addr, job.id).await.status, JobStatus::Done);
+    let done = stats().await;
+    assert_eq!(
+        (done.units_decided, done.jobs_done, done.devices),
+        (6, 1, 0)
+    );
+
+    // A browser (here: one that says it computes with WebAssembly) joins and counts.
+    let (mut ws, _) = connect_async(format!("ws://{addr}/ws/worker"))
+        .await
+        .unwrap();
+    ws.send(Message::text(
+        json!({"type":"hello","protocol_version":PROTOCOL_VERSION,"client_version":"test",
+               "device":{"backend":"wasm","vendor":"x","architecture":"x"}})
+        .to_string(),
+    ))
+    .await
+    .unwrap();
+    assert!(matches!(
+        next(&mut ws).await,
+        CoordinatorMessage::Welcome { .. }
+    ));
+    assert_eq!(stats().await.devices, 1);
 }

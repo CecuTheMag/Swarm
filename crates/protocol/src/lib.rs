@@ -469,6 +469,24 @@ pub struct AddCheaters {
     pub collude: bool,
 }
 
+/// `GET /api/stats`: what the platform has computed so far, for the home page when no
+/// device is online. Counts only, of every network: nothing about any job's data.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[ts(export)]
+pub struct PlatformStats {
+    /// Units decided (computed and verified) in all jobs.
+    #[ts(type = "number")]
+    pub units_decided: i64,
+    /// Jobs that finished with a result.
+    #[ts(type = "number")]
+    pub jobs_done: i64,
+    /// Browser devices (WebGPU or WebAssembly) that ever joined a network; the server's
+    /// own simulated workers are not counted.
+    #[ts(type = "number")]
+    pub devices: i64,
+}
+
 /// Error body returned by the REST API.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]

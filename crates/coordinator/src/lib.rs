@@ -40,6 +40,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(api::healthz))
         .route("/api/openapi.json", get(openapi::spec))
+        .route("/api/stats", get(api::stats))
         .route("/api/jobs", post(api::create_job).get(api::list_jobs))
         .route("/api/jobs/{id}", get(api::get_job))
         .route("/api/jobs/{id}/cancel", post(api::cancel_job))

@@ -6,12 +6,25 @@
 	import LiveHive from '#lib/ui/LiveHive.svelte';
 	import Icon, { type IconName } from '#lib/ui/Icon.svelte';
 	import { reveal } from '#lib/ui/reveal.ts';
-	import { rate as rateFormat } from '#lib/ui/format.ts';
+	import { rate as rateFormat, total } from '#lib/ui/format.ts';
+	import type { PlatformStats } from '#lib/protocol/PlatformStats.ts';
 
 	// The public face of the project: what it is, how to join, why it is safe. The hero
 	// shows the network as it is right now: every cell is a connected device.
 	const live = new LiveDashboard();
 	onMount(() => live.start());
+
+	// When no device is online, the hero shows what the swarm has done so far instead of
+	// a row of zeros.
+	let totals = $state<PlatformStats | null>(null);
+	onMount(async () => {
+		try {
+			const res = await fetch('/api/stats');
+			if (res.ok) totals = await res.json();
+		} catch {
+			// The live counters stay; nothing else depends on the totals.
+		}
+	});
 
 	// Phones show the safety promises as rows that open on a tap; from 761 px they are
 	// a grid that is always open (and open without JavaScript too).
@@ -34,6 +47,7 @@
 	const rate = $derived(unitsPerSecond(live.state, live.now));
 	const devicesText = (n: number) => (n === 1 ? '1 устройство' : `${n} устройства`);
 	const rateText = $derived(rate > 0 ? rateFormat(rate) : '—');
+	const quiet = $derived(devices === 0 && totals !== null && totals.units_decided > 0);
 	const statusText = $derived(
 		live.connected
 			? devices > 0
@@ -188,14 +202,27 @@
 				{live.connected ? 'На живо' : 'Свързване…'}
 			</span>
 			<figcaption class="hero-card">
-				<div class="hero-stat">
-					<span class="num" data-testid="home-devices">{devices}</span>
-					<span class="muted">{devices === 1 ? 'устройство' : 'устройства'} на линия</span>
-				</div>
-				<div class="hero-stat">
-					<span class="num">{rateText}</span>
-					<span class="muted">изчислени части в секунда</span>
-				</div>
+				{#if quiet && totals}
+					<div class="hero-stat">
+						<span class="num" data-testid="home-total-units">{total(totals.units_decided)}</span>
+						<span class="muted">проверени части досега</span>
+					</div>
+					<div class="hero-stat">
+						<span class="num">{total(totals.devices)}</span>
+						<span class="muted"
+							>устройства са помагали · <a href={resolve('/worker')}>включете своето</a></span
+						>
+					</div>
+				{:else}
+					<div class="hero-stat">
+						<span class="num" data-testid="home-devices">{devices}</span>
+						<span class="muted">{devices === 1 ? 'устройство' : 'устройства'} на линия</span>
+					</div>
+					<div class="hero-stat">
+						<span class="num">{rateText}</span>
+						<span class="muted">изчислени части в секунда</span>
+					</div>
+				{/if}
 			</figcaption>
 		</figure>
 	</section>
