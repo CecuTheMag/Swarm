@@ -25,6 +25,15 @@ pub fn lookup(path: &str) -> Option<(&'static Model, &'static ModelFile)> {
 const CHUNK: usize = 1 << 20;
 
 /// `GET /api/models/{model id}/{file}`.
+#[utoipa::path(
+    operation_id = "models_file",
+    get,
+    path = "/api/models/{path}",
+    tag = "files",
+    params(("path" = String, Path, description = "Path in the catalog")),
+    responses((status = 200, description = "A model file of the catalog; the browser checks its SHA-256", body = Vec<u8>, content_type = "application/octet-stream"), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(())
+)]
 pub async fn file(
     State(state): State<AppState>,
     Path(path): Path<String>,

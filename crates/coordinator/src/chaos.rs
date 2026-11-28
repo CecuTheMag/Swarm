@@ -29,6 +29,15 @@ const CHEATER_UNIT_TIME: Duration = Duration::from_secs(1);
 const CHEATER_LIFETIME: Duration = Duration::from_secs(300);
 
 /// Switches a device of the public network off.
+#[utoipa::path(
+    operation_id = "chaos_kill_worker",
+    post,
+    path = "/api/chaos/workers/{id}/kill",
+    tag = "chaos",
+    params(("id" = uuid::Uuid, Path, description = "Device connection")),
+    responses((status = 204, description = "Switched off"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn kill_worker(
     State(state): State<AppState>,
     method: Method,
@@ -47,6 +56,15 @@ pub async fn kill_worker(
 }
 
 /// Cuts a device of the public network off, as if it lost its signal.
+#[utoipa::path(
+    operation_id = "chaos_cut_off_worker",
+    post,
+    path = "/api/chaos/workers/{id}/cut",
+    tag = "chaos",
+    params(("id" = uuid::Uuid, Path, description = "Device connection")),
+    responses((status = 204, description = "Cut off"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn cut_off_worker(
     State(state): State<AppState>,
     method: Method,
@@ -64,6 +82,15 @@ pub async fn cut_off_worker(
     .await
 }
 
+#[utoipa::path(
+    operation_id = "chaos_add_cheaters",
+    post,
+    path = "/api/chaos/cheaters",
+    tag = "chaos",
+    request_body = protocol::AddCheaters,
+    responses((status = 202, description = "The cheaters are joining"), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn add_cheaters(
     State(state): State<AppState>,
     method: Method,
@@ -73,6 +100,15 @@ pub async fn add_cheaters(
     cheaters(&state, &method, &headers, PUBLIC_NETWORK, body).await
 }
 
+#[utoipa::path(
+    operation_id = "chaos_network_kill",
+    post,
+    path = "/api/networks/{id}/chaos/workers/{worker}/kill",
+    tag = "chaos",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("worker" = uuid::Uuid, Path, description = "Device connection")),
+    responses((status = 204, description = "Switched off"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn network_kill(
     State(state): State<AppState>,
     method: Method,
@@ -82,6 +118,15 @@ pub async fn network_kill(
     disrupt(&state, &method, &headers, network, worker, Disruption::Kill).await
 }
 
+#[utoipa::path(
+    operation_id = "chaos_network_cut_off",
+    post,
+    path = "/api/networks/{id}/chaos/workers/{worker}/cut",
+    tag = "chaos",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("worker" = uuid::Uuid, Path, description = "Device connection")),
+    responses((status = 204, description = "Cut off"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn network_cut_off(
     State(state): State<AppState>,
     method: Method,
@@ -99,6 +144,16 @@ pub async fn network_cut_off(
     .await
 }
 
+#[utoipa::path(
+    operation_id = "chaos_network_cheaters",
+    post,
+    path = "/api/networks/{id}/chaos/cheaters",
+    tag = "chaos",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    request_body = protocol::AddCheaters,
+    responses((status = 202, description = "The cheaters are joining"), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn network_cheaters(
     State(state): State<AppState>,
     method: Method,

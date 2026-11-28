@@ -301,6 +301,15 @@ async fn program_in(
 }
 
 /// `GET /api/networks/{id}/programs` (viewers).
+#[utoipa::path(
+    operation_id = "programs_list",
+    get,
+    path = "/api/networks/{id}/programs",
+    tag = "programs",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    responses((status = 200, description = "The network's programs", body = Vec<protocol::ProgramSummary>), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn list(
     State(state): State<AppState>,
     method: Method,
@@ -313,6 +322,16 @@ pub async fn list(
 
 /// `POST /api/networks/{id}/programs` (admins): 201 for a new program, 200 when the
 /// network already had this module.
+#[utoipa::path(
+    operation_id = "programs_create",
+    post,
+    path = "/api/networks/{id}/programs",
+    tag = "programs",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    request_body = protocol::UploadProgram,
+    responses((status = 201, description = "Uploaded and checked", body = protocol::ProgramSummary), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn create(
     State(state): State<AppState>,
     method: Method,
@@ -335,6 +354,15 @@ pub async fn create(
 
 /// `POST /api/networks/{id}/programs/{program}/review` (admins): asks for review for the
 /// public network.
+#[utoipa::path(
+    operation_id = "programs_ask_review",
+    post,
+    path = "/api/networks/{id}/programs/{program}/review",
+    tag = "programs",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("program" = uuid::Uuid, Path, description = "Program")),
+    responses((status = 200, description = "Waiting for review", body = protocol::ProgramSummary), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn ask_review(
     State(state): State<AppState>,
     method: Method,
@@ -351,6 +379,14 @@ pub async fn ask_review(
 }
 
 /// `GET /api/admin/programs` (platform admin): programs waiting for review.
+#[utoipa::path(
+    operation_id = "programs_review_queue",
+    get,
+    path = "/api/admin/programs",
+    tag = "platform admin",
+    responses((status = 200, description = "Programs waiting for review", body = Vec<protocol::ProgramSummary>), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError)),
+    security(("session" = []))
+)]
 pub async fn review_queue(
     State(state): State<AppState>,
     method: Method,
@@ -361,6 +397,16 @@ pub async fn review_queue(
 }
 
 /// `POST /api/admin/programs/{program}/decision` (platform admin).
+#[utoipa::path(
+    operation_id = "programs_decision",
+    post,
+    path = "/api/admin/programs/{program}/decision",
+    tag = "platform admin",
+    params(("program" = uuid::Uuid, Path, description = "Program")),
+    request_body = protocol::ReviewDecision,
+    responses((status = 200, description = "Approved or rejected", body = protocol::ProgramSummary), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
+    security(("session" = []))
+)]
 pub async fn decision(
     State(state): State<AppState>,
     method: Method,
@@ -378,6 +424,14 @@ pub async fn decision(
 
 /// `GET /api/programs/approved`: what a contributor allows by allowing community
 /// programs.
+#[utoipa::path(
+    operation_id = "programs_approved",
+    get,
+    path = "/api/programs/approved",
+    tag = "programs",
+    responses((status = 200, description = "Programs that may run on the public network", body = Vec<protocol::ProgramSummary>)),
+    security(())
+)]
 pub async fn approved(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ProgramSummary>>, AppError> {
@@ -386,6 +440,15 @@ pub async fn approved(
 
 /// `GET /api/modules/{sha256}.wasm`, for workers about to run it. The bytes never change
 /// for a hash, so browsers may keep them for good.
+#[utoipa::path(
+    operation_id = "programs_module_file",
+    get,
+    path = "/api/modules/{file}",
+    tag = "files",
+    params(("file" = String, Path, description = "`<sha256>.wasm`")),
+    responses((status = 200, description = "A program's module, by its SHA-256", body = Vec<u8>, content_type = "application/wasm"), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(())
+)]
 pub async fn module_file(
     State(state): State<AppState>,
     Path(file): Path<String>,
@@ -407,6 +470,15 @@ pub async fn module_file(
 
 /// `GET /api/blobs/{sha256}.json`: an input units refer to by its hash (spec 0013). Only
 /// devices given such a unit learn the hash.
+#[utoipa::path(
+    operation_id = "programs_blob_file",
+    get,
+    path = "/api/blobs/{file}",
+    tag = "files",
+    params(("file" = String, Path, description = "`<sha256>.json`")),
+    responses((status = 200, description = "A program job's input, by its SHA-256", body = Vec<u8>, content_type = "application/json"), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(())
+)]
 pub async fn blob_file(
     State(state): State<AppState>,
     Path(file): Path<String>,
@@ -430,6 +502,15 @@ pub async fn blob_file(
 
 /// `GET /api/networks/{id}/jobs/{job}/outputs` (viewers): a program job's outputs, or a
 /// language-model job's answers as they are decided (spec 0017), in unit order.
+#[utoipa::path(
+    operation_id = "programs_outputs",
+    get,
+    path = "/api/networks/{id}/jobs/{job}/outputs",
+    tag = "programs",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("job" = uuid::Uuid, Path, description = "Job")),
+    responses((status = 200, description = "A program job's outputs", body = protocol::JobOutputs), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn outputs(
     State(state): State<AppState>,
     method: Method,

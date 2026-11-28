@@ -57,6 +57,15 @@ impl IntoResponse for AppError {
 /// The public network's jobs: started with the deployment's submit token, a public
 /// network API key, or by its admins in the console. Other networks use
 /// `/api/networks/{id}/jobs` (spec 0010).
+#[utoipa::path(
+    operation_id = "public_create_job",
+    post,
+    path = "/api/jobs",
+    tag = "public jobs",
+    request_body = protocol::CreateJob,
+    responses((status = 201, description = "Queued", body = protocol::JobSummary), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn create_job(
     State(state): State<AppState>,
     method: Method,
@@ -70,6 +79,15 @@ pub async fn create_job(
 }
 
 /// Stops a job (organiser only): for a demo, nothing must queue behind a forgotten job.
+#[utoipa::path(
+    operation_id = "public_cancel_job",
+    post,
+    path = "/api/jobs/{id}/cancel",
+    tag = "public jobs",
+    params(("id" = uuid::Uuid, Path, description = "Job")),
+    responses((status = 200, description = "Cancelled (or already finished)", body = protocol::JobSummary), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn cancel_job(
     State(state): State<AppState>,
     method: Method,
@@ -97,6 +115,15 @@ pub async fn cancel(state: &AppState, id: Uuid) -> Result<JobSummary, AppError> 
     Ok(job)
 }
 
+#[utoipa::path(
+    operation_id = "public_get_job",
+    get,
+    path = "/api/jobs/{id}",
+    tag = "public jobs",
+    params(("id" = uuid::Uuid, Path, description = "Job")),
+    responses((status = 200, description = "The job", body = protocol::JobSummary), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(())
+)]
 pub async fn get_job(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -105,6 +132,15 @@ pub async fn get_job(
 }
 
 /// The current image of a path-tracer job of the public network (spec 0003).
+#[utoipa::path(
+    operation_id = "public_job_image",
+    get,
+    path = "/api/jobs/{id}/image.png",
+    tag = "public jobs",
+    params(("id" = uuid::Uuid, Path, description = "Job")),
+    responses((status = 200, description = "The image so far", body = Vec<u8>, content_type = "image/png"), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(())
+)]
 pub async fn job_image(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -130,6 +166,14 @@ pub async fn image(state: &AppState, id: Uuid) -> Result<Response, AppError> {
         .into_response())
 }
 
+#[utoipa::path(
+    operation_id = "public_list_jobs",
+    get,
+    path = "/api/jobs",
+    tag = "public jobs",
+    responses((status = 200, description = "The 50 latest jobs", body = Vec<protocol::JobSummary>)),
+    security(())
+)]
 pub async fn list_jobs(State(state): State<AppState>) -> Result<Json<Vec<JobSummary>>, AppError> {
     Ok(Json(db::recent_jobs(&state.db, PUBLIC_NETWORK, 50).await?))
 }
@@ -143,6 +187,15 @@ pub struct ExampleSchool {
     seed: u64,
 }
 
+#[utoipa::path(
+    operation_id = "public_example_school",
+    get,
+    path = "/api/timetables/example",
+    tag = "schools",
+    params(("classes" = usize, Query, description = "Number of classes"), ("seed" = Option<u64>, Query, description = "Generator seed, 0 when left out")),
+    responses((status = 200, description = "A generated school", body = Object), (status = 400, description = "Invalid request", body = protocol::ApiError)),
+    security(())
+)]
 pub async fn example_school(
     axum::extract::Query(q): axum::extract::Query<ExampleSchool>,
 ) -> Result<Json<timetable::School>, AppError> {
@@ -155,6 +208,14 @@ pub async fn example_school(
     Ok(Json(timetable::sample::school(q.seed, q.classes)))
 }
 
+#[utoipa::path(
+    operation_id = "public_healthz",
+    get,
+    path = "/healthz",
+    tag = "health",
+    responses((status = 200, description = "The coordinator and its database answer"), (status = 503, description = "The database does not answer")),
+    security(())
+)]
 pub async fn healthz(State(state): State<AppState>) -> StatusCode {
     match sqlx::query("SELECT 1").execute(&state.db).await {
         Ok(_) => StatusCode::OK,

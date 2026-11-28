@@ -9,6 +9,7 @@ use crate::Backend;
 
 /// The signed-in account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct Me {
     pub id: Uuid,
@@ -18,6 +19,7 @@ pub struct Me {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct Login {
     pub email: String,
@@ -26,6 +28,7 @@ pub struct Login {
 
 /// What an invitation link offers, before it is accepted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct InviteInfo {
     pub email: Option<String>,
@@ -38,6 +41,7 @@ pub struct InviteInfo {
 /// Accepting an invitation creates an account; a signed-in account that accepts one
 /// only joins the network (both fields are then ignored).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct AcceptInvite {
     #[serde(default)]
@@ -49,6 +53,7 @@ pub struct AcceptInvite {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct CreateInvite {
     #[serde(default)]
@@ -60,6 +65,7 @@ pub struct CreateInvite {
 
 /// The link is shown once; only its hash is stored.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct CreatedInvite {
     pub token: String,
@@ -68,6 +74,7 @@ pub struct CreatedInvite {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum Role {
@@ -96,6 +103,7 @@ impl Role {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum JoinMode {
@@ -108,6 +116,7 @@ pub enum JoinMode {
 /// When a network's devices may compute: windows in the network's time zone. A window
 /// whose `to` is not after `from` runs past midnight (15:00–08:00).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct Hours {
     /// IANA name, e.g. "Europe/Sofia".
@@ -116,6 +125,7 @@ pub struct Hours {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct HoursWindow {
     /// ISO weekdays the window starts on: 1 = Monday … 7 = Sunday.
@@ -127,6 +137,7 @@ pub struct HoursWindow {
 
 /// A network as its members see it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct NetworkView {
     pub id: Uuid,
@@ -147,6 +158,7 @@ pub struct NetworkView {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct CreateNetwork {
     pub name: String,
@@ -154,6 +166,7 @@ pub struct CreateNetwork {
 
 /// Fields left out stay as they are; `hours: null` means always.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct UpdateNetwork {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -171,6 +184,7 @@ pub struct UpdateNetwork {
         with = "serde_with_double_option"
     )]
     #[ts(optional = nullable, as = "Option<Hours>")]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<Hours>))]
     pub hours: Option<Option<Hours>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -206,6 +220,7 @@ mod serde_with_double_option {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum DeviceStatus {
@@ -215,6 +230,7 @@ pub enum DeviceStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct DeviceView {
     pub id: Uuid,
@@ -234,6 +250,7 @@ pub struct DeviceView {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct UpdateDevice {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -249,6 +266,7 @@ pub struct UpdateDevice {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct MemberView {
     pub account_id: Uuid,
@@ -258,12 +276,14 @@ pub struct MemberView {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct UpdateMember {
     pub role: Role,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ApiKeyView {
     pub id: Uuid,
@@ -275,6 +295,7 @@ pub struct ApiKeyView {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct CreateApiKey {
     pub label: String,
@@ -282,6 +303,7 @@ pub struct CreateApiKey {
 
 /// The key is shown once; only its hash is stored.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct CreatedApiKey {
     pub id: Uuid,
@@ -290,6 +312,7 @@ pub struct CreatedApiKey {
 
 /// An account, for the platform admin.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct AccountView {
     pub id: Uuid,

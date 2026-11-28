@@ -110,6 +110,15 @@ fn editor(access: &Access) -> Option<Uuid> {
 }
 
 /// `GET /api/networks/{id}/jobs/{job}/timetable` (members): the edit, or null.
+#[utoipa::path(
+    operation_id = "timetable_get",
+    get,
+    path = "/api/networks/{id}/jobs/{job}/timetable",
+    tag = "schools",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("job" = uuid::Uuid, Path, description = "Job")),
+    responses((status = 200, description = "The edited timetable, or null before the first edit", body = Option<protocol::TimetableEdit>), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn get(
     State(state): State<AppState>,
     method: Method,
@@ -123,6 +132,16 @@ pub async fn get(
 
 /// `PUT /api/networks/{id}/jobs/{job}/timetable` (admins): saves an edit of `version`,
 /// or the first edit without one; 409 when someone saved since.
+#[utoipa::path(
+    operation_id = "timetable_save",
+    put,
+    path = "/api/networks/{id}/jobs/{job}/timetable",
+    tag = "schools",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("job" = uuid::Uuid, Path, description = "Job")),
+    request_body = protocol::SaveTimetableEdit,
+    responses((status = 200, description = "Saved, with its cost", body = protocol::TimetableEdit), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn save(
     State(state): State<AppState>,
     method: Method,
@@ -186,6 +205,15 @@ pub async fn save(
 
 /// `DELETE /api/networks/{id}/jobs/{job}/timetable` (admins): back to the timetable the
 /// search found.
+#[utoipa::path(
+    operation_id = "timetable_drop",
+    delete,
+    path = "/api/networks/{id}/jobs/{job}/timetable",
+    tag = "schools",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("job" = uuid::Uuid, Path, description = "Job")),
+    responses((status = 204, description = "Back to the found timetable"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn drop(
     State(state): State<AppState>,
     method: Method,

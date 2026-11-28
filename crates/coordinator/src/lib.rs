@@ -11,6 +11,7 @@ pub mod edits;
 pub mod hours;
 pub mod models;
 pub mod networks;
+pub mod openapi;
 pub mod render;
 pub mod schools;
 pub mod state;
@@ -38,6 +39,7 @@ pub static MIGRATOR: Migrator = sqlx::migrate!();
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(api::healthz))
+        .route("/api/openapi.json", get(openapi::spec))
         .route("/api/jobs", post(api::create_job).get(api::list_jobs))
         .route("/api/jobs/{id}", get(api::get_job))
         .route("/api/jobs/{id}/cancel", post(api::cancel_job))

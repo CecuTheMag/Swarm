@@ -15,3 +15,8 @@ timetable = { version = "0.1.0", path = "../timetable", features = ["ts"] }
 base64 = "0.22.1"
 ts-rs = { version = "12.0.1", features = ["uuid-impl", "serde-json-impl"] }
 uuid = { version = "1.29.0", features = ["serde", "v4"] }
+utoipa = { version = "5.5.0", features = ["uuid", "preserve_order", "preserve_path_order"], optional = true }
+
+[features]
+# Schemas of the REST API's bodies for the coordinator's OpenAPI description.
+openapi = ["dep:utoipa"]

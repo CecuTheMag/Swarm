@@ -17,6 +17,7 @@ use uuid::Uuid;
 pub const PROTOCOL_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum Backend {
@@ -153,6 +154,7 @@ pub enum DeviceControl {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum JobStatus {
@@ -184,6 +186,7 @@ impl JobStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct JobSummary {
     pub id: Uuid,
@@ -301,6 +304,7 @@ pub struct JobProgressSummary {
 
 /// `POST /api/jobs` body.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct CreateJob {
     pub template: String,
@@ -318,6 +322,7 @@ pub struct CreateJob {
 
 /// Where a program stands in review (spec 0012).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum Review {
@@ -354,6 +359,7 @@ impl Review {
 
 /// `POST /api/networks/{id}/programs` body.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct UploadProgram {
@@ -370,6 +376,7 @@ pub struct UploadProgram {
 
 /// A school a network keeps (spec 0014), without its data.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct SchoolSummary {
     pub id: Uuid,
@@ -388,17 +395,21 @@ pub struct SchoolSummary {
 
 /// A school with its data.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct SchoolRecord {
     pub summary: SchoolSummary,
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub school: templates::tt::School,
 }
 
 /// Creates a school, or saves one edited from `version`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct SaveSchool {
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub school: templates::tt::School,
     /// The version the edit started from; none when creating.
     #[serde(default)]
@@ -407,6 +418,7 @@ pub struct SaveSchool {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ProgramSummary {
     pub id: Uuid,
@@ -427,6 +439,7 @@ pub struct ProgramSummary {
 
 /// `POST /api/admin/programs/{id}/decision` body.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct ReviewDecision {
@@ -438,6 +451,7 @@ pub struct ReviewDecision {
 
 /// A program job's outputs in unit order, base64; `null` for units not decided yet.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct JobOutputs {
     pub outputs: Vec<Option<String>>,
@@ -446,6 +460,7 @@ pub struct JobOutputs {
 /// `POST /api/chaos/cheaters` body: simulated devices that make up every result join
 /// the grid, for the chaos panel (spec 0008).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct AddCheaters {
     /// How many, 1–3.
@@ -456,6 +471,7 @@ pub struct AddCheaters {
 
 /// Error body returned by the REST API.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ApiError {
     pub error: String,
@@ -506,6 +522,7 @@ mod tests {
 
 /// A found timetable as a person edited it (spec 0015).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct TimetableEdit {
     /// Base64 of one little-endian `u16` slot per lesson hour, as the job's result.
@@ -513,6 +530,7 @@ pub struct TimetableEdit {
     /// Hours to keep where they are in the next search, by index.
     pub pinned: Vec<u32>,
     /// Its cost, as the coordinator computed it.
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub cost: templates::tt::Cost,
     /// Grows with every save.
     pub version: u32,
@@ -524,6 +542,7 @@ pub struct TimetableEdit {
 
 /// Saves an edited timetable, edited from `version`; none for the first edit.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct SaveTimetableEdit {

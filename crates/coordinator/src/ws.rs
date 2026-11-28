@@ -32,17 +32,42 @@ const BLOCKED: &str = "this device is blocked: too many wrong results";
 /// `MAX_TILE² × 3` f32, about 262 KiB); anything far beyond that is abuse.
 pub const MAX_WORKER_MESSAGE_BYTES: usize = 512 * 1024;
 
+#[utoipa::path(
+    operation_id = "ws_worker",
+    get,
+    path = "/ws/worker",
+    tag = "websocket",
+    responses((status = 101, description = "WebSocket for a device: work units and results (protocol::WorkerMessage)")),
+    security(())
+)]
 pub async fn worker(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.max_message_size(MAX_WORKER_MESSAGE_BYTES)
         .on_upgrade(move |socket| worker_session(socket, state))
 }
 
 /// The public network's live events, open to anyone (the home page shows them).
+#[utoipa::path(
+    operation_id = "ws_dashboard",
+    get,
+    path = "/ws/dashboard",
+    tag = "websocket",
+    responses((status = 101, description = "WebSocket of the public network's live events (protocol::DashboardEvent)")),
+    security(())
+)]
 pub async fn dashboard(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(move |socket| dashboard_session(socket, state, PUBLIC_NETWORK))
 }
 
 /// A network's live events, for its members (spec 0010).
+#[utoipa::path(
+    operation_id = "ws_network_live",
+    get,
+    path = "/ws/networks/{id}/live",
+    tag = "websocket",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    responses((status = 101, description = "WebSocket of a network's live events, for its members"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn network_live(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
@@ -55,6 +80,15 @@ pub async fn network_live(
 }
 
 /// What a device that joined a network sees of it, once a second (spec 0010).
+#[utoipa::path(
+    operation_id = "ws_join_summary",
+    get,
+    path = "/ws/join/{code}/summary",
+    tag = "websocket",
+    params(("code" = String, Path, description = "Join code")),
+    responses((status = 101, description = "WebSocket of what a joined device sees of its network"), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(())
+)]
 pub async fn join_summary(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,

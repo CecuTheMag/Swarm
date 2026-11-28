@@ -92,6 +92,7 @@
 					<li><a href={resolve('/join')}>Включи се с код</a></li>
 					<li><a href={resolve('/app')}>Конзола</a></li>
 					<li><a href={resolve('/selftest')}>Самопроверка</a></li>
+					<li><a href={resolve('/docs/api')}>Програмен интерфейс</a></li>
 					<li>
 						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() builds the path; only a #section is added -->
 						<a href={resolve('/') + '#safety'}>Безопасност</a>

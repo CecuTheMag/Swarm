@@ -104,6 +104,15 @@ async fn get_in(db: &PgPool, network_id: Uuid, id: Uuid) -> sqlx::Result<Option<
 }
 
 /// `GET /api/networks/{id}/schools` (members).
+#[utoipa::path(
+    operation_id = "schools_list",
+    get,
+    path = "/api/networks/{id}/schools",
+    tag = "schools",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    responses((status = 200, description = "The network's schools", body = Vec<protocol::SchoolSummary>), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn list(
     State(state): State<AppState>,
     method: Method,
@@ -115,6 +124,16 @@ pub async fn list(
 }
 
 /// `POST /api/networks/{id}/schools` (admins).
+#[utoipa::path(
+    operation_id = "schools_create",
+    post,
+    path = "/api/networks/{id}/schools",
+    tag = "schools",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    request_body = protocol::SaveSchool,
+    responses((status = 201, description = "Saved as version 1", body = protocol::SchoolRecord), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn create(
     State(state): State<AppState>,
     method: Method,
@@ -163,6 +182,15 @@ pub async fn create(
 }
 
 /// `GET /api/networks/{id}/schools/{school}` (members).
+#[utoipa::path(
+    operation_id = "schools_get",
+    get,
+    path = "/api/networks/{id}/schools/{school}",
+    tag = "schools",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("school" = uuid::Uuid, Path, description = "School")),
+    responses((status = 200, description = "The school with its data", body = protocol::SchoolRecord), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn get(
     State(state): State<AppState>,
     method: Method,
@@ -178,6 +206,16 @@ pub async fn get(
 
 /// `PUT /api/networks/{id}/schools/{school}` (admins): saves an edit of `version`; 409
 /// when someone saved since.
+#[utoipa::path(
+    operation_id = "schools_save",
+    put,
+    path = "/api/networks/{id}/schools/{school}",
+    tag = "schools",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("school" = uuid::Uuid, Path, description = "School")),
+    request_body = protocol::SaveSchool,
+    responses((status = 200, description = "Saved as the next version", body = protocol::SchoolRecord), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn save(
     State(state): State<AppState>,
     method: Method,
@@ -222,6 +260,15 @@ pub async fn save(
 
 /// `DELETE /api/networks/{id}/schools/{school}` (admins). Jobs searched for it keep
 /// their own copy.
+#[utoipa::path(
+    operation_id = "schools_delete",
+    delete,
+    path = "/api/networks/{id}/schools/{school}",
+    tag = "schools",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("school" = uuid::Uuid, Path, description = "School")),
+    responses((status = 204, description = "Deleted"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn delete(
     State(state): State<AppState>,
     method: Method,

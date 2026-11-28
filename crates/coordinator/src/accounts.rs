@@ -81,6 +81,15 @@ async fn start_session(
 }
 
 /// `POST /api/auth/login`.
+#[utoipa::path(
+    operation_id = "accounts_login",
+    post,
+    path = "/api/auth/login",
+    tag = "accounts",
+    request_body = protocol::api::Login,
+    responses((status = 200, description = "Signed in; sets the session cookie", body = protocol::api::Me), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 429, description = "Too many attempts", body = protocol::ApiError)),
+    security(())
+)]
 pub async fn login(
     State(state): State<AppState>,
     method: Method,
@@ -119,6 +128,14 @@ pub async fn login(
 }
 
 /// `POST /api/auth/logout`: ends this session.
+#[utoipa::path(
+    operation_id = "accounts_logout",
+    post,
+    path = "/api/auth/logout",
+    tag = "accounts",
+    responses((status = 204, description = "Signed out; clears the cookie"), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError)),
+    security(("session" = []))
+)]
 pub async fn logout(
     State(state): State<AppState>,
     method: Method,
@@ -138,6 +155,14 @@ pub async fn logout(
 }
 
 /// `GET /api/me`: the signed-in account, or 401.
+#[utoipa::path(
+    operation_id = "accounts_current",
+    get,
+    path = "/api/me",
+    tag = "accounts",
+    responses((status = 200, description = "The signed-in account", body = protocol::api::Me), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError)),
+    security(("session" = []))
+)]
 pub async fn current(
     State(state): State<AppState>,
     method: Method,
@@ -185,6 +210,15 @@ async fn open_invite(db: &PgPool, token: &str) -> Result<InviteRow, AppError> {
 }
 
 /// `GET /api/invites/{token}`: what the invitation offers.
+#[utoipa::path(
+    operation_id = "accounts_invite_info",
+    get,
+    path = "/api/invites/{token}",
+    tag = "accounts",
+    params(("token" = String, Path, description = "Invitation token")),
+    responses((status = 200, description = "What the invitation offers", body = protocol::api::InviteInfo), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(())
+)]
 pub async fn invite_info(
     State(state): State<AppState>,
     Path(token): Path<String>,
@@ -200,6 +234,16 @@ pub async fn invite_info(
 
 /// `POST /api/invites/{token}`: a signed-in account joins the invitation's network;
 /// anyone else creates an account (and is signed in).
+#[utoipa::path(
+    operation_id = "accounts_accept_invite",
+    post,
+    path = "/api/invites/{token}",
+    tag = "accounts",
+    params(("token" = String, Path, description = "Invitation token")),
+    request_body = protocol::api::AcceptInvite,
+    responses((status = 200, description = "Accepted; a new account is signed in", body = Object), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
+    security(())
+)]
 pub async fn accept_invite(
     State(state): State<AppState>,
     method: Method,
@@ -306,6 +350,15 @@ pub(crate) async fn require_admin(
 }
 
 /// `POST /api/admin/invites` (platform admin): an invitation to create an account.
+#[utoipa::path(
+    operation_id = "accounts_admin_invite",
+    post,
+    path = "/api/admin/invites",
+    tag = "platform admin",
+    request_body = protocol::api::CreateInvite,
+    responses((status = 201, description = "The link, shown once", body = protocol::api::CreatedInvite), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError)),
+    security(("session" = []))
+)]
 pub async fn admin_invite(
     State(state): State<AppState>,
     method: Method,
@@ -319,6 +372,14 @@ pub async fn admin_invite(
 }
 
 /// `GET /api/admin/accounts` (platform admin).
+#[utoipa::path(
+    operation_id = "accounts_admin_accounts",
+    get,
+    path = "/api/admin/accounts",
+    tag = "platform admin",
+    responses((status = 200, description = "All accounts", body = Vec<protocol::api::AccountView>), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError)),
+    security(("session" = []))
+)]
 pub async fn admin_accounts(
     State(state): State<AppState>,
     method: Method,

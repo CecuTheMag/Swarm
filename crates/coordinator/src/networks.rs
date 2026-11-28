@@ -187,6 +187,14 @@ async fn rules_of(state: &AppState, id: Uuid) -> Result<NetworkRules, AppError> 
 // ---------- Networks ----------
 
 /// `GET /api/networks`: the signed-in account's networks.
+#[utoipa::path(
+    operation_id = "networks_list",
+    get,
+    path = "/api/networks",
+    tag = "networks",
+    responses((status = 200, description = "The caller's networks", body = Vec<protocol::api::NetworkView>), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError)),
+    security(("session" = []))
+)]
 pub async fn list(
     State(state): State<AppState>,
     method: Method,
@@ -210,6 +218,15 @@ pub async fn list(
 }
 
 /// `POST /api/networks`: a new network owned by the signed-in account.
+#[utoipa::path(
+    operation_id = "networks_create",
+    post,
+    path = "/api/networks",
+    tag = "networks",
+    request_body = protocol::api::CreateNetwork,
+    responses((status = 201, description = "Created; the caller owns it", body = protocol::api::NetworkView), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
+    security(("session" = []))
+)]
 pub async fn create(
     State(state): State<AppState>,
     method: Method,
@@ -240,6 +257,15 @@ pub async fn create(
     ))
 }
 
+#[utoipa::path(
+    operation_id = "networks_get",
+    get,
+    path = "/api/networks/{id}",
+    tag = "networks",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    responses((status = 200, description = "The network", body = protocol::api::NetworkView), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn get(
     State(state): State<AppState>,
     method: Method,
@@ -252,6 +278,16 @@ pub async fn get(
 }
 
 /// `PATCH /api/networks/{id}`: rules (admin); devices hear about it at once.
+#[utoipa::path(
+    operation_id = "networks_update",
+    patch,
+    path = "/api/networks/{id}",
+    tag = "networks",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    request_body = protocol::api::UpdateNetwork,
+    responses((status = 200, description = "The updated network", body = protocol::api::NetworkView), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn update(
     State(state): State<AppState>,
     method: Method,
@@ -318,6 +354,15 @@ pub async fn update(
 }
 
 /// `DELETE /api/networks/{id}` (owner): the network, its devices and jobs.
+#[utoipa::path(
+    operation_id = "networks_delete",
+    delete,
+    path = "/api/networks/{id}",
+    tag = "networks",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    responses((status = 204, description = "Deleted"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []))
+)]
 pub async fn delete(
     State(state): State<AppState>,
     method: Method,
@@ -366,6 +411,15 @@ struct DeviceRow {
 }
 
 /// `GET /api/networks/{id}/devices`: waiting ones first, then by last seen.
+#[utoipa::path(
+    operation_id = "networks_devices",
+    get,
+    path = "/api/networks/{id}/devices",
+    tag = "devices",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    responses((status = 200, description = "The network's devices", body = Vec<protocol::api::DeviceView>), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn devices(
     State(state): State<AppState>,
     method: Method,
@@ -408,6 +462,16 @@ pub async fn devices(
 }
 
 /// `PATCH /api/networks/{id}/devices/{device}`: rename, pause, resume, approve (admin).
+#[utoipa::path(
+    operation_id = "networks_update_device",
+    patch,
+    path = "/api/networks/{id}/devices/{device}",
+    tag = "devices",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("device" = uuid::Uuid, Path, description = "Device")),
+    request_body = protocol::api::UpdateDevice,
+    responses((status = 204, description = "Updated"), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn update_device(
     State(state): State<AppState>,
     method: Method,
@@ -445,6 +509,15 @@ pub async fn update_device(
 
 /// `DELETE /api/networks/{id}/devices/{device}` (admin): the device leaves and cannot
 /// join this network again with the same browser.
+#[utoipa::path(
+    operation_id = "networks_remove_device",
+    delete,
+    path = "/api/networks/{id}/devices/{device}",
+    tag = "devices",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("device" = uuid::Uuid, Path, description = "Device")),
+    responses((status = 204, description = "Removed"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn remove_device(
     State(state): State<AppState>,
     method: Method,
@@ -468,6 +541,15 @@ pub async fn remove_device(
 
 // ---------- Members ----------
 
+#[utoipa::path(
+    operation_id = "networks_members",
+    get,
+    path = "/api/networks/{id}/members",
+    tag = "members",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    responses((status = 200, description = "The network's members", body = Vec<protocol::api::MemberView>), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn members(
     State(state): State<AppState>,
     method: Method,
@@ -506,6 +588,16 @@ async fn owners(state: &AppState, id: Uuid) -> Result<i64, AppError> {
 }
 
 /// `PATCH /api/networks/{id}/members/{account}` (owner). A network keeps an owner.
+#[utoipa::path(
+    operation_id = "networks_update_member",
+    patch,
+    path = "/api/networks/{id}/members/{account}",
+    tag = "members",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("account" = uuid::Uuid, Path, description = "Account")),
+    request_body = protocol::api::UpdateMember,
+    responses((status = 204, description = "Role changed"), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []))
+)]
 pub async fn update_member(
     State(state): State<AppState>,
     method: Method,
@@ -535,6 +627,15 @@ pub async fn update_member(
 }
 
 /// `DELETE /api/networks/{id}/members/{account}`: an owner removes anyone, anyone leaves.
+#[utoipa::path(
+    operation_id = "networks_remove_member",
+    delete,
+    path = "/api/networks/{id}/members/{account}",
+    tag = "members",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("account" = uuid::Uuid, Path, description = "Account")),
+    responses((status = 204, description = "Removed"), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []))
+)]
 pub async fn remove_member(
     State(state): State<AppState>,
     method: Method,
@@ -566,6 +667,16 @@ pub async fn remove_member(
 
 /// `POST /api/networks/{id}/invites` (admin): a link that adds a member with a role no
 /// higher than the inviter's, and creates their account if they have none.
+#[utoipa::path(
+    operation_id = "networks_invite",
+    post,
+    path = "/api/networks/{id}/invites",
+    tag = "members",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    request_body = protocol::api::CreateInvite,
+    responses((status = 201, description = "The link, shown once", body = protocol::api::CreatedInvite), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn invite(
     State(state): State<AppState>,
     method: Method,
@@ -613,6 +724,15 @@ pub async fn create_invite(
 
 // ---------- API keys ----------
 
+#[utoipa::path(
+    operation_id = "networks_api_keys",
+    get,
+    path = "/api/networks/{id}/keys",
+    tag = "api keys",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    responses((status = 200, description = "The network's API keys, without the keys", body = Vec<protocol::api::ApiKeyView>), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn api_keys(
     State(state): State<AppState>,
     method: Method,
@@ -639,6 +759,16 @@ pub async fn api_keys(
     ))
 }
 
+#[utoipa::path(
+    operation_id = "networks_create_api_key",
+    post,
+    path = "/api/networks/{id}/keys",
+    tag = "api keys",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    request_body = protocol::api::CreateApiKey,
+    responses((status = 201, description = "The key, shown once", body = protocol::api::CreatedApiKey), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn create_api_key(
     State(state): State<AppState>,
     method: Method,
@@ -663,6 +793,15 @@ pub async fn create_api_key(
     Ok((StatusCode::CREATED, Json(CreatedApiKey { id: key_id, key })))
 }
 
+#[utoipa::path(
+    operation_id = "networks_revoke_api_key",
+    delete,
+    path = "/api/networks/{id}/keys/{key}",
+    tag = "api keys",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("key" = uuid::Uuid, Path, description = "API key")),
+    responses((status = 204, description = "Revoked"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn revoke_api_key(
     State(state): State<AppState>,
     method: Method,
@@ -685,6 +824,15 @@ pub async fn revoke_api_key(
 
 // ---------- Jobs ----------
 
+#[utoipa::path(
+    operation_id = "networks_jobs",
+    get,
+    path = "/api/networks/{id}/jobs",
+    tag = "jobs",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    responses((status = 200, description = "The network's latest jobs", body = Vec<protocol::JobSummary>), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn jobs(
     State(state): State<AppState>,
     method: Method,
@@ -748,6 +896,16 @@ pub async fn start_job(
     Ok(job)
 }
 
+#[utoipa::path(
+    operation_id = "networks_create_job",
+    post,
+    path = "/api/networks/{id}/jobs",
+    tag = "jobs",
+    params(("id" = uuid::Uuid, Path, description = "Network")),
+    request_body = protocol::CreateJob,
+    responses((status = 201, description = "Queued", body = protocol::JobSummary), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn create_job(
     State(state): State<AppState>,
     method: Method,
@@ -773,6 +931,15 @@ pub async fn job_in(
         .ok_or(AppError::NotFound)
 }
 
+#[utoipa::path(
+    operation_id = "networks_get_job",
+    get,
+    path = "/api/networks/{id}/jobs/{job}",
+    tag = "jobs",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("job" = uuid::Uuid, Path, description = "Job")),
+    responses((status = 200, description = "The job", body = protocol::JobSummary), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn get_job(
     State(state): State<AppState>,
     method: Method,
@@ -783,6 +950,15 @@ pub async fn get_job(
     Ok(Json(job_in(&state, id, job_id).await?))
 }
 
+#[utoipa::path(
+    operation_id = "networks_cancel_job",
+    post,
+    path = "/api/networks/{id}/jobs/{job}/cancel",
+    tag = "jobs",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("job" = uuid::Uuid, Path, description = "Job")),
+    responses((status = 200, description = "Cancelled (or already finished)", body = protocol::JobSummary), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn cancel_job(
     State(state): State<AppState>,
     method: Method,
@@ -796,6 +972,15 @@ pub async fn cancel_job(
 
 /// The owner accepts the results that wait for a second device (spec 0018): for a job
 /// that stalled because only one device is online.
+#[utoipa::path(
+    operation_id = "networks_accept_unchecked",
+    post,
+    path = "/api/networks/{id}/jobs/{job}/accept-unchecked",
+    tag = "jobs",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("job" = uuid::Uuid, Path, description = "Job")),
+    responses((status = 200, description = "Units waiting for a second device are accepted as they are", body = protocol::JobSummary), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn accept_unchecked(
     State(state): State<AppState>,
     method: Method,
@@ -812,6 +997,15 @@ pub async fn accept_unchecked(
     Ok(Json(job_in(&state, id, job_id).await?))
 }
 
+#[utoipa::path(
+    operation_id = "networks_job_image",
+    get,
+    path = "/api/networks/{id}/jobs/{job}/image.png",
+    tag = "jobs",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("job" = uuid::Uuid, Path, description = "Job")),
+    responses((status = 200, description = "The image so far", body = Vec<u8>, content_type = "image/png"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn job_image(
     State(state): State<AppState>,
     method: Method,
@@ -824,12 +1018,21 @@ pub async fn job_image(
 }
 
 /// `GET /api/join/{code}`: what a device sees before it joins.
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct JoinInfo {
     pub name: String,
     pub approval: bool,
 }
 
+#[utoipa::path(
+    operation_id = "networks_join_info",
+    get,
+    path = "/api/join/{code}",
+    tag = "networks",
+    params(("code" = String, Path, description = "Join code")),
+    responses((status = 200, description = "The network behind a join link", body = JoinInfo), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(())
+)]
 pub async fn join_info(
     State(state): State<AppState>,
     Path(code): Path<String>,
@@ -944,6 +1147,15 @@ async fn sweep_in(
 
 /// `GET …/jobs/{job}/leaderboard`: the configurations ranked by the units decided so
 /// far, so the console can show the sweep while it runs.
+#[utoipa::path(
+    operation_id = "networks_leaderboard",
+    get,
+    path = "/api/networks/{id}/jobs/{job}/leaderboard",
+    tag = "jobs",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("job" = uuid::Uuid, Path, description = "Job")),
+    responses((status = 200, description = "A neural network sweep's results", body = Object), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn leaderboard(
     State(state): State<AppState>,
     method: Method,
@@ -1003,6 +1215,15 @@ pub struct Model {
 /// `GET …/jobs/{job}/model.json`: the best configuration's network. Devices never
 /// upload weights; training is deterministic, so the coordinator retrains the first
 /// run of the best configuration and gets the very weights the devices agreed on.
+#[utoipa::path(
+    operation_id = "networks_model",
+    get,
+    path = "/api/networks/{id}/jobs/{job}/model.json",
+    tag = "jobs",
+    params(("id" = uuid::Uuid, Path, description = "Network"), ("job" = uuid::Uuid, Path, description = "Job")),
+    responses((status = 200, description = "The best network of a finished sweep, as a download", body = Object), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
+    security(("session" = []), ("api_key" = []))
+)]
 pub async fn model(
     State(state): State<AppState>,
     method: Method,
