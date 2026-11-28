@@ -58,6 +58,43 @@ path; no WebGPU adapter on any. Each page in `docs/tests/` has the details.
 | Neural network sweep, 672 trainings | 154 s on one thread per PC; 91 s on three, with an identical leaderboard |
 | MNIST sweep, 240 trainings of 2 500 steps | 112 s; best 93.7 % of 2 000 unseen handwritten digits |
 
+## Speedup curve, virtual devices (2026-11-28)
+
+The same job computed by 1, 2, 4, 6 and 8 identical "virtual devices": native
+sim-worker processes (`target/release/sim-worker`), each pinned with `taskset` to an
+efficiency core of its own (cores 12–19 of an Intel i5-14600KF, Gracemont, 4.1 GHz,
+one thread per core). The coordinator (release build) and PostgreSQL are pinned to the
+other cores (0–11), so they never share a core with a device. Every run starts from an
+empty database, with one result per unit (`SWARM_REDUNDANCY=1`; a fresh database has no
+honeypot answers), so this measures how the work spreads over devices, not the cost of
+verification (that is 1.20–1.26 computations per unit, under „Result verification“). The
+time is the job's own `created_at` → `finished_at` on the server. Three rounds of each;
+`scripts/speedup.sh pi` / `pt` repeats it.
+
+| Workload | Devices | Median time | Range (3 runs) | Speedup | Efficiency |
+|---|---|---|---|---|---|
+| π, 96 units × 2²⁸ samples | 1 | 81.99 s | 81.98–82.01 s | 1.00× | 100 % |
+| | 2 | 41.01 s | 41.01–41.01 s | 2.00× | 100 % |
+| | 4 | 20.77 s | 20.76–20.84 s | 3.95× | 99 % |
+| | 6 | 13.92 s | 13.86–13.96 s | 5.89× | 98 % |
+| | 8 | 10.48 s | 10.40–10.56 s | 7.82× | 98 % |
+| Path tracer, 1280×768, 128² tiles, 64 spp × 2 passes (120 units) | 1 | 48.03 s | 48.01–48.05 s | 1.00× | 100 % |
+| | 2 | 24.26 s | 24.26–24.28 s | 1.98× | 99 % |
+| | 4 | 12.45 s | 12.35–12.47 s | 3.86× | 96 % |
+| | 6 | 8.27 s | 8.21–8.29 s | 5.81× | 97 % |
+| | 8 | 6.54 s | 6.53–6.55 s | 7.35× | 92 % |
+
+π's units all take the same time, so eight devices finish together. The path tracer's
+tiles do not (sky against walls and light), and with 15 tiles per device at eight devices
+the last, slowest tiles leave some devices idle at the end: smaller tiles or more of them
+would raise the 92 %. Both stay close to linear because each unit is independent and a
+device asks for its next unit before the current one is done (two in flight).
+
+What this does and does not show: identical devices on one machine with a fast local
+network, so no network delay and no device slower than the others. The school lab
+(13 real PCs, below) and the phone through the public address measure those; a curve on
+the lab's PCs is still to be done.
+
 ## School lab idle time
 
 | Date | Lab | PCs | Observed idle hours | Method |
