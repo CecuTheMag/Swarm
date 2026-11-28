@@ -1,0 +1,5 @@
+# cargo audit reads Cargo.lock. sqlx lists its optional SQLite driver there although no
+# crate enables it (`cargo tree -i sqlx-sqlite --edges all` prints nothing), so this
+# advisory about the C SQLite it bundles does not reach any binary.
+[advisories]
+ignore = ["RUSTSEC-2026-0459"]

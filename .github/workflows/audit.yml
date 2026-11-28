@@ -1,0 +1,35 @@
+name: Security audit
+
+# Known vulnerabilities in the Rust crates (RustSec) and the web app's npm packages.
+# Its own workflow, also run every night: a new advisory shows up even when nothing was
+# pushed, without failing the build of code that did not change.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: taiki-e/install-action@cargo-audit
+      # .cargo/audit.toml lists the one advisory that does not apply, and why.
+      - run: cargo audit
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: pnpm audit --prod
