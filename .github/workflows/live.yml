@@ -1,0 +1,21 @@
+name: Live site
+
+# The public site has to answer from a week before a competition round until a month
+# after it. Every night (and by hand) this checks it the way the jury uses it; a failed
+# run notifies the repository's owner.
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Pages, API and test accounts
+        env:
+          SWARM_URL: https://swarmrelay.duckdns.org
+          # One "email password" pair per line (Settings → Secrets → Actions).
+          JURY_ACCOUNTS: ${{ secrets.JURY_ACCOUNTS }}
+        run: bash scripts/live-check.sh
