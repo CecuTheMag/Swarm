@@ -7,6 +7,10 @@
 #   --profile public                + public HTTPS through Tailscale Funnel (`just public`)
 #   --profile fleet                 + simulated CPU workers on the server
 #
+# The `backup` service dumps the database at start and every night at 03:00 UTC into
+# ~/swarm-backups on the server, keeping 14 days (`just backup-check` restores the
+# latest one into a scratch database to prove it works).
+#
 # Only the proxy publishes a port. Browsers allow WebGPU (and the hashing workers use
 # to check kernels) only on HTTPS pages, so other devices join through the public
 # address.
@@ -45,6 +49,23 @@ services:
       # Language models (spec 0017), copied to the server by `just deploy-models`.
       SWARM_MODELS_DIR: /models
     volumes: ["${HOME}/swarm-models:/models:ro"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  backup:
+    <<: *common
+    image: postgres:18-alpine
+    environment:
+      PGHOST: postgres
+      PGUSER: swarm
+      PGPASSWORD: swarm
+      PGDATABASE: swarm
+      BACKUP_KEEP_DAYS: "14"
+      BACKUP_HOUR: "3"
+    volumes:
+      - "${HOME}/swarm-backups:/backups"
+      - ./backup:/scripts:ro
+    entrypoint: ["sh", "/scripts/backup.sh"]
     depends_on:
       postgres: { condition: service_healthy }
 

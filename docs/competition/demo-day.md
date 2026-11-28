@@ -23,6 +23,11 @@ The Tailscale Funnel address `https://swarm.tail629f50.ts.net` (`just public`) s
 a second door. It is about ten times slower (≈2 MB/s against ≈20 MB/s, [measurements](../measurements.md#public-address-relay-sweep-spec-0006))
 and dropped a third of 30 connections, so use it only if the DuckDNS name fails.
 
+Backups: the `backup` service dumps the database when the stack starts and every night
+at 03:00 UTC into `~/swarm-backups` on the server and keeps 14 days. `just backup-check`
+restores the latest dump into a scratch database and compares row counts with the live
+one; run it once after the first deploy and before the competition.
+
 The day before:
 
 - `curl https://swarmrelay.duckdns.org/healthz` answers 200.

@@ -128,6 +128,12 @@ fleet n="4" server=env_var_or_default("SWARM_SERVER", ""):
 cheater server=env_var_or_default("SWARM_SERVER", ""):
     ssh {{server}} 'docker run --rm --network swarm_default --label com.centurylinklabs.watchtower.enable=false swarm-coordinator sim-worker --url ws://coordinator:7700/ws/worker --cheat-rate 1 --delay-ms 1000'
 
+# Restores the server's latest nightly dump into a scratch database and compares row
+# counts with the live one (deploy/backup). The live database is only read.
+backup-check server=env_var_or_default("SWARM_SERVER", ""):
+    @test -n "{{server}}" || { echo "usage: just backup-check user@host (or set SWARM_SERVER)"; exit 1; }
+    ssh {{server}} 'cd ~/swarm && docker compose --env-file ~/swarm.env -f deploy/compose.server.yaml exec -T backup sh /scripts/restore-check.sh'
+
 # Per-device speed of completed pi units.
 bench-report:
     docker compose exec -T postgres psql -U swarm swarm < deploy/sql/benchmarks.sql
