@@ -28,6 +28,19 @@ async fn main() -> anyhow::Result<()> {
         println!("Admin {email} can sign in with the password: {password}");
         return Ok(());
     }
+    // `coordinator password-reset EMAIL`: a new random password for an existing account of
+    // any role, printed once; its sessions end.
+    if args.get(1).map(String::as_str) == Some("password-reset") {
+        let email = args
+            .get(2)
+            .context("usage: coordinator password-reset EMAIL")?;
+        let password = &coordinator::auth::random_token()[..20];
+        if !coordinator::accounts::reset_password(&db, email, password).await? {
+            anyhow::bail!("no account {email}");
+        }
+        println!("{email} can sign in with the password: {password}");
+        return Ok(());
+    }
     // Development and tests: SWARM_BOOTSTRAP_ADMIN=email:password.
     if let Ok(spec) = std::env::var("SWARM_BOOTSTRAP_ADMIN")
         && let Some((email, password)) = spec.split_once(':')

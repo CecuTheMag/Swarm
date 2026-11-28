@@ -93,6 +93,16 @@ materials:
 test-accounts:
     bash scripts/test-accounts.sh
 
+# New passwords for the jury's test accounts on the server, the jury's documentation
+# rebuilt with them (scripts/rotate-jury.sh). Nothing goes into the repository.
+rotate-jury:
+    bash scripts/rotate-jury.sh
+
+# A new password for one account on the server, printed once there; its sessions end.
+password-reset email server=env_var_or_default("SWARM_SERVER", ""):
+    @test -n "{{server}}" || { echo "usage: just password-reset EMAIL user@host (or set SWARM_SERVER)"; exit 1; }
+    ssh -t {{server}} 'cd ~/swarm && docker compose --env-file ~/swarm.env -f deploy/compose.server.yaml exec coordinator coordinator password-reset {{email}}'
+
 # The documentation PDF with the authors' details and the test logins filled in, built
 # outside the repository (scripts/build-documentation.sh says where it reads them from).
 documentation:

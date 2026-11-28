@@ -1075,3 +1075,53 @@ async fn feature_flags_switch_features_off_on_the_server(db: PgPool) {
         StatusCode::BAD_REQUEST
     );
 }
+
+/// `coordinator password-reset EMAIL`: a leaked or forgotten password is replaced, every
+/// session of the account ends, and the account keeps its role.
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn a_password_reset_ends_the_sessions_and_keeps_the_role(db: PgPool) {
+    let addr = serve(db.clone(), config()).await;
+    let admin = Browser::admin(&addr).await;
+    let network = admin.create_network("Кабинет 12").await;
+    let viewer = admin
+        .invite_member(network.id, "viewer", "viewer@swarm.test")
+        .await;
+    assert_eq!(viewer.get("/api/me").await.status(), StatusCode::OK);
+
+    assert!(
+        accounts::reset_password(&db, "Viewer@Swarm.test", "a new password 123")
+            .await
+            .unwrap()
+    );
+    assert!(
+        !accounts::reset_password(&db, "nobody@swarm.test", "x")
+            .await
+            .unwrap()
+    );
+
+    // The signed-in browser is signed out; the old password no longer works.
+    assert_eq!(
+        viewer.get("/api/me").await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let again = Browser::new(&addr);
+    assert_eq!(
+        again
+            .login("viewer@swarm.test", "member password")
+            .await
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        again
+            .login("viewer@swarm.test", "a new password 123")
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let networks: Vec<NetworkView> = again.get("/api/networks").await.json().await.unwrap();
+    assert_eq!(networks.len(), 1);
+    assert_eq!(networks[0].role, protocol::api::Role::Viewer);
+    let me: Me = again.get("/api/me").await.json().await.unwrap();
+    assert!(!me.is_admin);
+}

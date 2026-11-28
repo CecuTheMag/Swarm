@@ -444,6 +444,32 @@ pub async fn ensure_admin(db: &PgPool, email: &str, password: &str) -> anyhow::R
     Ok(id)
 }
 
+/// Gives an existing account a new password and ends all its sessions; returns false when
+/// there is no such account. `coordinator password-reset EMAIL` on the server, for a
+/// forgotten password or a password that leaked.
+pub async fn reset_password(db: &PgPool, email: &str, password: &str) -> anyhow::Result<bool> {
+    let email = normalize_email(email).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let password = password.to_owned();
+    let hash = tokio::task::spawn_blocking(move || auth::hash_password(&password)).await?;
+    let mut tx = db.begin().await?;
+    let id: Option<Uuid> = sqlx::query_scalar(
+        "UPDATE accounts SET password_hash = $2 WHERE lower(email) = $1 RETURNING id",
+    )
+    .bind(&email)
+    .bind(hash)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(id) = id else {
+        return Ok(false);
+    };
+    sqlx::query("DELETE FROM sessions WHERE account_id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
