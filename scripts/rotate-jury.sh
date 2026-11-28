@@ -7,6 +7,7 @@
 #   SWARM_SERVER=user@host just rotate-jury
 #
 # Needs the accounts.env that scripts/test-accounts.sh wrote (OUT_DIR, default ~/rojak-jury).
+# CHECK_LOGIN=0 skips signing in with each new password (check them by hand instead).
 set -euo pipefail
 SERVER="${SWARM_SERVER:?set SWARM_SERVER=user@host}"
 OUT_DIR="${OUT_DIR:-$HOME/rojak-jury}"
@@ -34,9 +35,11 @@ lines = open(path, encoding="utf-8").read().splitlines()
 lines = [f"{key}='{value}'" if l.startswith(key + "=") else l for l in lines]
 open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
 PY
-  status="$(curl -sS -o /dev/null -w '%{http_code}' -H "Origin: $BASE" -H 'Content-Type: application/json' \
-    -d "$(printf '{"email":"%s","password":"%s"}' "$email" "$password")" "$BASE/api/auth/login")"
-  [ "$status" = 200 ] || { echo "the new password of $email does not sign in ($status)" >&2; exit 1; }
+  if [ "${CHECK_LOGIN:-1}" = 1 ]; then
+    status="$(curl -sS -o /dev/null -w '%{http_code}' -H "Origin: $BASE" -H 'Content-Type: application/json' \
+      -d "$(printf '{"email":"%s","password":"%s"}' "$email" "$password")" "$BASE/api/auth/login")"
+    [ "$status" = 200 ] || { echo "the new password of $email does not sign in ($status)" >&2; exit 1; }
+  fi
   echo "rotated: $email"
 done
 
