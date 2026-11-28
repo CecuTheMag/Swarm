@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import Icon from '#lib/ui/Icon.svelte';
 	import { CurrentNetwork, can, provideNetwork } from '#lib/console/networks.svelte.ts';
+	import { flags } from '#lib/flags.svelte.ts';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
@@ -42,7 +43,7 @@
 			{
 				href: resolve('/app/n/[id]/resilience', { id }),
 				label: 'Устойчивост',
-				show: can(role, 'admin')
+				show: can(role, 'admin') && flags.on('chaos_panel')
 			}
 		].filter((t) => t.show);
 	});
@@ -51,6 +52,7 @@
 		page.url.pathname === href ||
 		(href !== resolve('/app/n/[id]', { id: page.params.id! }) &&
 			page.url.pathname.startsWith(href + '/'));
+	void flags.load();
 </script>
 
 {#if page.url.pathname.endsWith('/live')}

@@ -5,7 +5,7 @@
 use crate::{
     api::AppError,
     auth::{self, PUBLIC_NETWORK},
-    networks,
+    flags, networks,
     state::{AppState, Disruption},
 };
 use axum::{
@@ -35,7 +35,7 @@ const CHEATER_LIFETIME: Duration = Duration::from_secs(300);
     path = "/api/chaos/workers/{id}/kill",
     tag = "chaos",
     params(("id" = uuid::Uuid, Path, description = "Device connection")),
-    responses((status = 204, description = "Switched off"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    responses((status = 204, description = "Switched off"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
     security(("session" = []), ("api_key" = []))
 )]
 pub async fn kill_worker(
@@ -62,7 +62,7 @@ pub async fn kill_worker(
     path = "/api/chaos/workers/{id}/cut",
     tag = "chaos",
     params(("id" = uuid::Uuid, Path, description = "Device connection")),
-    responses((status = 204, description = "Cut off"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    responses((status = 204, description = "Cut off"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
     security(("session" = []), ("api_key" = []))
 )]
 pub async fn cut_off_worker(
@@ -106,7 +106,7 @@ pub async fn add_cheaters(
     path = "/api/networks/{id}/chaos/workers/{worker}/kill",
     tag = "chaos",
     params(("id" = uuid::Uuid, Path, description = "Network"), ("worker" = uuid::Uuid, Path, description = "Device connection")),
-    responses((status = 204, description = "Switched off"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    responses((status = 204, description = "Switched off"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
     security(("session" = []), ("api_key" = []))
 )]
 pub async fn network_kill(
@@ -124,7 +124,7 @@ pub async fn network_kill(
     path = "/api/networks/{id}/chaos/workers/{worker}/cut",
     tag = "chaos",
     params(("id" = uuid::Uuid, Path, description = "Network"), ("worker" = uuid::Uuid, Path, description = "Device connection")),
-    responses((status = 204, description = "Cut off"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError)),
+    responses((status = 204, description = "Cut off"), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 404, description = "Not found, or not visible to the caller", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
     security(("session" = []), ("api_key" = []))
 )]
 pub async fn network_cut_off(
@@ -173,6 +173,7 @@ async fn disrupt(
     disruption: Disruption,
 ) -> Result<StatusCode, AppError> {
     auth::network_access(state, method, headers, network, Role::Admin).await?;
+    flags::require(&state.db, flags::CHAOS_PANEL, "resilience tests").await?;
     if state.disrupt(network, worker, disruption) {
         Ok(StatusCode::NO_CONTENT)
     } else {
@@ -190,6 +191,7 @@ async fn cheaters(
     body: AddCheaters,
 ) -> Result<StatusCode, AppError> {
     auth::network_access(state, method, headers, network, Role::Admin).await?;
+    flags::require(&state.db, flags::CHAOS_PANEL, "resilience tests").await?;
     if !(1..=3).contains(&body.count) {
         return Err(AppError::BadRequest("count must be between 1 and 3".into()));
     }

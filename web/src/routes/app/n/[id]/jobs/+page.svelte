@@ -21,6 +21,7 @@
 	import { parsePrompts } from '#lib/console/ai.ts';
 	import { aiCatalogText } from '#lib/templates.ts';
 	import type { AiCatalog } from '#lib/protocol/AiCatalog.ts';
+	import { flags } from '#lib/flags.svelte.ts';
 
 	const network = useNetwork();
 	const id = $derived(page.params.id!);
@@ -167,7 +168,10 @@
 	/** What those jobs carry: only a choice the owner made, never the public network's. */
 	const checked = $derived(network.view?.public || !check ? {} : { quorum: Number(check) });
 	let onPublic = $state(false);
-	const canGoPublic = $derived(program?.review === 'approved' && !network.view?.public);
+	const canGoPublic = $derived(
+		program?.review === 'approved' && !network.view?.public && flags.on('public_programs')
+	);
+	void flags.load();
 
 	/** The body of a program job, from the form. */
 	async function programJob() {
@@ -376,14 +380,16 @@
 				>
 					<Icon name="school" size={16} /> Разписание
 				</button>
-				<button
-					type="button"
-					aria-pressed={template === 'ai'}
-					onclick={() => (template = 'ai')}
-					data-testid="kind-ai"
-				>
-					<Icon name="chip" size={16} /> Текст с ИИ
-				</button>
+				{#if flags.on('ai_jobs')}
+					<button
+						type="button"
+						aria-pressed={template === 'ai'}
+						onclick={() => (template = 'ai')}
+						data-testid="kind-ai"
+					>
+						<Icon name="chip" size={16} /> Текст с ИИ
+					</button>
+				{/if}
 				<button
 					type="button"
 					aria-pressed={template === 'program'}

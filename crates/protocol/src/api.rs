@@ -325,6 +325,28 @@ pub struct AccountView {
     pub last_login_at: Option<i64>,
 }
 
+/// A feature the platform admin switches on and off (spec 0020).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[ts(export)]
+pub struct FeatureFlag {
+    pub key: String,
+    pub enabled: bool,
+    /// What it switches, in the console's language.
+    pub description: String,
+    #[ts(type = "number")]
+    pub updated_at: i64,
+    /// The account that switched it last, if it still exists.
+    pub updated_by: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[ts(export)]
+pub struct UpdateFeatureFlag {
+    pub enabled: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

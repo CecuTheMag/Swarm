@@ -63,7 +63,7 @@ impl IntoResponse for AppError {
     path = "/api/jobs",
     tag = "public jobs",
     request_body = protocol::CreateJob,
-    responses((status = 201, description = "Queued", body = protocol::JobSummary), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError)),
+    responses((status = 201, description = "Queued", body = protocol::JobSummary), (status = 400, description = "Invalid request", body = protocol::ApiError), (status = 401, description = "Not signed in or unknown API key", body = protocol::ApiError), (status = 403, description = "Role too low, or a change from another site", body = protocol::ApiError), (status = 409, description = "Conflict with the current state", body = protocol::ApiError)),
     security(("session" = []), ("api_key" = []))
 )]
 pub async fn create_job(

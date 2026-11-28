@@ -850,6 +850,18 @@ pub async fn start_job(
     access: &Access,
     body: &CreateJob,
 ) -> Result<JobSummary, AppError> {
+    // Features that are switched off are refused before anything else (spec 0020).
+    if body.template == protocol::templates::ai::ID {
+        crate::flags::require(&state.db, crate::flags::AI_JOBS, "language-model jobs").await?;
+    }
+    if body.public == Some(true) && access.network_id != PUBLIC_NETWORK {
+        crate::flags::require(
+            &state.db,
+            crate::flags::PUBLIC_PROGRAMS,
+            "programs on the public network",
+        )
+        .await?;
+    }
     let template = templates::get(&body.template)
         .ok_or_else(|| AppError::BadRequest(format!("unknown template {:?}", body.template)))?;
     if template.template.test_only(&body.params) && !state.config.test_models {

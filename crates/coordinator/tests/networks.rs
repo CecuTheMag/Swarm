@@ -10,7 +10,7 @@ use futures_util::{SinkExt, StreamExt};
 use protocol::{
     CoordinatorMessage, DashboardEvent, DeviceControl, JobSummary, NetworkSummary,
     PROTOCOL_VERSION,
-    api::{CreatedApiKey, CreatedInvite, DeviceView, Me, NetworkView},
+    api::{CreatedApiKey, CreatedInvite, DeviceView, FeatureFlag, Me, NetworkView},
 };
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
@@ -977,4 +977,101 @@ async fn an_owner_accepts_the_results_a_lone_device_gave(db: PgPool) {
     assert_eq!(done.units_done, 2);
     assert_eq!(done.status, protocol::JobStatus::Done);
     assert!(done.result.is_some());
+}
+
+/// Feature flags (spec 0020): only the platform admin switches them, everyone reads
+/// them, and the server refuses a feature that is off whatever the client sends.
+#[sqlx::test(migrator = "coordinator::MIGRATOR")]
+async fn feature_flags_switch_features_off_on_the_server(db: PgPool) {
+    let addr = serve(db, config()).await;
+    let anyone = Browser::new(&addr);
+    let states: Value = anyone.get("/api/flags").await.json().await.unwrap();
+    assert_eq!(
+        states,
+        json!({ "ai_jobs": true, "chaos_panel": true, "public_programs": true })
+    );
+
+    let admin = Browser::admin(&addr).await;
+    let network = admin.create_network("Кабинет 12").await;
+    let member = admin
+        .invite_member(network.id, "admin", "teacher@swarm.test")
+        .await;
+    let off = json!({ "enabled": false });
+    assert_eq!(
+        anyone
+            .patch("/api/admin/flags/ai_jobs", off.clone())
+            .await
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        member
+            .patch("/api/admin/flags/ai_jobs", off.clone())
+            .await
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        member.get("/api/admin/flags").await.status(),
+        StatusCode::FORBIDDEN
+    );
+
+    let flags: Vec<FeatureFlag> = admin.get("/api/admin/flags").await.json().await.unwrap();
+    assert_eq!(flags.len(), 3);
+    assert!(flags.iter().all(|f| f.enabled && !f.description.is_empty()));
+
+    let res = admin.patch("/api/admin/flags/ai_jobs", off.clone()).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let flag: FeatureFlag = res.json().await.unwrap();
+    assert!(!flag.enabled);
+    assert!(flag.updated_by.is_some());
+    let states: Value = anyone.get("/api/flags").await.json().await.unwrap();
+    assert_eq!(states["ai_jobs"], false);
+
+    // Refused before anything else is looked at, for the network's own admin too.
+    let ai_job = json!({ "template": "ai", "params": {} });
+    let jobs = format!("/api/networks/{}/jobs", network.id);
+    let res = member.post(&jobs, ai_job.clone()).await;
+    assert_eq!(res.status(), StatusCode::CONFLICT);
+    let error: Value = res.json().await.unwrap();
+    assert!(error["error"].as_str().unwrap().contains("switched off"));
+
+    admin
+        .patch("/api/admin/flags/public_programs", off.clone())
+        .await;
+    let res = member
+        .post(
+            &jobs,
+            json!({ "template": "program", "params": {}, "public": true }),
+        )
+        .await;
+    assert_eq!(res.status(), StatusCode::CONFLICT);
+
+    admin
+        .patch("/api/admin/flags/chaos_panel", off.clone())
+        .await;
+    let res = member
+        .post(
+            &format!("/api/networks/{}/chaos/cheaters", network.id),
+            json!({ "count": 1, "collude": false }),
+        )
+        .await;
+    assert_eq!(res.status(), StatusCode::CONFLICT);
+
+    assert_eq!(
+        admin
+            .patch("/api/admin/flags/no_such_flag", off)
+            .await
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+
+    // Switched on again, the same request reaches the template's own checks.
+    admin
+        .patch("/api/admin/flags/ai_jobs", json!({ "enabled": true }))
+        .await;
+    assert_eq!(
+        member.post(&jobs, ai_job).await.status(),
+        StatusCode::BAD_REQUEST
+    );
 }

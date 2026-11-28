@@ -4,6 +4,7 @@
 	import { LiveDashboard } from '#lib/dashboard/live.svelte.ts';
 	import SwarmMap from '#lib/dashboard/SwarmMap.svelte';
 	import ChaosPanel from '#lib/dashboard/ChaosPanel.svelte';
+	import { flags } from '#lib/flags.svelte.ts';
 	import {
 		caughtDevices,
 		deviceLabel,
@@ -170,6 +171,7 @@
 				return `Хванат измамник (${deviceLabel(item.device)}): ${count(item.wrong_results, 'грешен резултат', 'грешни резултата')} отхвърлени${item.units_redone > 0 ? `, ${count(item.units_redone, 'част', 'части')} се изчисляват наново` : ''}. Устройството е блокирано.`;
 		}
 	}
+	void flags.load();
 </script>
 
 <svelte:head>
@@ -235,7 +237,7 @@
 					<SwarmMap {workers} {caught} />
 				</section>
 
-				{#if chaos}
+				{#if chaos && flags.on('chaos_panel')}
 					<ChaosPanel {workers} {caughtIds} {totals} base={chaos.base} password={chaos.password} />
 				{/if}
 

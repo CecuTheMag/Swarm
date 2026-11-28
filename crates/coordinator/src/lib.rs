@@ -8,6 +8,7 @@ pub mod catalog;
 pub mod chaos;
 pub mod db;
 pub mod edits;
+pub mod flags;
 pub mod hours;
 pub mod models;
 pub mod networks;
@@ -41,6 +42,9 @@ pub fn router(state: AppState) -> Router {
         .route("/healthz", get(api::healthz))
         .route("/api/openapi.json", get(openapi::spec))
         .route("/api/stats", get(api::stats))
+        .route("/api/flags", get(flags::states))
+        .route("/api/admin/flags", get(flags::list))
+        .route("/api/admin/flags/{key}", patch(flags::update))
         .route("/api/jobs", post(api::create_job).get(api::list_jobs))
         .route("/api/jobs/{id}", get(api::get_job))
         .route("/api/jobs/{id}/cancel", post(api::cancel_job))

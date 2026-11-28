@@ -7,6 +7,8 @@
 	import type { AccountView } from '#lib/protocol/AccountView.ts';
 	import type { CreatedInvite } from '#lib/protocol/CreatedInvite.ts';
 	import type { ProgramSummary } from '#lib/protocol/ProgramSummary.ts';
+	import type { FeatureFlag } from '#lib/protocol/FeatureFlag.ts';
+	import { flags as flagStates } from '#lib/flags.svelte.ts';
 
 	// The platform admin: who has an account, and invitations for new ones (spec 0010).
 	let accounts = $state<AccountView[]>([]);
@@ -18,14 +20,33 @@
 	let pending = $state<ProgramSummary[]>([]);
 	let notes = $state<Record<string, string>>({});
 
+	// Features switched on and off without a deploy (spec 0020).
+	let featureFlags = $state<FeatureFlag[]>([]);
+
 	async function load() {
 		try {
-			[accounts, pending] = await Promise.all([
+			[accounts, pending, featureFlags] = await Promise.all([
 				api<AccountView[]>('/api/admin/accounts'),
-				api<ProgramSummary[]>('/api/admin/programs')
+				api<ProgramSummary[]>('/api/admin/programs'),
+				api<FeatureFlag[]>('/api/admin/flags')
 			]);
 		} catch (e) {
 			error = failureText(e);
+		}
+	}
+
+	async function switchFlag(key: string, enabled: boolean) {
+		error = null;
+		try {
+			const flag = await api<FeatureFlag>(`/api/admin/flags/${key}`, {
+				method: 'PATCH',
+				body: { enabled }
+			});
+			featureFlags = featureFlags.map((f) => (f.key === key ? flag : f));
+			flagStates.set(key, flag.enabled);
+		} catch (e) {
+			error = failureText(e);
+			await load();
 		}
 	}
 
@@ -119,6 +140,33 @@
 		{/each}
 	</section>
 
+	<section class="card" data-testid="feature-flags">
+		<h2>Функции</h2>
+		<p class="muted">
+			Изключената функция изчезва от конзолата, а сървърът отказва заявките за нея. Промяната важи
+			веднага, без ново внедряване.
+		</p>
+		{#each featureFlags as f (f.key)}
+			<label class="flag">
+				<input
+					type="checkbox"
+					role="switch"
+					checked={f.enabled}
+					data-testid={`flag-${f.key}`}
+					onchange={(e) => switchFlag(f.key, e.currentTarget.checked)}
+				/>
+				<span>
+					<strong>{f.description}</strong>
+					<span class="muted small">
+						<code>{f.key}</code> · {f.enabled ? 'включена' : 'изключена'}{f.updated_by
+							? ` · ${f.updated_by}, ${new Date(f.updated_at).toLocaleString('bg-BG')}`
+							: ''}
+					</span>
+				</span>
+			</label>
+		{/each}
+	</section>
+
 	<section class="card">
 		<h2>Всички профили ({accounts.length})</h2>
 		<div class="table-wrap">
@@ -168,6 +216,20 @@
 	}
 	.small {
 		font-size: var(--text-sm);
+	}
+	.flag {
+		display: flex;
+		gap: var(--s-3);
+		align-items: flex-start;
+		padding: var(--s-3) 0;
+		border-top: 1px solid var(--border);
+	}
+	.flag > span {
+		display: grid;
+		gap: var(--s-1);
+	}
+	.flag input {
+		margin-top: 4px;
 	}
 	.hash {
 		word-break: break-all;

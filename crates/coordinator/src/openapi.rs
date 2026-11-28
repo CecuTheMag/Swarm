@@ -2,7 +2,7 @@
 //! annotations and the `protocol` types, served at `/api/openapi.json`. The web app's
 //! API reference (`/docs/api`) renders it with Swagger UI.
 
-use crate::{accounts, api, catalog, chaos, edits, models, networks, schools, ws};
+use crate::{accounts, api, catalog, chaos, edits, flags, models, networks, schools, ws};
 use axum::{
     http::header,
     response::{IntoResponse, Response},
@@ -66,6 +66,9 @@ use utoipa::{
         catalog::approved,
         catalog::review_queue,
         catalog::decision,
+        flags::states,
+        flags::list,
+        flags::update,
         schools::list,
         schools::create,
         schools::get,
@@ -109,6 +112,7 @@ use utoipa::{
         (name = "public jobs", description = "Jobs of the public volunteer network"),
         (name = "chaos", description = "Resilience demo: switch devices off, cut them off, add cheaters"),
         (name = "platform admin", description = "Accounts and program review, for the platform's admins"),
+        (name = "feature flags", description = "Features switched on and off at run time; the server refuses what is off"),
         (name = "files", description = "Code and data devices download, checked by their SHA-256"),
         (name = "websocket", description = "Upgrades to WebSocket: devices and live views"),
     )
